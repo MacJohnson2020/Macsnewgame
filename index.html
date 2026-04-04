@@ -176,15 +176,36 @@ const ZONES = [
 ];
 
 const BUILDINGS = [
-  {id:'generator',name:'Generator',desc:'Energy regen speed',baseCost:50,costMult:1.8,effect:'energy_regen'},
-  {id:'foundry',name:'Foundry',desc:'Passive gold/min',baseCost:80,costMult:1.8,effect:'gold_per_min'},
-  {id:'lab',name:'Lab',desc:'XP boost %',baseCost:100,costMult:2.0,effect:'xp_boost'},
-  {id:'vault',name:'Vault',desc:'Max energy +5/lv',baseCost:60,costMult:1.6,effect:'max_energy'},
-  {id:'barracks',name:'Barracks',desc:'Combat power +3/lv',baseCost:120,costMult:2.0,effect:'combat_power'},
-  {id:'tavern',name:'Tavern',desc:'Follower happiness +',baseCost:100,costMult:1.8,effect:'happiness'},
-  {id:'workshop',name:'Workshop',desc:'Crafting speed +',baseCost:90,costMult:1.9,effect:'craft_speed'},
-  {id:'shrine',name:'Shrine',desc:'Luck boost +',baseCost:150,costMult:2.2,effect:'luck_boost'}
+  {id:'generator',name:'Generator',desc:'Energy regen speed',baseCost:50,costMult:1.8,effect:'energy_regen',slotBonus:'Faster regen per worker'},
+  {id:'foundry',name:'Foundry',desc:'Passive gold/min',baseCost:80,costMult:1.8,effect:'gold_per_min',slotBonus:'+gold/min per worker'},
+  {id:'lab',name:'Lab',desc:'XP boost %',baseCost:100,costMult:2.0,effect:'xp_boost',slotBonus:'+XP% per worker'},
+  {id:'vault',name:'Vault',desc:'Max energy +5/lv',baseCost:60,costMult:1.6,effect:'max_energy',slotBonus:'Guards protect gold from raids'},
+  {id:'barracks',name:'Barracks',desc:'Combat power +3/lv',baseCost:120,costMult:2.0,effect:'combat_power',slotBonus:'+combat power per soldier'},
+  {id:'tavern',name:'Tavern',desc:'Follower happiness +',baseCost:100,costMult:1.8,effect:'happiness',slotBonus:'Slows happiness decay'},
+  {id:'workshop',name:'Workshop',desc:'Crafting speed +',baseCost:90,costMult:1.9,effect:'craft_speed',slotBonus:'+crafting XP per worker'},
+  {id:'shrine',name:'Shrine',desc:'Luck boost +',baseCost:150,costMult:2.2,effect:'luck_boost',slotBonus:'+luck per worker'}
 ];
+
+function getBuildingSlots(bId, cityIdx){
+  const city = G.cities[cityIdx !== undefined ? cityIdx : G.currentCity];
+  const lv = city.buildings[bId] || 0;
+  return Math.floor(lv / 5) + (lv > 0 ? 1 : 0); // 1 slot at lv1, +1 every 5 levels, max 5 at lv20
+}
+
+function getFollowersInSlot(bId, cityIdx){
+  const ci = cityIdx !== undefined ? cityIdx : G.currentCity;
+  return G.followers.filter(f => f.cityIdx === ci && f.assigned === bId);
+}
+
+function getWallGarrison(cityIdx){
+  const ci = cityIdx !== undefined ? cityIdx : G.currentCity;
+  return G.followers.filter(f => f.cityIdx === ci && f.assigned === 'garrison');
+}
+
+function getGarrisonSlots(cityIdx){
+  const city = G.cities[cityIdx !== undefined ? cityIdx : G.currentCity];
+  return Math.floor(city.wallLevel / 3) + (city.wallLevel > 0 ? 1 : 0); // 1 at lv1, +1 per 3 levels
+}
 
 const GEAR_SLOTS = ['weapon','armor','shield','implant'];
 const GEAR_NAMES = {
@@ -420,7 +441,8 @@ function getSkillUnlocks(idx){
 function getGoldPerMin(){
   const fLv = getAllBuildingLevel('foundry');
   let base = fLv * 2;
-  const workers = G.followers.filter(f => f.assigned === 'foundry');
+  // Foundry workers across all cities
+  const workers = G.followers.filter(f => f.assigned === 'foundry' && f.happiness > 20);
   workers.forEach(f => { base += Math.floor(f.level * 0.5) + 1; });
   // Mining specialty bonus
   G.cities.forEach(c => {
@@ -1106,8 +1128,23 @@ function trainFollower(id){
 function assignFollower(id, role){
   const f = G.followers.find(x => x.id === id);
   if(!f) return;
+  const ci = f.cityIdx || 0;
+  // Check slot capacity for building assignments
+  const buildingIds = BUILDINGS.map(b => b.id);
+  if(buildingIds.includes(role)){
+    const slots = getBuildingSlots(role, ci);
+    const current = getFollowersInSlot(role, ci).length;
+    if(current >= slots){ toast('No slots! ' + role + ' has ' + current + '/' + slots + ' workers', '#f44'); return; }
+  }
+  if(role === 'garrison'){
+    const slots = getGarrisonSlots(ci);
+    const current = getWallGarrison(ci).length;
+    if(current >= slots){ toast('Garrison full! ' + current + '/' + slots, '#f44'); return; }
+  }
   f.assigned = role;
-  toast(f.name + ' assigned to ' + role, '#0ff');
+  const label = BUILDINGS.find(b => b.id === role)?.name || role;
+  toast(f.name + ' assigned to ' + label, '#0ff');
+  if(role === 'garrison') updateCityDefense(ci);
   save();
   showTab('followers_detail', f.id);
 }
@@ -1215,12 +1252,15 @@ function getCityDefense(cityIdx){
   let def = city.wallLevel * 10;
   // Barracks adds defense
   def += (city.buildings.barracks || 0) * 5;
-  // Followers assigned to this city on patrol
-  G.followers.forEach(f => {
-    if(f.cityIdx === cityIdx && f.assigned === 'patrol' && f.happiness > 20){
-      def += Math.floor(f.level * (f.rarity + 1) * 0.8);
-    }
-  });
+  // Barracks workers add combat defense
+  const barracksSoldiers = G.followers.filter(f => f.cityIdx === cityIdx && f.assigned === 'barracks' && f.happiness > 20);
+  barracksSoldiers.forEach(f => { def += Math.floor(f.level * (f.rarity + 1) * 0.5); });
+  // Wall garrison - main defenders
+  const garrison = G.followers.filter(f => f.cityIdx === cityIdx && f.assigned === 'garrison' && f.happiness > 20);
+  garrison.forEach(f => { def += Math.floor(f.level * (f.rarity + 1) * 1.2); });
+  // Vault guards protect gold (counted as defense too)
+  const vaultGuards = G.followers.filter(f => f.cityIdx === cityIdx && f.assigned === 'vault' && f.happiness > 20);
+  vaultGuards.forEach(f => { def += Math.floor(f.level * (f.rarity + 1) * 0.3); });
   // Fortress specialty
   if(city.specialty === 'fortress') def = Math.floor(def * (1 + SPECIALTIES.fortress.bonus.defense));
   return def;
@@ -1831,27 +1871,59 @@ function renderTown(c){
   html += '</div>';
 
   // Wall
-  html += '<h3>Wall (Defense)</h3>';
+  // Wall & Garrison
+  html += '<h3>Wall & Garrison</h3>';
   html += '<div class="card">';
-  html += 'Wall Lv.' + city.wallLevel + '/20 | Defense Rating: ' + city.defense + '<br>';
+  html += 'Wall Lv.' + city.wallLevel + '/20 | Defense: ' + city.defense + '<br>';
+  const garSlots = getGarrisonSlots(ci);
+  const garrisoned = getWallGarrison(ci);
+  html += '<div class="text-sm">Garrison: ' + garrisoned.length + '/' + garSlots + ' slots</div>';
+  garrisoned.forEach(f => {
+    const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
+    html += '<div class="follower-card">';
+    html += '<span class="' + RARITIES[f.rarity] + '">' + f.name + '</span> Lv.' + f.level;
+    html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
+    html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
+    html += '</div>';
+  });
+  for(let s = garrisoned.length; s < garSlots; s++){
+    html += '<div class="follower-card text-dim">[Empty garrison slot]</div>';
+  }
   if(city.wallLevel < 20){
     const wallCost = Math.floor(80 * Math.pow(1.9, city.wallLevel));
     html += '<button class="btn btn-cyan" onclick="upgradeWall()">Upgrade Wall (' + wallCost + 'g)</button>';
-  } else {
-    html += '<span class="legendary">MAXED</span>';
   }
   html += '<br><span class="text-sm text-dim">Raids won: ' + city.raidWins + ' | lost: ' + city.raidLosses + '</span>';
   html += '</div>';
 
-  // Buildings
+  // Buildings with unit slots
   html += '<h3>Buildings</h3>';
   BUILDINGS.forEach(b => {
     const lv = city.buildings[b.id] || 0;
     const cost = getBuildingCost(b.id);
     const maxed = lv >= 20;
+    const slots = getBuildingSlots(b.id, ci);
+    const assigned = getFollowersInSlot(b.id, ci);
     html += '<div class="card">';
     html += '<b>' + b.name + '</b> Lv.' + lv + '/20';
-    html += ' <span class="text-dim">- ' + b.desc + '</span><br>';
+    html += ' <span class="text-dim">- ' + b.desc + '</span>';
+    if(slots > 0) html += ' | Workers: ' + assigned.length + '/' + slots;
+    html += '<br>';
+    // Show slot bonus info
+    if(lv > 0) html += '<div class="text-sm" style="color:#888">Slot bonus: ' + b.slotBonus + '</div>';
+    // Show assigned followers
+    assigned.forEach(f => {
+      const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
+      html += '<div class="follower-card">';
+      html += '<span class="' + RARITIES[f.rarity] + '">' + f.name + '</span> Lv.' + f.level;
+      html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
+      html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
+      html += '</div>';
+    });
+    // Show empty slots
+    for(let s = assigned.length; s < slots; s++){
+      html += '<div class="follower-card text-dim">[Empty slot]</div>';
+    }
     if(!maxed){
       html += '<button class="btn btn-cyan" onclick="upgradeBuilding(\'' + b.id + '\')">Upgrade (' + cost + 'g)</button>';
     } else {
@@ -1860,24 +1932,16 @@ function renderTown(c){
     html += '</div>';
   });
 
-  // Followers in this city
+  // Idle & Combat followers in this city
   const cityFollowers = G.followers.filter(f => (f.cityIdx || 0) === ci);
-  html += '<h3>Followers in ' + city.name + ' (' + pop + '/' + maxPop + ')</h3>';
-  if(cityFollowers.length === 0){
-    html += '<div class="text-dim">No followers in this city. Assign some!</div>';
-  }
-  const groups = {};
-  cityFollowers.forEach(f => {
-    if(!groups[f.assigned]) groups[f.assigned] = [];
-    groups[f.assigned].push(f);
-  });
-  for(const role in groups){
-    html += '<div class="text-sm mt" style="color:#888">[' + role.toUpperCase() + ']</div>';
-    groups[role].forEach(f => {
+  const idleFollowers = cityFollowers.filter(f => f.assigned === 'idle' || f.assigned === 'combat');
+  if(idleFollowers.length > 0){
+    html += '<h3>Idle & Combat (' + idleFollowers.length + ')</h3>';
+    idleFollowers.forEach(f => {
       const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
       html += '<div class="follower-card">';
       html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
-      html += ' Lv.' + f.level + ' ' + f.class;
+      html += ' Lv.' + f.level + ' ' + f.class + ' [' + f.assigned + ']';
       html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
       html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
       html += '</div>';
@@ -1887,7 +1951,7 @@ function renderTown(c){
   // Unassigned followers (no city)
   const unassigned = G.followers.filter(f => f.cityIdx === undefined || f.cityIdx === null);
   if(unassigned.length > 0){
-    html += '<div class="text-sm mt" style="color:#f44">[UNASSIGNED - No City]</div>';
+    html += '<div class="text-sm mt" style="color:#f44">[UNASSIGNED - No City] (' + unassigned.length + ')</div>';
     unassigned.forEach(f => {
       html += '<div class="follower-card">';
       html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
@@ -1919,7 +1983,8 @@ function renderFollowerDetail(c, fId){
   html += 'Happiness: <span style="color:' + hColor + '">' + f.happiness + '/100</span><br>';
   html += 'Loyalty: ' + f.loyalty + '/100<br>';
   html += 'City: ' + (G.cities[f.cityIdx || 0]?.name || 'Unassigned') + '<br>';
-  html += 'Role: ' + f.assigned + '<br>';
+  const roleLabel = BUILDINGS.find(b => b.id === f.assigned)?.name || f.assigned;
+  html += 'Role: ' + roleLabel + '<br>';
   html += '</div>';
 
   html += '<h3>Actions</h3>';
@@ -1927,10 +1992,29 @@ function renderFollowerDetail(c, fId){
   html += '<button class="btn btn-purple" onclick="trainFollower(' + f.id + ')">Train (' + trainCost + 'g) +XP</button><br>';
 
   html += '<h3>Assign Role</h3>';
-  const roles = ['idle','combat','foundry','mining','crafting','patrol'];
-  roles.forEach(r => {
+  const ci = f.cityIdx || 0;
+  // General roles
+  html += '<div class="text-sm text-dim">General:</div>';
+  ['idle','combat'].forEach(r => {
     const active = f.assigned === r ? 'btn-cyan' : '';
     html += '<button class="btn ' + active + '" onclick="assignFollower(' + f.id + ',\'' + r + '\')">' + r + '</button> ';
+  });
+  // Garrison
+  const garSlots = getGarrisonSlots(ci);
+  const garCurrent = getWallGarrison(ci).length;
+  if(garSlots > 0){
+    const active = f.assigned === 'garrison' ? 'btn-cyan' : '';
+    html += '<button class="btn ' + active + '" onclick="assignFollower(' + f.id + ',\'garrison\')">garrison (' + garCurrent + '/' + garSlots + ')</button> ';
+  }
+  // Building slots
+  html += '<br><div class="text-sm text-dim mt">Building slots:</div>';
+  BUILDINGS.forEach(b => {
+    const bLv = G.cities[ci].buildings[b.id] || 0;
+    if(bLv <= 0) return;
+    const slots = getBuildingSlots(b.id, ci);
+    const current = getFollowersInSlot(b.id, ci).length;
+    const active = f.assigned === b.id ? 'btn-cyan' : '';
+    html += '<button class="btn ' + active + '" onclick="assignFollower(' + f.id + ',\'' + b.id + '\')">' + b.name + ' (' + current + '/' + slots + ')</button> ';
   });
 
   // City assignment
@@ -2129,29 +2213,43 @@ function gameLoop(){
   if(followerTimer >= 120){ // every 2 min
     followerTimer = 0;
     G.followers.forEach(f => {
-      // Patrol followers find stuff
-      if(f.assigned === 'patrol' && f.happiness > 20){
-        if(Math.random() < 0.3){
-          const goldFound = Math.floor(f.level * (f.rarity+1) * 2);
-          G.gold += goldFound;
-        }
-        // Small chance to find gems
-        if(Math.random() < 0.02 * (f.rarity + 1)){
-          G.gems += 1;
-          toast(f.name + ' found a gem on patrol!', '#b026ff');
-        }
-      }
-      // Mining followers give skill xp (Mining = index 4)
-      if(f.assigned === 'mining' && f.happiness > 20){
-        addSkillXp(4, Math.floor(f.level * 2));
-      }
-      // Crafting followers give crafting xp (Crafting = index 8)
-      if(f.assigned === 'crafting' && f.happiness > 20){
+      if(f.happiness <= 20) { /* unhappy workers do nothing */ }
+      else if(f.assigned === 'foundry'){
+        // Foundry workers already handled by getGoldPerMin()
+      } else if(f.assigned === 'lab'){
+        // Lab workers: small passive XP
+        addXp(Math.floor(f.level * 0.5));
+      } else if(f.assigned === 'workshop'){
+        // Workshop workers give crafting XP (Crafting = index 8)
         addSkillXp(8, Math.floor(f.level * 2));
+      } else if(f.assigned === 'shrine'){
+        // Shrine workers: small gem chance
+        if(Math.random() < 0.01 * (f.rarity + 1)){
+          G.gems += 1;
+          toast(f.name + ' channeled a gem at the shrine!', '#b026ff');
+        }
+      } else if(f.assigned === 'generator'){
+        // Generator workers: chance for bonus energy
+        if(Math.random() < 0.3 && G.energy < getMaxEnergy()){
+          G.energy = Math.min(getMaxEnergy(), G.energy + 1);
+        }
+      } else if(f.assigned === 'garrison'){
+        // Garrison: small gold from repelling scouts
+        if(Math.random() < 0.15){
+          G.gold += Math.floor(f.level * (f.rarity+1));
+        }
       }
+      // Tavern workers slow happiness decay for all followers in same city
+      // (handled below)
       // Slow happiness decay
       if(Math.random() < 0.1){
-        f.happiness = Math.max(0, f.happiness - 1);
+        // Tavern workers in same city reduce decay
+        const ci = f.cityIdx || 0;
+        const tavernWorkers = G.followers.filter(tw => tw.cityIdx === ci && tw.assigned === 'tavern' && tw.happiness > 20);
+        const decayReduction = Math.min(0.08, tavernWorkers.length * 0.02); // up to 80% reduction
+        if(Math.random() >= decayReduction){
+          f.happiness = Math.max(0, f.happiness - 1);
+        }
       }
     });
   }
@@ -2188,9 +2286,11 @@ function migrateOldSave(){
   }
   if(G.total_raids_won === undefined) G.total_raids_won = 0;
   if(G.dungeons_cleared === undefined) G.dungeons_cleared = 0;
-  // Assign followers to city 0 if they don't have a city
+  // Assign followers to city 0 if they don't have a city, migrate old roles
   G.followers.forEach(f => {
     if(f.cityIdx === undefined) f.cityIdx = 0;
+    if(f.assigned === 'patrol') f.assigned = 'garrison';
+    if(f.assigned === 'mining') f.assigned = 'foundry'; // mining was generic, foundry is closest
   });
   // Update defense for all cities
   G.cities.forEach((c, i) => updateCityDefense(i));
