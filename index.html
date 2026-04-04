@@ -203,6 +203,32 @@ const FOLLOWER_CLASSES = ['Fighter','Miner','Crafter','Hacker','Scout'];
 // ==================== GAME STATE ====================
 let G = null; // game state
 
+function newCity(cityName){
+  return {
+    name: cityName,
+    buildings: {},
+    defense: 0,
+    wallLevel: 0,
+    population: 0,
+    maxPop: 5,
+    specialty: 'none', // none, military, mining, trade, research
+    raidWins: 0,
+    raidLosses: 0,
+    lastRaid: 0
+  };
+}
+
+const CITY_COSTS = [0, 2000, 8000, 25000, 80000]; // gold cost for 2nd, 3rd, 4th, 5th city
+const CITY_LEVEL_REQ = [1, 15, 30, 55, 80]; // level required
+const SPECIALTIES = {
+  none: {name:'None',desc:'No bonus',bonus:{}},
+  military: {name:'Military',desc:'+15% combat power from this city',bonus:{combat:0.15}},
+  mining: {name:'Mining',desc:'+20% gold/min from this city',bonus:{gold:0.2}},
+  trade: {name:'Trade',desc:'-15% building costs',bonus:{buildCost:-0.15}},
+  research: {name:'Research',desc:'+10% XP from all sources',bonus:{xp:0.1}},
+  fortress: {name:'Fortress',desc:'+30% defense rating',bonus:{defense:0.3}}
+};
+
 function newGame(name, cls){
   return {
     name: name,
@@ -216,7 +242,8 @@ function newGame(name, cls){
     skillLevels: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     gear: { weapon:null, armor:null, shield:null, implant:null },
     inventory: [],
-    buildings: {},
+    cities: [newCity('Outpost Alpha')],
+    currentCity: 0,
     followers: [],
     followerIdCounter: 0,
     missions_completed: 0,
@@ -232,8 +259,19 @@ function newGame(name, cls){
     combatLog: [],
     bounties: [],
     bountyRefreshTime: 0,
-    dungeons_cleared: 0
+    dungeons_cleared: 0,
+    total_raids_won: 0
   };
+}
+
+// Compatibility: G.buildings points to current city's buildings
+function getCityBuildings(){ return G.cities[G.currentCity].buildings; }
+function getCity(){ return G.cities[G.currentCity]; }
+function getAllBuildingLevel(bId){
+  // Sum building level across all cities
+  let total = 0;
+  G.cities.forEach(c => { total += c.buildings[bId] || 0; });
+  return total;
 }
 
 function save(){
@@ -264,23 +302,26 @@ function toast(msg, color){
 // ==================== CORE MECHANICS ====================
 function getMaxEnergy(){
   let base = 100;
-  const vaultLv = G.buildings.vault || 0;
+  const vaultLv = getAllBuildingLevel('vault');
   base += vaultLv * 5;
   return base;
 }
 
 function getEnergyRegenRate(){
-  // seconds per 1 energy
   let base = 30;
-  const genLv = G.buildings.generator || 0;
+  const genLv = getAllBuildingLevel('generator');
   base = Math.max(5, base - genLv * 2);
   return base;
 }
 
 function getXpBoost(){
   let boost = 1 + (G.prestige_bonus / 100);
-  const labLv = G.buildings.lab || 0;
+  const labLv = getAllBuildingLevel('lab');
   boost += labLv * 0.05;
+  // Research specialty bonus
+  G.cities.forEach(c => {
+    if(c.specialty === 'research') boost += SPECIALTIES.research.bonus.xp;
+  });
   return boost;
 }
 
@@ -295,8 +336,12 @@ function getPrimaryCombatSkill(){
 
 function getCombatPower(){
   let p = G.stats.power;
-  const bLv = G.buildings.barracks || 0;
+  const bLv = getAllBuildingLevel('barracks');
   p += bLv * 3;
+  // Military specialty bonus
+  G.cities.forEach(c => {
+    if(c.specialty === 'military') p += Math.floor(p * SPECIALTIES.military.bonus.combat);
+  });
   for(const slot of GEAR_SLOTS){
     if(G.gear[slot]) p += G.gear[slot].power || 0;
   }
@@ -340,7 +385,7 @@ function getLuck(){
   let l = G.stats.luck;
   const cls = CLASSES[G.class];
   l += cls.luck * Math.floor(G.level/3);
-  const shrineLv = G.buildings.shrine || 0;
+  const shrineLv = getAllBuildingLevel('shrine');
   l += shrineLv * 2;
   // Scavenging boosts luck
   l += Math.floor(G.skillLevels[5] * 0.5);
@@ -373,10 +418,14 @@ function getSkillUnlocks(idx){
 }
 
 function getGoldPerMin(){
-  const fLv = G.buildings.foundry || 0;
+  const fLv = getAllBuildingLevel('foundry');
   let base = fLv * 2;
   const workers = G.followers.filter(f => f.assigned === 'foundry');
   workers.forEach(f => { base += Math.floor(f.level * 0.5) + 1; });
+  // Mining specialty bonus
+  G.cities.forEach(c => {
+    if(c.specialty === 'mining') base = Math.floor(base * (1 + SPECIALTIES.mining.bonus.gold));
+  });
   // Master Miner 99: passive gold income
   if(G.skillLevels[4] >= 99) base += 5;
   // Scavenger Lord 99: passive gold income
@@ -972,7 +1021,8 @@ function generateFollower(guaranteed_rarity){
     defense: Math.floor(basePower * 0.7),
     happiness: 80,
     loyalty: 50,
-    assigned: 'idle' // idle, combat, foundry, mining, crafting, patrol
+    assigned: 'idle', // idle, combat, foundry, mining, crafting, patrol
+    cityIdx: G.currentCity
   };
 }
 
@@ -1126,33 +1176,184 @@ function trainSkill(idx){
 }
 
 // ==================== BUILDINGS ====================
-function getBuildingCost(bId){
+function getBuildingCost(bId, cityIdx){
   const b = BUILDINGS.find(x => x.id === bId);
-  const lv = G.buildings[bId] || 0;
+  const ci = cityIdx !== undefined ? cityIdx : G.currentCity;
+  const lv = G.cities[ci].buildings[bId] || 0;
   let cost = Math.floor(b.baseCost * Math.pow(b.costMult, lv));
   // Engineering skill reduces building cost
-  if(G.skillLevels[9] >= 99) cost = Math.floor(cost * 0.7); // ARCHITECT
+  if(G.skillLevels[9] >= 99) cost = Math.floor(cost * 0.7);
   else if(G.skillLevels[9] >= 75) cost = Math.floor(cost * 0.8);
   else if(G.skillLevels[9] >= 50) cost = Math.floor(cost * 0.85);
   else if(G.skillLevels[9] >= 25) cost = Math.floor(cost * 0.9);
   else if(G.skillLevels[9] >= 10) cost = Math.floor(cost * 0.95);
+  // Trade specialty
+  const city = G.cities[ci];
+  if(city.specialty === 'trade') cost = Math.floor(cost * (1 + SPECIALTIES.trade.bonus.buildCost));
   return cost;
 }
 
 function upgradeBuilding(bId){
   const cost = getBuildingCost(bId);
-  if(G.gold < cost){
-    toast('Need ' + cost + ' gold', '#f44');
-    return;
-  }
+  const city = getCity();
+  if(G.gold < cost){ toast('Need ' + cost + ' gold', '#f44'); return; }
   G.gold -= cost;
-  G.buildings[bId] = (G.buildings[bId] || 0) + 1;
+  city.buildings[bId] = (city.buildings[bId] || 0) + 1;
   G.maxEnergy = getMaxEnergy();
   const b = BUILDINGS.find(x => x.id === bId);
-  toast(b.name + ' upgraded to level ' + G.buildings[bId] + '!', '#0ff');
+  toast(b.name + ' in ' + city.name + ' upgraded to Lv.' + city.buildings[bId] + '!', '#0ff');
+  // Update city defense
+  updateCityDefense(G.currentCity);
   checkAchievements();
   save();
   showTab('town');
+}
+
+// ==================== CITY MANAGEMENT ====================
+function getCityDefense(cityIdx){
+  const city = G.cities[cityIdx];
+  let def = city.wallLevel * 10;
+  // Barracks adds defense
+  def += (city.buildings.barracks || 0) * 5;
+  // Followers assigned to this city on patrol
+  G.followers.forEach(f => {
+    if(f.cityIdx === cityIdx && f.assigned === 'patrol' && f.happiness > 20){
+      def += Math.floor(f.level * (f.rarity + 1) * 0.8);
+    }
+  });
+  // Fortress specialty
+  if(city.specialty === 'fortress') def = Math.floor(def * (1 + SPECIALTIES.fortress.bonus.defense));
+  return def;
+}
+
+function updateCityDefense(cityIdx){
+  G.cities[cityIdx].defense = getCityDefense(cityIdx);
+}
+
+function getCityPopulation(cityIdx){
+  return G.followers.filter(f => f.cityIdx === cityIdx).length;
+}
+
+function getCityMaxPop(cityIdx){
+  const city = G.cities[cityIdx];
+  let maxPop = 5;
+  maxPop += (city.buildings.barracks || 0) * 1;
+  maxPop += (city.buildings.tavern || 0) * 2;
+  return maxPop;
+}
+
+function foundCity(name){
+  const idx = G.cities.length;
+  if(idx >= 5){ toast('Max 5 cities!','#f44'); return; }
+  if(G.level < CITY_LEVEL_REQ[idx]){ toast('Need level ' + CITY_LEVEL_REQ[idx],'#f44'); return; }
+  const cost = CITY_COSTS[idx];
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+  G.cities.push(newCity(name));
+  toast('Founded ' + name + '!', '#0ff');
+  checkAchievements();
+  save();
+  showTab('town');
+}
+
+function switchCity(idx){
+  if(idx < 0 || idx >= G.cities.length) return;
+  G.currentCity = idx;
+  toast('Viewing: ' + G.cities[idx].name, '#0ff');
+  showTab('town');
+}
+
+function setCitySpecialty(spec){
+  const city = getCity();
+  city.specialty = spec;
+  toast(city.name + ' specialized as ' + SPECIALTIES[spec].name, '#0ff');
+  save();
+  showTab('town');
+}
+
+function upgradeWall(){
+  const city = getCity();
+  if(city.wallLevel >= 20){ toast('Wall maxed!','#f44'); return; }
+  const cost = Math.floor(80 * Math.pow(1.9, city.wallLevel));
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+  city.wallLevel++;
+  updateCityDefense(G.currentCity);
+  toast(city.name + ' wall upgraded to Lv.' + city.wallLevel, '#0ff');
+  save();
+  showTab('town');
+}
+
+function moveFollowerToCity(fId, cityIdx){
+  const f = G.followers.find(x => x.id === fId);
+  if(!f) return;
+  const pop = getCityPopulation(cityIdx);
+  const maxPop = getCityMaxPop(cityIdx);
+  if(pop >= maxPop){ toast('City is full! (' + pop + '/' + maxPop + ')','#f44'); return; }
+  f.cityIdx = cityIdx;
+  toast(f.name + ' moved to ' + G.cities[cityIdx].name, '#0ff');
+  updateCityDefense(cityIdx);
+  save();
+}
+
+// ==================== RAID EVENTS ====================
+function triggerRaid(cityIdx){
+  const city = G.cities[cityIdx];
+  const defense = getCityDefense(cityIdx);
+  // Raid strength scales with level and time
+  const raidPower = Math.floor(20 + G.level * 3 + Math.random() * G.level * 2);
+  let log = [];
+  log.push('=== RAID on ' + city.name + '! ===');
+  log.push('City Defense: ' + defense + ' | Raider Strength: ' + raidPower);
+
+  let won = defense >= raidPower;
+  if(won){
+    log.push('Your defenses held! Raiders repelled!');
+    city.raidWins++;
+    G.total_raids_won++;
+    // Bonus loot for defending
+    const goldReward = Math.floor(30 + G.level * 5 + defense * 0.5);
+    G.gold += goldReward;
+    G.total_gold_earned += goldReward;
+    log.push('+' + goldReward + ' gold from raider spoils!');
+    if(Math.random() < 0.15){
+      G.gems += 1;
+      log.push('+1 gem found in the wreckage!');
+    }
+  } else {
+    log.push('Defenses breached! Raiders pillaged your city!');
+    city.raidLosses++;
+    // Lose some gold
+    const goldLost = Math.floor(Math.min(G.gold * 0.1, 50 + G.level * 3));
+    G.gold = Math.max(0, G.gold - goldLost);
+    log.push('-' + goldLost + ' gold stolen!');
+    // Building damage chance
+    const bKeys = Object.keys(city.buildings).filter(k => city.buildings[k] > 0);
+    if(bKeys.length > 0 && Math.random() < 0.3){
+      const dmgKey = bKeys[Math.floor(Math.random() * bKeys.length)];
+      city.buildings[dmgKey] = Math.max(0, city.buildings[dmgKey] - 1);
+      const bName = BUILDINGS.find(b => b.id === dmgKey)?.name || dmgKey;
+      log.push(bName + ' damaged! (-1 level)');
+    }
+  }
+  city.lastRaid = Date.now();
+  checkAchievements();
+  save();
+  return { won, log };
+}
+
+function showRaidResult(result){
+  let html = '<h2>Raid ' + (result.won ? 'Defended!' : 'Breached!') + '</h2>';
+  html += '<div class="log">';
+  result.log.forEach(line => {
+    let cls = '';
+    if(line.includes('held') || line.includes('+')) cls = 'heal';
+    else if(line.includes('breached') || line.includes('-') || line.includes('damaged')) cls = 'dmg-player';
+    html += '<div class="log-line ' + cls + '">' + line + '</div>';
+  });
+  html += '</div>';
+  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'town\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
 }
 
 // ==================== ACHIEVEMENTS ====================
@@ -1202,11 +1403,17 @@ const ACHIEVEMENT_DEFS = [
   {id:'legend_follower',name:'Legendary Pull',desc:'Get a Legendary follower',check:()=>G.followers.some(f=>f.rarity>=4)},
   {id:'mythic_follower',name:'MYTHIC!!!',desc:'Get a Mythic follower',check:()=>G.followers.some(f=>f.rarity>=5)},
   // Buildings
-  {id:'building_1',name:'Foundation',desc:'Build your first building',check:()=>Object.values(G.buildings).some(v=>v>=1)},
-  {id:'building_5',name:'Builder',desc:'Have any building at level 5',check:()=>Object.values(G.buildings).some(v=>v>=5)},
-  {id:'building_10',name:'Architect',desc:'Have any building at level 10',check:()=>Object.values(G.buildings).some(v=>v>=10)},
-  {id:'building_20',name:'Master Builder',desc:'Max out a building (level 20)',check:()=>Object.values(G.buildings).some(v=>v>=20)},
-  {id:'all_buildings',name:'Town Complete',desc:'Have all 8 buildings at level 1+',check:()=>BUILDINGS.every(b=>(G.buildings[b.id]||0)>=1)},
+  {id:'building_1',name:'Foundation',desc:'Build your first building',check:()=>G.cities.some(c=>Object.values(c.buildings).some(v=>v>=1))},
+  {id:'building_5',name:'Builder',desc:'Have any building at level 5',check:()=>G.cities.some(c=>Object.values(c.buildings).some(v=>v>=5))},
+  {id:'building_10',name:'Architect',desc:'Have any building at level 10',check:()=>G.cities.some(c=>Object.values(c.buildings).some(v=>v>=10))},
+  {id:'building_20',name:'Master Builder',desc:'Max out a building (level 20)',check:()=>G.cities.some(c=>Object.values(c.buildings).some(v=>v>=20))},
+  {id:'all_buildings',name:'Town Complete',desc:'All 8 buildings at level 1+ in one city',check:()=>G.cities.some(c=>BUILDINGS.every(b=>(c.buildings[b.id]||0)>=1))},
+  {id:'city_2',name:'Expansion',desc:'Found a second city',check:()=>G.cities.length>=2},
+  {id:'city_3',name:'Empire',desc:'Found 3 cities',check:()=>G.cities.length>=3},
+  {id:'city_5',name:'Dominion',desc:'Found all 5 cities',check:()=>G.cities.length>=5},
+  {id:'raid_win_1',name:'Defender',desc:'Win your first raid defense',check:()=>(G.total_raids_won||0)>=1},
+  {id:'raid_win_10',name:'Iron Wall',desc:'Win 10 raid defenses',check:()=>(G.total_raids_won||0)>=10},
+  {id:'raid_win_50',name:'Unbreakable',desc:'Win 50 raid defenses',check:()=>(G.total_raids_won||0)>=50},
   // Skills
   {id:'skill_10',name:'Apprentice',desc:'Get any skill to level 10',check:()=>G.skillLevels.some(v=>v>=10)},
   {id:'skill_25',name:'Journeyman',desc:'Get any skill to level 25',check:()=>G.skillLevels.some(v=>v>=25)},
@@ -1560,13 +1767,86 @@ function sellItem(idx){
 
 // ==================== TOWN & FOLLOWERS UI ====================
 function renderTown(c){
-  let html = '<h2>Town</h2>';
-  html += '<div class="text-sm text-dim mb">Gold/min: ' + getGoldPerMin() + ' | Followers: ' + G.followers.length + '</div>';
+  const city = getCity();
+  const ci = G.currentCity;
+  const pop = getCityPopulation(ci);
+  const maxPop = getCityMaxPop(ci);
+
+  let html = '<h2>Cities</h2>';
+
+  // City switcher
+  html += '<div class="card">';
+  G.cities.forEach((ct, i) => {
+    const active = i === ci ? 'btn-cyan' : '';
+    html += '<button class="btn ' + active + '" onclick="switchCity(' + i + ')">' + ct.name + '</button> ';
+  });
+  // Found new city button
+  if(G.cities.length < 5){
+    const nextIdx = G.cities.length;
+    const nextCost = CITY_COSTS[nextIdx];
+    const nextLv = CITY_LEVEL_REQ[nextIdx];
+    const canFound = G.level >= nextLv && G.gold >= nextCost;
+    html += '<br><button class="btn btn-green" onclick="var n=prompt(\'Name your new city:\');if(n)foundCity(n)" ' + (canFound ? '' : 'disabled') + '>';
+    html += 'Found City (' + nextCost + 'g, Lv.' + nextLv + ')</button>';
+  }
+  html += '</div>';
+
+  // Current city info
+  html += '<div class="card">';
+  html += '<h3 style="color:#0ff">' + city.name + '</h3>';
+  // ASCII layout
+  const wallChar = city.wallLevel > 0 ? '=' : '-';
+  const wallStr = wallChar.repeat(24);
+  html += '<pre style="color:#666;font-size:11px;line-height:1.2">';
+  html += '  ' + wallStr + '\n';
+  html += '  |' + '  ' + city.name.substring(0,20).padEnd(20) + '  |\n';
+  html += '  |  Pop: ' + (pop+'/'+maxPop).padEnd(7) + ' Def: ' + (city.defense+'').padEnd(5) + '  |\n';
+  html += '  |  Wall Lv.' + (city.wallLevel+'').padEnd(3) + ' ' + (SPECIALTIES[city.specialty].name).padEnd(10) + '|\n';
+  // Show buildings as grid
+  let bLine1 = '  |';
+  let bLine2 = '  |';
+  let count = 0;
+  BUILDINGS.forEach(b => {
+    const lv = city.buildings[b.id] || 0;
+    const abbr = b.name.substring(0,3).toUpperCase();
+    if(count < 4) bLine1 += ' ' + abbr + (lv > 9 ? lv : ' '+lv);
+    else bLine2 += ' ' + abbr + (lv > 9 ? lv : ' '+lv);
+    count++;
+  });
+  bLine1 += '      |'; bLine2 += '      |';
+  html += bLine1 + '\n' + bLine2 + '\n';
+  html += '  ' + wallStr + '\n';
+  html += '</pre>';
+  html += '<div class="text-sm">Gold/min (all cities): ' + getGoldPerMin() + ' | Total followers: ' + G.followers.length + '</div>';
+  html += '</div>';
+
+  // Specialty
+  html += '<h3>City Specialty</h3>';
+  html += '<div class="card">';
+  html += 'Current: <b>' + SPECIALTIES[city.specialty].name + '</b> - ' + SPECIALTIES[city.specialty].desc + '<br>';
+  for(const sp in SPECIALTIES){
+    const active = city.specialty === sp ? 'btn-cyan' : '';
+    html += '<button class="btn ' + active + '" onclick="setCitySpecialty(\'' + sp + '\')" style="padding:6px 10px;min-height:36px">' + SPECIALTIES[sp].name + '</button> ';
+  }
+  html += '</div>';
+
+  // Wall
+  html += '<h3>Wall (Defense)</h3>';
+  html += '<div class="card">';
+  html += 'Wall Lv.' + city.wallLevel + '/20 | Defense Rating: ' + city.defense + '<br>';
+  if(city.wallLevel < 20){
+    const wallCost = Math.floor(80 * Math.pow(1.9, city.wallLevel));
+    html += '<button class="btn btn-cyan" onclick="upgradeWall()">Upgrade Wall (' + wallCost + 'g)</button>';
+  } else {
+    html += '<span class="legendary">MAXED</span>';
+  }
+  html += '<br><span class="text-sm text-dim">Raids won: ' + city.raidWins + ' | lost: ' + city.raidLosses + '</span>';
+  html += '</div>';
 
   // Buildings
   html += '<h3>Buildings</h3>';
   BUILDINGS.forEach(b => {
-    const lv = G.buildings[b.id] || 0;
+    const lv = city.buildings[b.id] || 0;
     const cost = getBuildingCost(b.id);
     const maxed = lv >= 20;
     html += '<div class="card">';
@@ -1580,14 +1860,14 @@ function renderTown(c){
     html += '</div>';
   });
 
-  // Followers list
-  html += '<h3>Followers (' + G.followers.length + ')</h3>';
-  if(G.followers.length === 0){
-    html += '<div class="text-dim">No followers yet. Use Summon tab to recruit!</div>';
+  // Followers in this city
+  const cityFollowers = G.followers.filter(f => (f.cityIdx || 0) === ci);
+  html += '<h3>Followers in ' + city.name + ' (' + pop + '/' + maxPop + ')</h3>';
+  if(cityFollowers.length === 0){
+    html += '<div class="text-dim">No followers in this city. Assign some!</div>';
   }
-  // Group by assignment
   const groups = {};
-  G.followers.forEach(f => {
+  cityFollowers.forEach(f => {
     if(!groups[f.assigned]) groups[f.assigned] = [];
     groups[f.assigned].push(f);
   });
@@ -1603,6 +1883,20 @@ function renderTown(c){
       html += '</div>';
     });
   }
+
+  // Unassigned followers (no city)
+  const unassigned = G.followers.filter(f => f.cityIdx === undefined || f.cityIdx === null);
+  if(unassigned.length > 0){
+    html += '<div class="text-sm mt" style="color:#f44">[UNASSIGNED - No City]</div>';
+    unassigned.forEach(f => {
+      html += '<div class="follower-card">';
+      html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
+      html += ' Lv.' + f.level + ' ';
+      html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="moveFollowerToCity(' + f.id + ',' + ci + ')">Assign Here</button>';
+      html += '</div>';
+    });
+  }
+
   c.innerHTML = html;
 }
 
@@ -1624,7 +1918,8 @@ function renderFollowerDetail(c, fId){
   html += 'Power: ' + f.power + ' | Defense: ' + f.defense + '<br>';
   html += 'Happiness: <span style="color:' + hColor + '">' + f.happiness + '/100</span><br>';
   html += 'Loyalty: ' + f.loyalty + '/100<br>';
-  html += 'Assigned: ' + f.assigned + '<br>';
+  html += 'City: ' + (G.cities[f.cityIdx || 0]?.name || 'Unassigned') + '<br>';
+  html += 'Role: ' + f.assigned + '<br>';
   html += '</div>';
 
   html += '<h3>Actions</h3>';
@@ -1637,6 +1932,15 @@ function renderFollowerDetail(c, fId){
     const active = f.assigned === r ? 'btn-cyan' : '';
     html += '<button class="btn ' + active + '" onclick="assignFollower(' + f.id + ',\'' + r + '\')">' + r + '</button> ';
   });
+
+  // City assignment
+  if(G.cities.length > 1){
+    html += '<h3>Move to City</h3>';
+    G.cities.forEach((ct, i) => {
+      const active = (f.cityIdx || 0) === i ? 'btn-cyan' : '';
+      html += '<button class="btn ' + active + '" onclick="moveFollowerToCity(' + f.id + ',' + i + ');showTab(\'followers_detail\',' + f.id + ')">' + ct.name + '</button> ';
+    });
+  }
 
   html += '<div class="mt"><button class="btn btn-red" onclick="if(confirm(\'Dismiss ' + f.name + '?\'))dismissFollower(' + f.id + ')">Dismiss</button></div>';
   html += '<div class="mt"><button class="btn" onclick="showTab(\'town\')">Back to Town</button></div>';
@@ -1852,6 +2156,15 @@ function gameLoop(){
     });
   }
 
+  // Raid events (random, ~every 10 min per city)
+  G.cities.forEach((city, ci) => {
+    const timeSinceRaid = Date.now() - (city.lastRaid || 0);
+    if(timeSinceRaid > 600000 && Math.random() < 0.005){ // ~every 10 min, 0.5% per tick
+      const result = triggerRaid(ci);
+      showRaidResult(result);
+    }
+  });
+
   // Auto-save
   saveTimer++;
   if(saveTimer >= 30){
@@ -1864,8 +2177,28 @@ function gameLoop(){
 }
 
 // ==================== INIT ====================
+function migrateOldSave(){
+  // Migrate old single-buildings saves to multi-city
+  if(!G.cities){
+    const oldBuildings = G.buildings || {};
+    G.cities = [newCity('Outpost Alpha')];
+    G.cities[0].buildings = oldBuildings;
+    G.currentCity = 0;
+    delete G.buildings;
+  }
+  if(G.total_raids_won === undefined) G.total_raids_won = 0;
+  if(G.dungeons_cleared === undefined) G.dungeons_cleared = 0;
+  // Assign followers to city 0 if they don't have a city
+  G.followers.forEach(f => {
+    if(f.cityIdx === undefined) f.cityIdx = 0;
+  });
+  // Update defense for all cities
+  G.cities.forEach((c, i) => updateCityDefense(i));
+}
+
 function init(){
   if(load()){
+    migrateOldSave();
     calcOfflineProgress();
     document.getElementById('top-bar').style.display = '';
     document.getElementById('nav').style.display = 'flex';
