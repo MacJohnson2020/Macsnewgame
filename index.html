@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Void Raiders</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a1a; color:#ccc; font-family: 'Courier New', monospace; font-size:14px; overflow-x:hidden; }
+#app { max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+/* Top Bar */
+#top-bar { background:#111; padding:8px 12px; border-bottom:1px solid #333; position:sticky; top:0; z-index:10; }
+#top-bar .row { display:flex; justify-content:space-between; align-items:center; }
+.stat-label { color:#888; font-size:11px; }
+.stat-val { color:#0ff; font-size:13px; font-weight:bold; }
+.gold-val { color:#ffd700; }
+.energy-val { color:#0f0; }
+/* Main Content */
+#content { flex:1; overflow-y:auto; padding:10px; padding-bottom:70px; }
+/* Bottom Nav */
+#nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; display:flex; background:#111; border-top:1px solid #333; z-index:10; }
+#nav button { flex:1; padding:12px 4px; background:none; border:none; color:#666; font-family:inherit; font-size:11px; cursor:pointer; }
+#nav button.active { color:#0ff; border-top:2px solid #0ff; }
+/* Buttons */
+.btn { display:inline-block; padding:10px 16px; margin:4px; background:#1a1a2e; border:1px solid #333; color:#ccc; font-family:inherit; font-size:13px; cursor:pointer; min-height:44px; min-width:44px; }
+.btn:active { background:#2a2a4e; }
+.btn:disabled { opacity:0.4; }
+.btn-cyan { border-color:#0ff; color:#0ff; }
+.btn-purple { border-color:#b026ff; color:#b026ff; }
+.btn-gold { border-color:#ffd700; color:#ffd700; }
+.btn-green { border-color:#0f0; color:#0f0; }
+.btn-red { border-color:#f44; color:#f44; }
+/* Rarity Colors */
+.common { color:#aaa; } .uncommon { color:#0f0; } .rare { color:#44f; }
+.epic { color:#b026ff; } .legendary { color:#ffd700; }
+/* Progress Bar */
+.pbar { background:#1a1a2e; border:1px solid #333; height:16px; margin:4px 0; position:relative; }
+.pbar-fill { height:100%; transition:width 0.3s; }
+.pbar-text { position:absolute; top:0; left:4px; font-size:10px; line-height:16px; color:#fff; }
+.pbar-cyan .pbar-fill { background:#0ff; }
+.pbar-green .pbar-fill { background:#0a0; }
+.pbar-purple .pbar-fill { background:#b026ff; }
+.pbar-gold .pbar-fill { background:#ffd700; }
+/* Sections */
+h2 { color:#0ff; font-size:16px; margin:12px 0 8px; border-bottom:1px solid #333; padding-bottom:4px; }
+h3 { color:#b026ff; font-size:14px; margin:8px 0 4px; }
+.card { background:#111; border:1px solid #222; padding:10px; margin:6px 0; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+.text-center { text-align:center; }
+.text-sm { font-size:11px; }
+.text-dim { color:#666; }
+.mt { margin-top:8px; }
+.mb { margin-bottom:8px; }
+/* Toast */
+#toast-container { position:fixed; top:50px; left:50%; transform:translateX(-50%); z-index:100; width:90%; max-width:400px; }
+.toast { background:#1a1a2e; border:1px solid #0ff; padding:10px; margin:4px 0; text-align:center; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+/* Modal */
+.modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:50; display:flex; align-items:center; justify-content:center; }
+.modal { background:#111; border:1px solid #0ff; padding:20px; max-width:90%; max-height:80vh; overflow-y:auto; }
+/* Combat Log */
+.log { max-height:200px; overflow-y:auto; background:#050510; border:1px solid #222; padding:6px; font-size:12px; }
+.log-line { margin:2px 0; }
+.dmg-player { color:#f44; } .dmg-enemy { color:#0ff; } .heal { color:#0f0; }
+/* Followers */
+.follower-card { background:#0a0a1a; border:1px solid #333; padding:8px; margin:4px 0; }
+.follower-card .name { font-weight:bold; }
+/* Input */
+input[type="text"] { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; font-family:inherit; font-size:14px; width:100%; }
+select { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; font-family:inherit; font-size:14px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top-bar">
+    <div class="row">
+      <div><span class="stat-label">LVL </span><span class="stat-val" id="hud-level">1</span></div>
+      <div><span class="stat-label">EN </span><span class="energy-val" id="hud-energy">100/100</span></div>
+      <div><span class="stat-label">GOLD </span><span class="gold-val" id="hud-gold">0</span></div>
+      <div><span class="stat-label">GEMS </span><span class="stat-val" style="color:#b026ff" id="hud-gems">10</span></div>
+    </div>
+    <div class="pbar pbar-cyan"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" id="hud-xp-text">0 / 100 XP</span></div>
+  </div>
+  <div id="content"></div>
+  <div id="nav">
+    <button onclick="showTab('missions')" id="tab-missions">Missions</button>
+    <button onclick="showTab('skills')" id="tab-skills">Skills</button>
+    <button onclick="showTab('gear')" id="tab-gear">Gear</button>
+    <button onclick="showTab('town')" id="tab-town">Town</button>
+    <button onclick="showTab('gacha')" id="tab-gacha">Summon</button>
+    <button onclick="showTab('profile')" id="tab-profile">Profile</button>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script>
+// ==================== GAME DATA ====================
+const CLASSES = {
+  striker: { name:'Striker', desc:'High damage, fast attacks', power:3, defense:1, speed:3, luck:1 },
+  tank: { name:'Tank', desc:'Tanky, slow but strong', power:2, defense:4, speed:1, luck:1 },
+  phantom: { name:'Phantom', desc:'Evasive, lucky, crits', power:2, defense:1, speed:2, luck:3 }
+};
+
+const SKILL_NAMES = ['Combat','Mining','Crafting','Hacking','Scavenging','Engineering'];
+const SKILL_RESOURCES = ['','ore','parts','data','scrap','components'];
+
+function xpForSkillLevel(lv){ return Math.floor(50 * Math.pow(1.15, lv-1)); }
+function xpForLevel(lv){ return Math.floor(100 * Math.pow(1.2, lv-1)); }
+
+const ZONES = [
+  { name:'Rust Flats', minLv:1, missions:[
+    {name:'Scavenge Wreckage',energy:5,enemyHp:30,enemyAtk:3,gold:10,xp:20,skillXp:{0:10}},
+    {name:'Fight Drifters',energy:8,enemyHp:50,enemyAtk:5,gold:20,xp:35,skillXp:{0:15}},
+    {name:'Clear Outpost',energy:12,enemyHp:80,enemyAtk:8,gold:35,xp:55,skillXp:{0:25},boss:true}
+  ]},
+  { name:'Neon Undercity', minLv:5, missions:[
+    {name:'Hack Terminal',energy:8,enemyHp:60,enemyAtk:6,gold:25,xp:40,skillXp:{3:15}},
+    {name:'Gang Turf War',energy:12,enemyHp:100,enemyAtk:10,gold:45,xp:65,skillXp:{0:20}},
+    {name:'Syndicate Boss',energy:18,enemyHp:180,enemyAtk:15,gold:80,xp:100,skillXp:{0:35},boss:true}
+  ]},
+  { name:'The Crucible', minLv:12, missions:[
+    {name:'Mine Void Ore',energy:10,enemyHp:90,enemyAtk:9,gold:35,xp:50,skillXp:{1:20}},
+    {name:'Ambush Convoy',energy:15,enemyHp:150,enemyAtk:14,gold:60,xp:85,skillXp:{0:30,4:15}},
+    {name:'Warden Mech',energy:22,enemyHp:300,enemyAtk:22,gold:120,xp:150,skillXp:{0:50},boss:true}
+  ]},
+  { name:'Phantom Reach', minLv:22, missions:[
+    {name:'Scout Anomaly',energy:12,enemyHp:140,enemyAtk:13,gold:50,xp:70,skillXp:{3:25,4:15}},
+    {name:'Void Incursion',energy:18,enemyHp:220,enemyAtk:20,gold:85,xp:110,skillXp:{0:40}},
+    {name:'Rift Guardian',energy:28,enemyHp:500,enemyAtk:35,gold:200,xp:250,skillXp:{0:70},boss:true}
+  ]},
+  { name:'Iron Spire', minLv:35, missions:[
+    {name:'Infiltrate Labs',energy:15,enemyHp:200,enemyAtk:18,gold:70,xp:95,skillXp:{3:30,5:20}},
+    {name:'Siege Walls',energy:22,enemyHp:350,enemyAtk:28,gold:120,xp:160,skillXp:{0:50,5:25}},
+    {name:'Overlord Prime',energy:35,enemyHp:800,enemyAtk:50,gold:350,xp:400,skillXp:{0:100},boss:true}
+  ]},
+  { name:'The Abyss', minLv:50, missions:[
+    {name:'Descend Layer',energy:20,enemyHp:400,enemyAtk:30,gold:120,xp:150,skillXp:{0:60,4:30}},
+    {name:'Abyssal Horde',energy:30,enemyHp:600,enemyAtk:45,gold:200,xp:250,skillXp:{0:80}},
+    {name:'Void Titan',energy:45,enemyHp:1500,enemyAtk:80,gold:600,xp:600,skillXp:{0:150},boss:true}
+  ]},
+  { name:'Endgame: Nexus', minLv:70, missions:[
+    {name:'Nexus Breach',energy:25,enemyHp:700,enemyAtk:50,gold:200,xp:250,skillXp:{0:80}},
+    {name:'Omega Squad',energy:35,enemyHp:1000,enemyAtk:70,gold:350,xp:400,skillXp:{0:100}},
+    {name:'Nexus Core',energy:50,enemyHp:3000,enemyAtk:120,gold:1000,xp:1000,skillXp:{0:250},boss:true}
+  ]}
+];
+
+const BUILDINGS = [
+  {id:'generator',name:'Generator',desc:'Energy regen speed',baseCost:50,costMult:1.8,effect:'energy_regen'},
+  {id:'foundry',name:'Foundry',desc:'Passive gold/min',baseCost:80,costMult:1.8,effect:'gold_per_min'},
+  {id:'lab',name:'Lab',desc:'XP boost %',baseCost:100,costMult:2.0,effect:'xp_boost'},
+  {id:'vault',name:'Vault',desc:'Max energy +5/lv',baseCost:60,costMult:1.6,effect:'max_energy'},
+  {id:'barracks',name:'Barracks',desc:'Combat power +3/lv',baseCost:120,costMult:2.0,effect:'combat_power'},
+  {id:'tavern',name:'Tavern',desc:'Follower happiness +',baseCost:100,costMult:1.8,effect:'happiness'},
+  {id:'workshop',name:'Workshop',desc:'Crafting speed +',baseCost:90,costMult:1.9,effect:'craft_speed'},
+  {id:'shrine',name:'Shrine',desc:'Luck boost +',baseCost:150,costMult:2.2,effect:'luck_boost'}
+];
+
+const GEAR_SLOTS = ['weapon','armor','shield','implant'];
+const GEAR_NAMES = {
+  weapon:['Rusty Blade','Plasma Cutter','Void Edge','Nexus Cannon','Abyssal Reaper'],
+  armor:['Scrap Vest','Nano Weave','Void Plate','Nexus Shell','Abyssal Shroud'],
+  shield:['Tin Buckler','Energy Barrier','Void Ward','Nexus Aegis','Abyssal Wall'],
+  implant:['Basic Chip','Neural Link','Void Eye','Nexus Core','Abyssal Mind']
+};
+const RARITIES = ['common','uncommon','rare','epic','legendary'];
+const RARITY_MULT = [1, 1.5, 2.2, 3.5, 5];
+const RARITY_NAMES = ['Common','Uncommon','Rare','Epic','Legendary'];
+
+const FOLLOWER_NAMES = ['Kira','Rex','Nova','Bolt','Shade','Ember','Frost','Nyx','Axel','Vex','Luna','Drift','Scar','Echo','Blitz','Rune','Cipher','Jinx','Havoc','Onyx','Zara','Pike','Ash','Wraith','Pulse'];
+const FOLLOWER_CLASSES = ['Fighter','Miner','Crafter','Hacker','Scout'];
+
+// ==================== GAME STATE ====================
+let G = null; // game state
+
+function newGame(name, cls){
+  return {
+    name: name,
+    class: cls,
+    level: 1, xp: 0,
+    gold: 0, gems: 10,
+    energy: 100, maxEnergy: 100,
+    stats: { power:5, defense:5, speed:5, luck:5 },
+    statPoints: 0,
+    skills: [0,0,0,0,0,0], // xp per skill
+    skillLevels: [1,1,1,1,1,1],
+    gear: { weapon:null, armor:null, shield:null, implant:null },
+    inventory: [],
+    buildings: {},
+    followers: [],
+    followerIdCounter: 0,
+    missions_completed: 0,
+    bosses_killed: 0,
+    total_kills: 0,
+    total_gold_earned: 0,
+    total_gacha_pulls: 0,
+    prestige: 0,
+    prestige_bonus: 0, // percent
+    lastSave: Date.now(),
+    lastOnline: Date.now(),
+    achievements: [],
+    combatLog: []
+  };
+}
+
+function save(){
+  if(!G) return;
+  G.lastSave = Date.now();
+  G.lastOnline = Date.now();
+  localStorage.setItem('voidraiders_save', JSON.stringify(G));
+}
+
+function load(){
+  try {
+    const d = localStorage.getItem('voidraiders_save');
+    if(d){ G = JSON.parse(d); return true; }
+  } catch(e){}
+  return false;
+}
+
+function toast(msg, color){
+  const c = document.getElementById('toast-container');
+  const d = document.createElement('div');
+  d.className = 'toast';
+  if(color) d.style.borderColor = color;
+  d.textContent = msg;
+  c.appendChild(d);
+  setTimeout(()=> d.remove(), 2500);
+}
+
+// ==================== CORE MECHANICS ====================
+function getMaxEnergy(){
+  let base = 100;
+  const vaultLv = G.buildings.vault || 0;
+  base += vaultLv * 5;
+  return base;
+}
+
+function getEnergyRegenRate(){
+  // seconds per 1 energy
+  let base = 30;
+  const genLv = G.buildings.generator || 0;
+  base = Math.max(5, base - genLv * 2);
+  return base;
+}
+
+function getXpBoost(){
+  let boost = 1 + (G.prestige_bonus / 100);
+  const labLv = G.buildings.lab || 0;
+  boost += labLv * 0.05;
+  return boost;
+}
+
+function getCombatPower(){
+  let p = G.stats.power;
+  const bLv = G.buildings.barracks || 0;
+  p += bLv * 3;
+  // gear bonuses
+  for(const slot of GEAR_SLOTS){
+    if(G.gear[slot]) p += G.gear[slot].power || 0;
+  }
+  // class bonus
+  const cls = CLASSES[G.class];
+  p += cls.power * G.level;
+  // follower bonus
+  const activeFollowers = G.followers.filter(f => f.assigned === 'combat');
+  activeFollowers.forEach(f => { p += Math.floor(f.level * f.power * 0.5); });
+  return Math.floor(p);
+}
+
+function getCombatDefense(){
+  let d = G.stats.defense;
+  for(const slot of GEAR_SLOTS){
+    if(G.gear[slot]) d += G.gear[slot].defense || 0;
+  }
+  const cls = CLASSES[G.class];
+  d += cls.defense * G.level;
+  return Math.floor(d);
+}
+
+function getCombatSpeed(){
+  let s = G.stats.speed;
+  const cls = CLASSES[G.class];
+  s += cls.speed * Math.floor(G.level/2);
+  return Math.floor(s);
+}
+
+function getLuck(){
+  let l = G.stats.luck;
+  const cls = CLASSES[G.class];
+  l += cls.luck * Math.floor(G.level/3);
+  const shrineLv = G.buildings.shrine || 0;
+  l += shrineLv * 2;
+  return Math.floor(l);
+}
+
+function getGoldPerMin(){
+  const fLv = G.buildings.foundry || 0;
+  let base = fLv * 2;
+  // followers assigned to foundry
+  const workers = G.followers.filter(f => f.assigned === 'foundry');
+  workers.forEach(f => { base += Math.floor(f.level * 0.5) + 1; });
+  return base;
+}
+
+function addXp(amount){
+  amount = Math.floor(amount * getXpBoost());
+  G.xp += amount;
+  let needed = xpForLevel(G.level);
+  while(G.xp >= needed && G.level < 100){
+    G.xp -= needed;
+    G.level++;
+    G.statPoints += 3;
+    toast('LEVEL UP! You are now level ' + G.level, '#0ff');
+    checkAchievements();
+    needed = xpForLevel(G.level);
+  }
+  if(G.level >= 100) G.xp = Math.min(G.xp, needed);
+}
+
+function addSkillXp(skillIdx, amount){
+  amount = Math.floor(amount * getXpBoost());
+  G.skills[skillIdx] += amount;
+  let needed = xpForSkillLevel(G.skillLevels[skillIdx]);
+  while(G.skills[skillIdx] >= needed && G.skillLevels[skillIdx] < 99){
+    G.skills[skillIdx] -= needed;
+    G.skillLevels[skillIdx]++;
+    toast(SKILL_NAMES[skillIdx] + ' level ' + G.skillLevels[skillIdx] + '!', '#b026ff');
+    needed = xpForSkillLevel(G.skillLevels[skillIdx]);
+  }
+}
+
+function generateGear(missionLevel, isBoss){
+  const luck = getLuck();
+  let rarityRoll = Math.random() * 100 + luck * 0.5;
+  let rarity = 0;
+  if(rarityRoll > 95) rarity = 4;
+  else if(rarityRoll > 80) rarity = 3;
+  else if(rarityRoll > 55) rarity = 2;
+  else if(rarityRoll > 30) rarity = 1;
+  if(isBoss && rarity < 2) rarity = 2; // boss guarantees rare+
+
+  const slot = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
+  const names = GEAR_NAMES[slot];
+  const name = names[rarity] || names[names.length-1];
+  const mult = RARITY_MULT[rarity];
+  const basePower = Math.floor((3 + missionLevel * 1.5) * mult);
+
+  return {
+    id: Date.now() + Math.random(),
+    name: name,
+    slot: slot,
+    rarity: rarity,
+    power: slot === 'weapon' ? basePower : Math.floor(basePower * 0.3),
+    defense: slot === 'armor' || slot === 'shield' ? basePower : Math.floor(basePower * 0.2),
+    level: Math.max(1, Math.floor(missionLevel * mult * 0.5))
+  };
+}
+
+// ==================== COMBAT ====================
+function runCombat(mission, zoneIdx){
+  if(G.energy < mission.energy){
+    toast('Not enough energy! Need ' + mission.energy, '#f44');
+    return;
+  }
+  G.energy -= mission.energy;
+
+  const playerPower = getCombatPower();
+  const playerDef = getCombatDefense();
+  const playerSpeed = getCombatSpeed();
+  const playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  let playerHp = playerMaxHp;
+
+  let enemyHp = Math.floor(mission.enemyHp * (1 + zoneIdx * 0.1));
+  const enemyMaxHp = enemyHp;
+  const enemyAtk = Math.floor(mission.enemyAtk * (1 + zoneIdx * 0.05));
+
+  let log = [];
+  let turn = 0;
+  let won = false;
+
+  log.push('--- ' + mission.name + ' ---');
+  log.push('Your HP: ' + playerHp + ' | Enemy HP: ' + enemyHp);
+
+  while(playerHp > 0 && enemyHp > 0 && turn < 50){
+    turn++;
+    // Player attacks
+    let dmg = Math.max(1, playerPower - Math.floor(enemyAtk * 0.2) + Math.floor(Math.random()*5));
+    // Crit chance
+    if(Math.random()*100 < getLuck()){
+      dmg = Math.floor(dmg * 2);
+      log.push('Turn ' + turn + ': You CRIT for ' + dmg + ' damage!');
+    } else {
+      log.push('Turn ' + turn + ': You deal ' + dmg + ' damage.');
+    }
+    enemyHp -= dmg;
+    if(enemyHp <= 0){ won = true; break; }
+
+    // Enemy attacks
+    let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
+    // Dodge chance based on speed
+    if(Math.random()*100 < Math.min(30, playerSpeed * 0.5)){
+      log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
+    } else {
+      playerHp -= eDmg;
+      log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
+    }
+  }
+
+  let rewards = { gold:0, xp:0, gear:null, skillXp:{} };
+
+  if(won){
+    log.push('=== VICTORY! ===');
+    G.total_kills++;
+    G.missions_completed++;
+    if(mission.boss) G.bosses_killed++;
+
+    rewards.gold = Math.floor(mission.gold * (1 + Math.random()*0.3));
+    rewards.xp = mission.xp;
+    rewards.skillXp = mission.skillXp || {};
+
+    // Loot drop chance
+    let dropChance = mission.boss ? 80 : 30 + getLuck();
+    if(Math.random()*100 < dropChance){
+      rewards.gear = generateGear(G.level, mission.boss);
+    }
+
+    G.gold += rewards.gold;
+    G.total_gold_earned += rewards.gold;
+    addXp(rewards.xp);
+    for(const sk in rewards.skillXp){
+      addSkillXp(parseInt(sk), rewards.skillXp[sk]);
+    }
+    if(rewards.gear){
+      G.inventory.push(rewards.gear);
+      log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']');
+    }
+    log.push('+' + rewards.gold + ' gold, +' + rewards.xp + ' XP');
+  } else {
+    log.push('=== DEFEAT ===');
+    log.push('You were overwhelmed...');
+  }
+
+  G.combatLog = log;
+  checkAchievements();
+  save();
+  showCombatResult(log, won, rewards);
+}
+
+function showCombatResult(log, won, rewards){
+  let html = '<h2>' + (won ? 'Victory!' : 'Defeat') + '</h2>';
+  html += '<div class="log">';
+  log.forEach(line => {
+    let cls = '';
+    if(line.includes('You deal') || line.includes('CRIT')) cls = 'dmg-enemy';
+    else if(line.includes('Enemy deals')) cls = 'dmg-player';
+    else if(line.includes('DODGE')) cls = 'heal';
+    else if(line.includes('VICTORY')) cls = 'heal';
+    else if(line.includes('DEFEAT')) cls = 'dmg-player';
+    else if(line.includes('LOOT')) cls = 'legendary';
+    html += '<div class="log-line ' + cls + '">' + line + '</div>';
+  });
+  html += '</div>';
+  if(won && rewards.gear){
+    html += '<div class="card mt"><span class="' + RARITIES[rewards.gear.rarity] + '">' + rewards.gear.name + '</span>';
+    html += ' | PWR:' + rewards.gear.power + ' DEF:' + rewards.gear.defense + '</div>';
+  }
+  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== GACHA SYSTEM ====================
+function generateFollower(guaranteed_rarity){
+  let rarity = 0;
+  if(guaranteed_rarity !== undefined){
+    rarity = guaranteed_rarity;
+  } else {
+    const roll = Math.random() * 100;
+    if(roll < 1) rarity = 4;       // 1% legendary
+    else if(roll < 6) rarity = 3;  // 5% epic
+    else if(roll < 20) rarity = 2; // 14% rare
+    else if(roll < 50) rarity = 1; // 30% uncommon
+    // else common 50%
+  }
+
+  const name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
+  const cls = FOLLOWER_CLASSES[Math.floor(Math.random()*FOLLOWER_CLASSES.length)];
+  const basePower = (rarity + 1) * 3 + Math.floor(Math.random()*5);
+
+  G.followerIdCounter++;
+  return {
+    id: G.followerIdCounter,
+    name: name,
+    class: cls,
+    rarity: rarity,
+    level: 1,
+    xp: 0,
+    power: basePower,
+    defense: Math.floor(basePower * 0.7),
+    happiness: 80,
+    loyalty: 50,
+    assigned: 'idle' // idle, combat, foundry, mining, crafting, patrol
+  };
+}
+
+function doPull(count){
+  const cost = count === 1 ? 3 : 25; // 3 gems single, 25 gems for 10
+  if(G.gems < cost){
+    toast('Not enough gems! Need ' + cost, '#f44');
+    return;
+  }
+  G.gems -= cost;
+  G.total_gacha_pulls += count;
+
+  let pulled = [];
+  for(let i = 0; i < count; i++){
+    // Pity: every 10th pull guarantees rare+
+    let f;
+    if(G.total_gacha_pulls % 50 === 0){
+      f = generateFollower(4); // legendary pity at 50
+    } else if(G.total_gacha_pulls % 10 === 0){
+      f = generateFollower(Math.max(2, Math.floor(Math.random()*3)+2));
+    } else {
+      f = generateFollower();
+    }
+    G.followers.push(f);
+    pulled.push(f);
+  }
+  save();
+  showPullResults(pulled);
+}
+
+function showPullResults(pulled){
+  let html = '<h2>Summon Results</h2>';
+  pulled.forEach(f => {
+    html += '<div class="card follower-card">';
+    html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
+    html += ' <span class="text-sm">[' + RARITY_NAMES[f.rarity] + ' ' + f.class + ']</span><br>';
+    html += '<span class="text-sm">PWR:' + f.power + ' DEF:' + f.defense + '</span>';
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'gacha\')">Back</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== FOLLOWER MANAGEMENT ====================
+function feedFollower(id){
+  const f = G.followers.find(x => x.id === id);
+  if(!f) return;
+  const cost = 10 + f.level * 5;
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+  f.happiness = Math.min(100, f.happiness + 20);
+  f.loyalty = Math.min(100, f.loyalty + 5);
+  toast(f.name + ' is happier! (+20 happiness)', '#0f0');
+  save();
+  showTab('followers_detail', f.id);
+}
+
+function trainFollower(id){
+  const f = G.followers.find(x => x.id === id);
+  if(!f) return;
+  const cost = 20 + f.level * 15;
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+  f.xp += 30 + f.level * 5;
+  const needed = f.level * 50;
+  if(f.xp >= needed && f.level < 50){
+    f.xp -= needed;
+    f.level++;
+    f.power += (f.rarity + 1);
+    f.defense += Math.floor((f.rarity + 1) * 0.7);
+    toast(f.name + ' leveled up to ' + f.level + '!', '#b026ff');
+  } else {
+    toast(f.name + ' gained training XP.', '#0ff');
+  }
+  save();
+  showTab('followers_detail', f.id);
+}
+
+function assignFollower(id, role){
+  const f = G.followers.find(x => x.id === id);
+  if(!f) return;
+  f.assigned = role;
+  toast(f.name + ' assigned to ' + role, '#0ff');
+  save();
+  showTab('followers_detail', f.id);
+}
+
+function dismissFollower(id){
+  const idx = G.followers.findIndex(x => x.id === id);
+  if(idx === -1) return;
+  const name = G.followers[idx].name;
+  G.followers.splice(idx, 1);
+  toast(name + ' dismissed.', '#f44');
+  save();
+  showTab('town');
+}
+
+// ==================== SKILL TRAINING ====================
+function trainSkill(idx){
+  const cost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
+  if(G.energy < cost){
+    toast('Need ' + cost + ' energy', '#f44');
+    return;
+  }
+  G.energy -= cost;
+  const xpGain = 15 + G.skillLevels[idx] * 2;
+  addSkillXp(idx, xpGain);
+
+  // Resource rewards
+  const goldGain = Math.floor(2 + G.skillLevels[idx] * 0.5);
+  G.gold += goldGain;
+
+  // Gem chance from hacking
+  if(idx === 3 && Math.random() < 0.05){
+    G.gems += 1;
+    toast('+1 Gem from hacking!', '#b026ff');
+  }
+
+  save();
+  showTab('skills');
+}
+
+// ==================== BUILDINGS ====================
+function getBuildingCost(bId){
+  const b = BUILDINGS.find(x => x.id === bId);
+  const lv = G.buildings[bId] || 0;
+  return Math.floor(b.baseCost * Math.pow(b.costMult, lv));
+}
+
+function upgradeBuilding(bId){
+  const cost = getBuildingCost(bId);
+  if(G.gold < cost){
+    toast('Need ' + cost + ' gold', '#f44');
+    return;
+  }
+  G.gold -= cost;
+  G.buildings[bId] = (G.buildings[bId] || 0) + 1;
+  G.maxEnergy = getMaxEnergy();
+  const b = BUILDINGS.find(x => x.id === bId);
+  toast(b.name + ' upgraded to level ' + G.buildings[bId] + '!', '#0ff');
+  checkAchievements();
+  save();
+  showTab('town');
+}
+
+// ==================== ACHIEVEMENTS ====================
+const ACHIEVEMENT_DEFS = [
+  {id:'first_kill',name:'First Blood',desc:'Complete your first mission',check:()=>G.missions_completed>=1},
+  {id:'kill_10',name:'Getting Started',desc:'Complete 10 missions',check:()=>G.missions_completed>=10},
+  {id:'kill_100',name:'Veteran',desc:'Complete 100 missions',check:()=>G.missions_completed>=100},
+  {id:'boss_1',name:'Boss Slayer',desc:'Kill your first boss',check:()=>G.bosses_killed>=1},
+  {id:'boss_10',name:'Boss Hunter',desc:'Kill 10 bosses',check:()=>G.bosses_killed>=10},
+  {id:'level_10',name:'Rising Star',desc:'Reach level 10',check:()=>G.level>=10},
+  {id:'level_25',name:'Hardened',desc:'Reach level 25',check:()=>G.level>=25},
+  {id:'level_50',name:'Elite',desc:'Reach level 50',check:()=>G.level>=50},
+  {id:'level_100',name:'Max Power',desc:'Reach level 100',check:()=>G.level>=100},
+  {id:'gold_1k',name:'Stacked',desc:'Earn 1000 total gold',check:()=>G.total_gold_earned>=1000},
+  {id:'gold_10k',name:'Rich',desc:'Earn 10000 total gold',check:()=>G.total_gold_earned>=10000},
+  {id:'pull_10',name:'Gambler',desc:'Do 10 gacha pulls',check:()=>G.total_gacha_pulls>=10},
+  {id:'pull_50',name:'Whale',desc:'Do 50 gacha pulls',check:()=>G.total_gacha_pulls>=50},
+  {id:'followers_5',name:'Squad Up',desc:'Have 5 followers',check:()=>G.followers.length>=5},
+  {id:'followers_15',name:'Army',desc:'Have 15 followers',check:()=>G.followers.length>=15},
+  {id:'building_5',name:'Builder',desc:'Have any building at level 5',check:()=>Object.values(G.buildings).some(v=>v>=5)},
+  {id:'prestige_1',name:'Reborn',desc:'Prestige once',check:()=>G.prestige>=1},
+];
+
+function checkAchievements(){
+  ACHIEVEMENT_DEFS.forEach(a => {
+    if(!G.achievements.includes(a.id) && a.check()){
+      G.achievements.push(a.id);
+      toast('Achievement: ' + a.name + '!', '#ffd700');
+      // reward
+      G.gems += 2;
+    }
+  });
+}
+
+// ==================== PRESTIGE ====================
+function doPrestige(){
+  if(G.level < 100){
+    toast('Must be level 100 to prestige!', '#f44');
+    return;
+  }
+  const newPrestige = G.prestige + 1;
+  const newBonus = newPrestige * 10; // 10% per prestige
+  const name = G.name;
+  const cls = G.class;
+  const gems = G.gems + 20; // bonus gems
+  const achievements = G.achievements;
+  const totalPulls = G.total_gacha_pulls;
+
+  G = newGame(name, cls);
+  G.prestige = newPrestige;
+  G.prestige_bonus = newBonus;
+  G.gems = gems;
+  G.achievements = achievements;
+  G.total_gacha_pulls = totalPulls;
+  toast('PRESTIGE ' + newPrestige + '! +' + newBonus + '% XP bonus!', '#ffd700');
+  save();
+  showTab('profile');
+}
+
+// ==================== OFFLINE PROGRESS ====================
+function calcOfflineProgress(){
+  if(!G.lastOnline) return;
+  const now = Date.now();
+  const elapsed = (now - G.lastOnline) / 1000; // seconds
+  if(elapsed < 60) return; // less than a minute
+
+  // Energy regen
+  const regenRate = getEnergyRegenRate();
+  const energyGained = Math.min(Math.floor(elapsed / regenRate), getMaxEnergy() - G.energy);
+  G.energy = Math.min(getMaxEnergy(), G.energy + energyGained);
+
+  // Gold from foundry
+  const goldPerMin = getGoldPerMin();
+  const goldGained = Math.floor(goldPerMin * (elapsed / 60));
+  G.gold += goldGained;
+
+  // Follower happiness decay
+  G.followers.forEach(f => {
+    f.happiness = Math.max(0, f.happiness - Math.floor(elapsed / 3600) * 5);
+  });
+
+  if(energyGained > 0 || goldGained > 0){
+    const mins = Math.floor(elapsed / 60);
+    let msg = 'Welcome back! (' + mins + ' min offline)\n';
+    if(energyGained > 0) msg += '+' + energyGained + ' Energy\n';
+    if(goldGained > 0) msg += '+' + goldGained + ' Gold\n';
+    setTimeout(() => toast(msg, '#0ff'), 500);
+  }
+  G.lastOnline = now;
+}
+
+// ==================== UI RENDERING ====================
+let currentTab = 'missions';
+
+function updateHUD(){
+  if(!G) return;
+  document.getElementById('hud-level').textContent = G.level;
+  document.getElementById('hud-energy').textContent = G.energy + '/' + getMaxEnergy();
+  document.getElementById('hud-gold').textContent = G.gold;
+  document.getElementById('hud-gems').textContent = G.gems;
+  const needed = xpForLevel(G.level);
+  const pct = Math.min(100, (G.xp / needed) * 100);
+  document.getElementById('hud-xp-fill').style.width = pct + '%';
+  document.getElementById('hud-xp-text').textContent = G.xp + ' / ' + needed + ' XP';
+}
+
+function showTab(tab, extra){
+  // Remove active from all
+  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+  const tabBtn = document.getElementById('tab-' + tab);
+  if(tabBtn) tabBtn.classList.add('active');
+
+  currentTab = tab;
+  const c = document.getElementById('content');
+
+  switch(tab){
+    case 'missions': renderMissions(c); break;
+    case 'skills': renderSkills(c); break;
+    case 'gear': renderGear(c); break;
+    case 'town': renderTown(c); break;
+    case 'gacha': renderGacha(c); break;
+    case 'profile': renderProfile(c); break;
+    case 'followers_detail': renderFollowerDetail(c, extra); break;
+    case 'inventory': renderInventory(c); break;
+    default: renderMissions(c);
+  }
+  updateHUD();
+}
+
+function renderMissions(c){
+  let html = '<h2>Missions</h2>';
+  ZONES.forEach((zone, zi) => {
+    if(G.level < zone.minLv){
+      html += '<div class="card text-dim">??? ' + zone.name + ' (Requires Lv.' + zone.minLv + ')</div>';
+      return;
+    }
+    html += '<div class="card"><h3>' + zone.name + '</h3>';
+    zone.missions.forEach(m => {
+      const color = m.boss ? 'btn-gold' : 'btn-cyan';
+      const tag = m.boss ? ' [BOSS]' : '';
+      html += '<button class="btn ' + color + '" onclick=\'runCombat(' + JSON.stringify(m).replace(/'/g,"\\'") + ',' + zi + ')\'>';
+      html += m.name + tag + ' (EN:' + m.energy + ' | +' + m.gold + 'g +' + m.xp + 'xp)';
+      html += '</button> ';
+    });
+    html += '</div>';
+  });
+  c.innerHTML = html;
+}
+
+function renderSkills(c){
+  let html = '<h2>Skills</h2>';
+  html += '<div class="text-sm text-dim mb">Train skills to level them up. Costs energy.</div>';
+  SKILL_NAMES.forEach((name, i) => {
+    const lv = G.skillLevels[i];
+    const xp = G.skills[i];
+    const needed = xpForSkillLevel(lv);
+    const pct = Math.min(100, (xp/needed)*100);
+    const cost = 3 + Math.floor(lv * 0.5);
+    html += '<div class="card">';
+    html += '<b>' + name + '</b> Lv.' + lv + '/99';
+    html += '<div class="pbar pbar-purple"><div class="pbar-fill" style="width:' + pct + '%"></div>';
+    html += '<span class="pbar-text">' + xp + '/' + needed + '</span></div>';
+    html += '<button class="btn btn-purple" onclick="trainSkill(' + i + ')">Train (EN:' + cost + ')</button>';
+    html += '</div>';
+  });
+  c.innerHTML = html;
+}
+
+function renderGear(c){
+  let html = '<h2>Loadout</h2>';
+  html += '<div class="text-sm text-dim mb">Power: ' + getCombatPower() + ' | Defense: ' + getCombatDefense() + ' | Speed: ' + getCombatSpeed() + ' | Luck: ' + getLuck() + '</div>';
+  GEAR_SLOTS.forEach(slot => {
+    html += '<div class="card">';
+    html += '<b>' + slot.charAt(0).toUpperCase() + slot.slice(1) + ':</b> ';
+    if(G.gear[slot]){
+      const g = G.gear[slot];
+      html += '<span class="' + RARITIES[g.rarity] + '">' + g.name + '</span>';
+      html += ' (PWR:' + g.power + ' DEF:' + g.defense + ' Lv.' + g.level + ')';
+      html += ' <button class="btn btn-red" onclick="unequip(\'' + slot + '\')">Unequip</button>';
+    } else {
+      html += '<span class="text-dim">Empty</span>';
+    }
+    html += '</div>';
+  });
+  html += '<h2>Inventory (' + G.inventory.length + ')</h2>';
+  if(G.inventory.length === 0){
+    html += '<div class="text-dim">No items. Run missions to find gear!</div>';
+  }
+  G.inventory.forEach((item, i) => {
+    html += '<div class="card">';
+    html += '<span class="' + RARITIES[item.rarity] + '">' + item.name + '</span>';
+    html += ' [' + item.slot + '] PWR:' + item.power + ' DEF:' + item.defense + ' Lv.' + item.level;
+    html += ' <button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
+    html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
+    html += '</div>';
+  });
+  c.innerHTML = html;
+}
+
+function equipItem(idx){
+  const item = G.inventory[idx];
+  if(!item) return;
+  // Swap if something equipped
+  if(G.gear[item.slot]){
+    G.inventory.push(G.gear[item.slot]);
+  }
+  G.gear[item.slot] = item;
+  G.inventory.splice(idx, 1);
+  toast('Equipped ' + item.name, '#0ff');
+  save();
+  showTab('gear');
+}
+
+function unequip(slot){
+  if(!G.gear[slot]) return;
+  G.inventory.push(G.gear[slot]);
+  G.gear[slot] = null;
+  save();
+  showTab('gear');
+}
+
+function sellItem(idx){
+  const item = G.inventory[idx];
+  if(!item) return;
+  const price = item.level * (item.rarity+1) * 3;
+  G.gold += price;
+  G.inventory.splice(idx, 1);
+  toast('Sold for ' + price + ' gold', '#ffd700');
+  save();
+  showTab('gear');
+}
+
+// ==================== TOWN & FOLLOWERS UI ====================
+function renderTown(c){
+  let html = '<h2>Town</h2>';
+  html += '<div class="text-sm text-dim mb">Gold/min: ' + getGoldPerMin() + ' | Followers: ' + G.followers.length + '</div>';
+
+  // Buildings
+  html += '<h3>Buildings</h3>';
+  BUILDINGS.forEach(b => {
+    const lv = G.buildings[b.id] || 0;
+    const cost = getBuildingCost(b.id);
+    const maxed = lv >= 20;
+    html += '<div class="card">';
+    html += '<b>' + b.name + '</b> Lv.' + lv + '/20';
+    html += ' <span class="text-dim">- ' + b.desc + '</span><br>';
+    if(!maxed){
+      html += '<button class="btn btn-cyan" onclick="upgradeBuilding(\'' + b.id + '\')">Upgrade (' + cost + 'g)</button>';
+    } else {
+      html += '<span class="legendary">MAXED</span>';
+    }
+    html += '</div>';
+  });
+
+  // Followers list
+  html += '<h3>Followers (' + G.followers.length + ')</h3>';
+  if(G.followers.length === 0){
+    html += '<div class="text-dim">No followers yet. Use Summon tab to recruit!</div>';
+  }
+  // Group by assignment
+  const groups = {};
+  G.followers.forEach(f => {
+    if(!groups[f.assigned]) groups[f.assigned] = [];
+    groups[f.assigned].push(f);
+  });
+  for(const role in groups){
+    html += '<div class="text-sm mt" style="color:#888">[' + role.toUpperCase() + ']</div>';
+    groups[role].forEach(f => {
+      const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
+      html += '<div class="follower-card">';
+      html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
+      html += ' Lv.' + f.level + ' ' + f.class;
+      html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
+      html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
+      html += '</div>';
+    });
+  }
+  c.innerHTML = html;
+}
+
+function renderFollowerDetail(c, fId){
+  const f = G.followers.find(x => x.id === fId);
+  if(!f){ showTab('town'); return; }
+
+  const xpNeeded = f.level * 50;
+  const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
+  const feedCost = 10 + f.level * 5;
+  const trainCost = 20 + f.level * 15;
+
+  let html = '<h2>' + f.name + '</h2>';
+  html += '<div class="card">';
+  html += '<span class="' + RARITIES[f.rarity] + '">[' + RARITY_NAMES[f.rarity] + ']</span> ' + f.class + '<br>';
+  html += 'Level: ' + f.level + '/50<br>';
+  html += '<div class="pbar pbar-cyan"><div class="pbar-fill" style="width:' + ((f.xp/xpNeeded)*100) + '%"></div>';
+  html += '<span class="pbar-text">' + f.xp + '/' + xpNeeded + ' XP</span></div>';
+  html += 'Power: ' + f.power + ' | Defense: ' + f.defense + '<br>';
+  html += 'Happiness: <span style="color:' + hColor + '">' + f.happiness + '/100</span><br>';
+  html += 'Loyalty: ' + f.loyalty + '/100<br>';
+  html += 'Assigned: ' + f.assigned + '<br>';
+  html += '</div>';
+
+  html += '<h3>Actions</h3>';
+  html += '<button class="btn btn-green" onclick="feedFollower(' + f.id + ')">Feed (' + feedCost + 'g) +Happiness</button> ';
+  html += '<button class="btn btn-purple" onclick="trainFollower(' + f.id + ')">Train (' + trainCost + 'g) +XP</button><br>';
+
+  html += '<h3>Assign Role</h3>';
+  const roles = ['idle','combat','foundry','mining','crafting','patrol'];
+  roles.forEach(r => {
+    const active = f.assigned === r ? 'btn-cyan' : '';
+    html += '<button class="btn ' + active + '" onclick="assignFollower(' + f.id + ',\'' + r + '\')">' + r + '</button> ';
+  });
+
+  html += '<div class="mt"><button class="btn btn-red" onclick="if(confirm(\'Dismiss ' + f.name + '?\'))dismissFollower(' + f.id + ')">Dismiss</button></div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'town\')">Back to Town</button></div>';
+  c.innerHTML = html;
+}
+
+function renderGacha(c){
+  let html = '<h2>Void Summons</h2>';
+  html += '<div class="card text-center">';
+  html += '<div style="font-size:20px;color:#b026ff;margin:10px">Summon Followers</div>';
+  html += '<div class="text-sm text-dim">Rates: Common 50% | Uncommon 30% | Rare 14% | Epic 5% | Legendary 1%</div>';
+  html += '<div class="text-sm text-dim">Pity: Guaranteed Rare+ every 10 pulls | Legendary every 50 pulls</div>';
+  html += '<div class="text-sm mt">Total pulls: ' + G.total_gacha_pulls + '</div>';
+  html += '<div class="text-sm">Next pity (Rare+): in ' + (10 - (G.total_gacha_pulls % 10)) + ' pulls</div>';
+  html += '<div class="text-sm">Next pity (Legendary): in ' + (50 - (G.total_gacha_pulls % 50)) + ' pulls</div>';
+  html += '<div class="mt">';
+  html += '<button class="btn btn-purple" onclick="doPull(1)">Single Pull (3 Gems)</button> ';
+  html += '<button class="btn btn-gold" onclick="doPull(10)">10x Pull (25 Gems)</button>';
+  html += '</div>';
+  html += '</div>';
+
+  // Ways to earn gems
+  html += '<div class="card mt">';
+  html += '<h3>Earn Gems</h3>';
+  html += '<div class="text-sm">- Achievements: +2 gems each</div>';
+  html += '<div class="text-sm">- Hacking skill: 5% chance per train</div>';
+  html += '<div class="text-sm">- Prestige: +20 gems</div>';
+  html += '<div class="text-sm">- Boss kills: small chance</div>';
+  html += '</div>';
+
+  html += '<div class="card mt">';
+  html += '<div class="text-sm">Gems: <span style="color:#b026ff">' + G.gems + '</span></div>';
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function renderProfile(c){
+  let html = '<h2>Profile</h2>';
+  html += '<div class="card">';
+  html += '<b>' + G.name + '</b> - ' + CLASSES[G.class].name + '<br>';
+  html += 'Level: ' + G.level + '/100<br>';
+  html += 'Prestige: ' + G.prestige + ' (+' + G.prestige_bonus + '% XP)<br>';
+  html += '</div>';
+
+  // Stats
+  html += '<h3>Stats (Points: ' + G.statPoints + ')</h3>';
+  html += '<div class="card">';
+  ['power','defense','speed','luck'].forEach(s => {
+    html += s.charAt(0).toUpperCase() + s.slice(1) + ': ' + G.stats[s];
+    if(G.statPoints > 0){
+      html += ' <button class="btn" style="padding:2px 8px;min-height:30px" onclick="allocStat(\'' + s + '\')">+</button>';
+    }
+    html += '<br>';
+  });
+  html += '</div>';
+
+  // Combat stats
+  html += '<h3>Combat Stats</h3>';
+  html += '<div class="card">';
+  html += 'Total Power: ' + getCombatPower() + '<br>';
+  html += 'Total Defense: ' + getCombatDefense() + '<br>';
+  html += 'Speed: ' + getCombatSpeed() + '<br>';
+  html += 'Luck: ' + getLuck() + '<br>';
+  html += 'Max HP: ' + (50 + G.level * 10 + G.stats.defense * 3) + '<br>';
+  html += 'XP Boost: ' + Math.floor(getXpBoost() * 100) + '%<br>';
+  html += '</div>';
+
+  // Lifetime stats
+  html += '<h3>Lifetime</h3>';
+  html += '<div class="card">';
+  html += 'Missions: ' + G.missions_completed + '<br>';
+  html += 'Bosses Killed: ' + G.bosses_killed + '<br>';
+  html += 'Total Kills: ' + G.total_kills + '<br>';
+  html += 'Gold Earned: ' + G.total_gold_earned + '<br>';
+  html += 'Gacha Pulls: ' + G.total_gacha_pulls + '<br>';
+  html += 'Followers: ' + G.followers.length + '<br>';
+  html += '</div>';
+
+  // Achievements
+  html += '<h3>Achievements (' + G.achievements.length + '/' + ACHIEVEMENT_DEFS.length + ')</h3>';
+  html += '<div class="card">';
+  ACHIEVEMENT_DEFS.forEach(a => {
+    const done = G.achievements.includes(a.id);
+    html += '<div style="color:' + (done ? '#ffd700' : '#444') + '">';
+    html += (done ? '* ' : '  ') + a.name + ' - ' + a.desc;
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Prestige
+  if(G.level >= 100){
+    html += '<div class="card mt">';
+    html += '<button class="btn btn-gold" onclick="if(confirm(\'Prestige? You will reset to Lv1 but gain permanent +10% XP bonus and 20 gems.\'))doPrestige()">PRESTIGE (Reset + Bonus)</button>';
+    html += '</div>';
+  }
+
+  // Save/Load
+  html += '<div class="card mt">';
+  html += '<button class="btn" onclick="save();toast(\'Saved!\',\'#0f0\')">Manual Save</button> ';
+  html += '<button class="btn btn-red" onclick="if(confirm(\'Delete ALL save data?\')){ localStorage.removeItem(\'voidraiders_save\'); location.reload(); }">Reset Game</button>';
+  html += '</div>';
+
+  c.innerHTML = html;
+}
+
+function allocStat(stat){
+  if(G.statPoints <= 0) return;
+  G.statPoints--;
+  G.stats[stat]++;
+  save();
+  showTab('profile');
+}
+
+// ==================== CHARACTER CREATION ====================
+function showCharacterCreation(){
+  const c = document.getElementById('content');
+  let html = '<div style="text-align:center;padding:20px">';
+  html += '<h2 style="font-size:22px;color:#0ff">VOID RAIDERS</h2>';
+  html += '<div class="text-dim mb">A wasteland awaits...</div>';
+  html += '<div class="card">';
+  html += '<div class="mb"><label>Name:</label><br><input type="text" id="char-name" placeholder="Enter your name" maxlength="20"></div>';
+  html += '<div class="mb"><label>Class:</label><br>';
+  html += '<select id="char-class">';
+  for(const k in CLASSES){
+    const cl = CLASSES[k];
+    html += '<option value="' + k + '">' + cl.name + ' - ' + cl.desc + '</option>';
+  }
+  html += '</select></div>';
+  html += '<button class="btn btn-cyan" onclick="startGame()" style="width:100%;font-size:16px;padding:14px">BEGIN</button>';
+  html += '</div></div>';
+  c.innerHTML = html;
+  document.getElementById('top-bar').style.display = 'none';
+  document.getElementById('nav').style.display = 'none';
+}
+
+function startGame(){
+  const name = document.getElementById('char-name').value.trim() || 'Raider';
+  const cls = document.getElementById('char-class').value;
+  G = newGame(name, cls);
+  // Apply class starting stats
+  const clData = CLASSES[cls];
+  G.stats.power += clData.power;
+  G.stats.defense += clData.defense;
+  G.stats.speed += clData.speed;
+  G.stats.luck += clData.luck;
+  save();
+  document.getElementById('top-bar').style.display = '';
+  document.getElementById('nav').style.display = 'flex';
+  showTab('missions');
+  toast('Welcome to the Void, ' + name + '!', '#0ff');
+}
+
+// ==================== GAME LOOP ====================
+let energyTimer = 0;
+let saveTimer = 0;
+let goldTimer = 0;
+let followerTimer = 0;
+
+function gameLoop(){
+  if(!G) return;
+
+  // Energy regen
+  energyTimer++;
+  const regenRate = getEnergyRegenRate();
+  const regenTicks = Math.floor(regenRate); // ticks per energy (1 tick = 1 second)
+  if(energyTimer >= regenTicks){
+    energyTimer = 0;
+    if(G.energy < getMaxEnergy()){
+      G.energy++;
+    }
+  }
+
+  // Passive gold
+  goldTimer++;
+  if(goldTimer >= 60){ // every 60 seconds
+    goldTimer = 0;
+    const gpm = getGoldPerMin();
+    if(gpm > 0){
+      G.gold += gpm;
+    }
+  }
+
+  // Follower passive effects
+  followerTimer++;
+  if(followerTimer >= 120){ // every 2 min
+    followerTimer = 0;
+    G.followers.forEach(f => {
+      // Patrol followers find stuff
+      if(f.assigned === 'patrol' && f.happiness > 20){
+        if(Math.random() < 0.3){
+          const goldFound = Math.floor(f.level * (f.rarity+1) * 2);
+          G.gold += goldFound;
+        }
+        // Small chance to find gems
+        if(Math.random() < 0.02 * (f.rarity + 1)){
+          G.gems += 1;
+          toast(f.name + ' found a gem on patrol!', '#b026ff');
+        }
+      }
+      // Mining followers give skill xp
+      if(f.assigned === 'mining' && f.happiness > 20){
+        addSkillXp(1, Math.floor(f.level * 2));
+      }
+      // Crafting followers give crafting xp
+      if(f.assigned === 'crafting' && f.happiness > 20){
+        addSkillXp(2, Math.floor(f.level * 2));
+      }
+      // Slow happiness decay
+      if(Math.random() < 0.1){
+        f.happiness = Math.max(0, f.happiness - 1);
+      }
+    });
+  }
+
+  // Auto-save
+  saveTimer++;
+  if(saveTimer >= 30){
+    saveTimer = 0;
+    save();
+  }
+
+  // Update HUD
+  updateHUD();
+}
+
+// ==================== INIT ====================
+function init(){
+  if(load()){
+    calcOfflineProgress();
+    document.getElementById('top-bar').style.display = '';
+    document.getElementById('nav').style.display = 'flex';
+    save();
+    showTab('missions');
+  } else {
+    showCharacterCreation();
+  }
+  // Game loop runs every second
+  setInterval(gameLoop, 1000);
+}
+
+// Start
+init();
+</script>
+</body>
+</html>
