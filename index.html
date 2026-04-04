@@ -101,62 +101,77 @@ const CLASSES = {
   phantom: { name:'Phantom', desc:'Evasive, lucky, crits', power:2, defense:1, speed:2, luck:3 }
 };
 
-const SKILL_NAMES = ['Combat','Mining','Crafting','Hacking','Scavenging','Engineering'];
-const SKILL_RESOURCES = ['','ore','parts','data','scrap','components'];
+// Skills: 0-3 Combat, 4-7 Gathering, 8-11 Production, 12-14 Utility
+const SKILL_NAMES = [
+  'Melee','Ranged','Corruption','Stealth',
+  'Mining','Scavenging','Harvesting','Hunting',
+  'Crafting','Engineering','Alchemy','Enchanting',
+  'Hacking','Leadership','Survival'
+];
+const SKILL_CATEGORIES = {
+  'Combat':[0,1,2,3], 'Gathering':[4,5,6,7],
+  'Production':[8,9,10,11], 'Utility':[12,13,14]
+};
+const SKILL_DESCS = [
+  'Blade damage, melee power','Gun damage, consistent hits','Dark arts, burst damage, DoTs','Crit rate, assassination bonus',
+  'Ore yield, mineral find','Scrap salvage, junk value','Bio materials, potion ingredients','Monster parts, trophy drops',
+  'Gear creation, repair','Building cost reduction, traps','Potions, buff duration','Gear rerolls, stat upgrades',
+  'Gem find, intel, bounties','Follower buffs, squad size','HP bonus, energy efficiency'
+];
 
 function xpForSkillLevel(lv){ return Math.floor(80 * Math.pow(1.18, lv-1)); }
 function xpForLevel(lv){ return Math.floor(150 * Math.pow(1.25, lv-1)); }
 
 const ZONES = [
   { name:'Rust Flats', minLv:1, missions:[
-    {name:'Scavenge Wreckage',energy:5,enemyHp:50,enemyAtk:5,gold:8,xp:15,skillXp:{0:8}},
-    {name:'Fight Drifters',energy:8,enemyHp:90,enemyAtk:8,gold:15,xp:25,skillXp:{0:12}},
-    {name:'Clear Outpost',energy:14,enemyHp:160,enemyAtk:14,gold:30,xp:45,skillXp:{0:20},boss:true}
+    {name:'Scavenge Wreckage',energy:5,enemyHp:50,enemyAtk:5,gold:8,xp:15,skillXp:{0:5,5:5}},
+    {name:'Fight Drifters',energy:8,enemyHp:90,enemyAtk:8,gold:15,xp:25,skillXp:{0:8,7:4}},
+    {name:'Clear Outpost',energy:14,enemyHp:160,enemyAtk:14,gold:30,xp:45,skillXp:{0:12,1:8},boss:true}
   ]},
   { name:'Neon Undercity', minLv:6, missions:[
-    {name:'Hack Terminal',energy:10,enemyHp:120,enemyAtk:11,gold:20,xp:30,skillXp:{3:12}},
-    {name:'Gang Turf War',energy:14,enemyHp:200,enemyAtk:16,gold:35,xp:50,skillXp:{0:18}},
-    {name:'Syndicate Boss',energy:20,enemyHp:400,enemyAtk:25,gold:65,xp:80,skillXp:{0:30},boss:true}
+    {name:'Hack Terminal',energy:10,enemyHp:120,enemyAtk:11,gold:20,xp:30,skillXp:{12:12,3:6}},
+    {name:'Gang Turf War',energy:14,enemyHp:200,enemyAtk:16,gold:35,xp:50,skillXp:{0:10,1:8}},
+    {name:'Syndicate Boss',energy:20,enemyHp:400,enemyAtk:25,gold:65,xp:80,skillXp:{0:15,3:15},boss:true}
   ]},
   { name:'The Crucible', minLv:14, missions:[
-    {name:'Mine Void Ore',energy:12,enemyHp:180,enemyAtk:15,gold:28,xp:40,skillXp:{1:15}},
-    {name:'Ambush Convoy',energy:18,enemyHp:320,enemyAtk:24,gold:50,xp:70,skillXp:{0:25,4:12}},
-    {name:'Warden Mech',energy:26,enemyHp:650,enemyAtk:38,gold:100,xp:120,skillXp:{0:40},boss:true}
+    {name:'Mine Void Ore',energy:12,enemyHp:180,enemyAtk:15,gold:28,xp:40,skillXp:{4:15,9:5}},
+    {name:'Ambush Convoy',energy:18,enemyHp:320,enemyAtk:24,gold:50,xp:70,skillXp:{1:15,5:12}},
+    {name:'Warden Mech',energy:26,enemyHp:650,enemyAtk:38,gold:100,xp:120,skillXp:{0:20,2:20},boss:true}
   ]},
   { name:'Phantom Reach', minLv:24, missions:[
-    {name:'Scout Anomaly',energy:15,enemyHp:300,enemyAtk:22,gold:40,xp:55,skillXp:{3:20,4:12}},
-    {name:'Void Incursion',energy:22,enemyHp:500,enemyAtk:35,gold:70,xp:90,skillXp:{0:35}},
-    {name:'Rift Guardian',energy:32,enemyHp:1000,enemyAtk:55,gold:160,xp:200,skillXp:{0:60},boss:true}
+    {name:'Scout Anomaly',energy:15,enemyHp:300,enemyAtk:22,gold:40,xp:55,skillXp:{12:15,5:12}},
+    {name:'Void Incursion',energy:22,enemyHp:500,enemyAtk:35,gold:70,xp:90,skillXp:{2:20,7:15}},
+    {name:'Rift Guardian',energy:32,enemyHp:1000,enemyAtk:55,gold:160,xp:200,skillXp:{2:35,14:25},boss:true}
   ]},
   { name:'Iron Spire', minLv:36, missions:[
-    {name:'Infiltrate Labs',energy:18,enemyHp:450,enemyAtk:30,gold:55,xp:75,skillXp:{3:25,5:15}},
-    {name:'Siege Walls',energy:26,enemyHp:750,enemyAtk:48,gold:100,xp:130,skillXp:{0:45,5:20}},
-    {name:'Overlord Prime',energy:38,enemyHp:1600,enemyAtk:80,gold:280,xp:320,skillXp:{0:80},boss:true}
+    {name:'Infiltrate Labs',energy:18,enemyHp:450,enemyAtk:30,gold:55,xp:75,skillXp:{12:20,3:15}},
+    {name:'Siege Walls',energy:26,enemyHp:750,enemyAtk:48,gold:100,xp:130,skillXp:{0:25,9:20}},
+    {name:'Overlord Prime',energy:38,enemyHp:1600,enemyAtk:80,gold:280,xp:320,skillXp:{1:40,2:40},boss:true}
   ]},
   { name:'Deadzone', minLv:48, missions:[
-    {name:'Toxic Wastes',energy:20,enemyHp:600,enemyAtk:40,gold:75,xp:100,skillXp:{4:30,1:20}},
-    {name:'Mutant Swarm',energy:28,enemyHp:1000,enemyAtk:60,gold:130,xp:170,skillXp:{0:55}},
-    {name:'The Abomination',energy:42,enemyHp:2500,enemyAtk:110,gold:400,xp:450,skillXp:{0:100},boss:true}
+    {name:'Toxic Wastes',energy:20,enemyHp:600,enemyAtk:40,gold:75,xp:100,skillXp:{5:20,6:20,14:10}},
+    {name:'Mutant Swarm',energy:28,enemyHp:1000,enemyAtk:60,gold:130,xp:170,skillXp:{0:30,7:25}},
+    {name:'The Abomination',energy:42,enemyHp:2500,enemyAtk:110,gold:400,xp:450,skillXp:{2:50,14:50},boss:true}
   ]},
   { name:'The Abyss', minLv:58, missions:[
-    {name:'Descend Layer',energy:24,enemyHp:900,enemyAtk:55,gold:100,xp:130,skillXp:{0:50,4:25}},
-    {name:'Abyssal Horde',energy:34,enemyHp:1400,enemyAtk:80,gold:170,xp:220,skillXp:{0:70}},
-    {name:'Void Titan',energy:50,enemyHp:3500,enemyAtk:140,gold:500,xp:500,skillXp:{0:120},boss:true}
+    {name:'Descend Layer',energy:24,enemyHp:900,enemyAtk:55,gold:100,xp:130,skillXp:{14:30,5:25}},
+    {name:'Abyssal Horde',energy:34,enemyHp:1400,enemyAtk:80,gold:170,xp:220,skillXp:{0:35,2:35}},
+    {name:'Void Titan',energy:50,enemyHp:3500,enemyAtk:140,gold:500,xp:500,skillXp:{2:60,3:60},boss:true}
   ]},
   { name:'Shattered Realm', minLv:72, missions:[
-    {name:'Reality Fracture',energy:28,enemyHp:1400,enemyAtk:75,gold:150,xp:200,skillXp:{3:40,0:60}},
-    {name:'Dimensional Rift',energy:40,enemyHp:2200,enemyAtk:110,gold:280,xp:350,skillXp:{0:90}},
-    {name:'Realm Eater',energy:55,enemyHp:5000,enemyAtk:180,gold:750,xp:750,skillXp:{0:180},boss:true}
+    {name:'Reality Fracture',energy:28,enemyHp:1400,enemyAtk:75,gold:150,xp:200,skillXp:{12:30,2:30}},
+    {name:'Dimensional Rift',energy:40,enemyHp:2200,enemyAtk:110,gold:280,xp:350,skillXp:{2:45,14:45}},
+    {name:'Realm Eater',energy:55,enemyHp:5000,enemyAtk:180,gold:750,xp:750,skillXp:{2:90,0:90},boss:true}
   ]},
   { name:'The Nexus', minLv:84, missions:[
-    {name:'Nexus Breach',energy:32,enemyHp:2000,enemyAtk:100,gold:200,xp:280,skillXp:{0:80}},
-    {name:'Omega Squad',energy:45,enemyHp:3500,enemyAtk:150,gold:400,xp:500,skillXp:{0:120}},
-    {name:'Nexus Core',energy:60,enemyHp:8000,enemyAtk:250,gold:1200,xp:1000,skillXp:{0:250},boss:true}
+    {name:'Nexus Breach',energy:32,enemyHp:2000,enemyAtk:100,gold:200,xp:280,skillXp:{1:50,3:30}},
+    {name:'Omega Squad',energy:45,enemyHp:3500,enemyAtk:150,gold:400,xp:500,skillXp:{0:60,1:60}},
+    {name:'Nexus Core',energy:60,enemyHp:8000,enemyAtk:250,gold:1200,xp:1000,skillXp:{2:125,0:125},boss:true}
   ]},
   { name:'Endgame: Void Heart', minLv:95, missions:[
-    {name:'Final Approach',energy:40,enemyHp:4000,enemyAtk:180,gold:350,xp:500,skillXp:{0:120}},
-    {name:'Void Legion',energy:55,enemyHp:6500,enemyAtk:250,gold:600,xp:800,skillXp:{0:180}},
-    {name:'THE VOID ITSELF',energy:75,enemyHp:15000,enemyAtk:400,gold:2500,xp:2000,skillXp:{0:400},boss:true}
+    {name:'Final Approach',energy:40,enemyHp:4000,enemyAtk:180,gold:350,xp:500,skillXp:{0:60,1:60}},
+    {name:'Void Legion',energy:55,enemyHp:6500,enemyAtk:250,gold:600,xp:800,skillXp:{0:80,2:50,3:50}},
+    {name:'THE VOID ITSELF',energy:75,enemyHp:15000,enemyAtk:400,gold:2500,xp:2000,skillXp:{2:200,0:100,3:100},boss:true}
   ]}
 ];
 
@@ -197,8 +212,8 @@ function newGame(name, cls){
     energy: 100, maxEnergy: 100,
     stats: { power:5, defense:5, speed:5, luck:5 },
     statPoints: 0,
-    skills: [0,0,0,0,0,0], // xp per skill
-    skillLevels: [1,1,1,1,1,1],
+    skills: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], // xp per skill (15)
+    skillLevels: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     gear: { weapon:null, armor:null, shield:null, implant:null },
     inventory: [],
     buildings: {},
@@ -266,20 +281,33 @@ function getXpBoost(){
   return boost;
 }
 
+// Best combat skill determines primary style
+function getPrimaryCombatSkill(){
+  let best = 0, bestLv = G.skillLevels[0];
+  for(let i = 1; i <= 3; i++){
+    if(G.skillLevels[i] > bestLv){ best = i; bestLv = G.skillLevels[i]; }
+  }
+  return best; // 0=Melee,1=Ranged,2=Corruption,3=Stealth
+}
+
 function getCombatPower(){
   let p = G.stats.power;
   const bLv = G.buildings.barracks || 0;
   p += bLv * 3;
-  // gear bonuses
   for(const slot of GEAR_SLOTS){
     if(G.gear[slot]) p += G.gear[slot].power || 0;
   }
-  // class bonus
   const cls = CLASSES[G.class];
   p += cls.power * G.level;
-  // follower bonus
+  // Combat skill bonuses
+  p += Math.floor(G.skillLevels[0] * 1.5); // Melee: raw power
+  p += Math.floor(G.skillLevels[1] * 1.0); // Ranged: steady power
+  p += Math.floor(G.skillLevels[2] * 2.0); // Corruption: high burst
+  // Stealth gives crit not power
+  // Leadership boosts follower contribution
+  const leadershipMult = 1 + G.skillLevels[13] * 0.02;
   const activeFollowers = G.followers.filter(f => f.assigned === 'combat');
-  activeFollowers.forEach(f => { p += Math.floor(f.level * f.power * 0.5); });
+  activeFollowers.forEach(f => { p += Math.floor(f.level * f.power * 0.5 * leadershipMult); });
   return Math.floor(p);
 }
 
@@ -290,6 +318,8 @@ function getCombatDefense(){
   }
   const cls = CLASSES[G.class];
   d += cls.defense * G.level;
+  // Survival skill: +2 def per level
+  d += Math.floor(G.skillLevels[14] * 2);
   return Math.floor(d);
 }
 
@@ -297,6 +327,8 @@ function getCombatSpeed(){
   let s = G.stats.speed;
   const cls = CLASSES[G.class];
   s += cls.speed * Math.floor(G.level/2);
+  // Stealth adds speed
+  s += Math.floor(G.skillLevels[3] * 0.8);
   return Math.floor(s);
 }
 
@@ -306,7 +338,34 @@ function getLuck(){
   l += cls.luck * Math.floor(G.level/3);
   const shrineLv = G.buildings.shrine || 0;
   l += shrineLv * 2;
+  // Scavenging boosts luck
+  l += Math.floor(G.skillLevels[5] * 0.5);
+  // Stealth boosts crit/luck
+  l += Math.floor(G.skillLevels[3] * 0.5);
   return Math.floor(l);
+}
+
+// Skill milestone unlocks - returns array of {level, desc, unlocked}
+function getSkillUnlocks(idx){
+  const lv = G.skillLevels[idx];
+  const unlocks = {
+    0: [{lv:10,desc:'+5% melee dmg'},{lv:25,desc:'+10% melee dmg'},{lv:50,desc:'Cleave: hit twice sometimes'},{lv:75,desc:'+20% melee dmg'},{lv:99,desc:'BERSERKER: 2x dmg at low HP'}],
+    1: [{lv:10,desc:'+5% ranged dmg'},{lv:25,desc:'Piercing: ignore 10% def'},{lv:50,desc:'+15% ranged dmg'},{lv:75,desc:'Double tap chance'},{lv:99,desc:'DEADEYE: never miss'}],
+    2: [{lv:10,desc:'+5% corruption dmg'},{lv:25,desc:'Poison: DoT on hit'},{lv:50,desc:'+20% corruption burst'},{lv:75,desc:'Life drain: heal on hit'},{lv:99,desc:'VOID LORD: 3x burst chance'}],
+    3: [{lv:10,desc:'+5% crit rate'},{lv:25,desc:'+10% crit rate'},{lv:50,desc:'Crit dmg x3 (was x2)'},{lv:75,desc:'Assassinate: 1-hit kill chance'},{lv:99,desc:'SHADOW: always crit from stealth'}],
+    4: [{lv:10,desc:'+10% ore yield'},{lv:25,desc:'Rare ore chance'},{lv:50,desc:'Double ore chance'},{lv:75,desc:'+gem chance from mining'},{lv:99,desc:'MASTER MINER: auto-mine passive'}],
+    5: [{lv:10,desc:'+5% loot drop rate'},{lv:25,desc:'+10% loot drop rate'},{lv:50,desc:'Better rarity rolls'},{lv:75,desc:'Double scavenge'},{lv:99,desc:'SCAVENGER LORD: free loot/min'}],
+    6: [{lv:10,desc:'Basic potions unlocked'},{lv:25,desc:'Medium potions'},{lv:50,desc:'Strong potions'},{lv:75,desc:'Rare herb find'},{lv:99,desc:'HERBALIST: infinite ingredients'}],
+    7: [{lv:10,desc:'+trophy drops'},{lv:25,desc:'Monster parts +50%'},{lv:50,desc:'Rare beast tracking'},{lv:75,desc:'Boss weak spots (+dmg)'},{lv:99,desc:'APEX HUNTER: boss dmg x2'}],
+    8: [{lv:10,desc:'Craft uncommon gear'},{lv:25,desc:'Craft rare gear'},{lv:50,desc:'Craft epic gear'},{lv:75,desc:'Craft legendary gear'},{lv:99,desc:'ARTISAN: craft mythic gear'}],
+    9: [{lv:10,desc:'-5% building cost'},{lv:25,desc:'-10% building cost'},{lv:50,desc:'-20% building cost'},{lv:75,desc:'Buildings +1 max level'},{lv:99,desc:'ARCHITECT: half cost everything'}],
+    10:[{lv:10,desc:'Craft HP potions'},{lv:25,desc:'Craft buff potions'},{lv:50,desc:'Stronger buffs'},{lv:75,desc:'Rare elixirs'},{lv:99,desc:'ALCHEMIST: permanent buffs'}],
+    11:[{lv:10,desc:'Reroll 1 stat on gear'},{lv:25,desc:'Add +1 stat to gear'},{lv:50,desc:'Upgrade rarity chance'},{lv:75,desc:'Guaranteed stat boost'},{lv:99,desc:'ENCHANTER: perfect rolls'}],
+    12:[{lv:10,desc:'+2% gem find'},{lv:25,desc:'+5% gem find'},{lv:50,desc:'Bounty board unlocked'},{lv:75,desc:'Intel: see enemy stats'},{lv:99,desc:'HACKER LORD: double gems'}],
+    13:[{lv:10,desc:'+1 follower slot effect'},{lv:25,desc:'Follower XP +25%'},{lv:50,desc:'Follower happiness decay -50%'},{lv:75,desc:'Follower auto-feed'},{lv:99,desc:'COMMANDER: followers x2 power'}],
+    14:[{lv:10,desc:'+50 max HP'},{lv:25,desc:'-10% energy cost'},{lv:50,desc:'+100 max HP'},{lv:75,desc:'-20% energy cost'},{lv:99,desc:'IMMORTAL: revive once per fight'}]
+  };
+  return (unlocks[idx]||[]).map(u => ({...u, unlocked: lv >= u.lv}));
 }
 
 function getGoldPerMin(){
@@ -365,6 +424,22 @@ function generateGear(missionLevel, isBoss){
   const mult = RARITY_MULT[rarity];
   const basePower = Math.floor((3 + missionLevel * 1.5) * mult);
 
+  // Skill requirement based on rarity and slot
+  let reqSkill = -1, reqLevel = 0;
+  if(rarity >= 2){ // Rare+ gear has skill requirements
+    if(slot === 'weapon'){
+      reqSkill = [0,1,2,3][Math.floor(Math.random()*4)]; // combat skill
+      reqLevel = Math.floor(5 + rarity * 8 + missionLevel * 0.3);
+    } else if(slot === 'armor' || slot === 'shield'){
+      reqSkill = 14; // Survival
+      reqLevel = Math.floor(3 + rarity * 6 + missionLevel * 0.2);
+    } else if(slot === 'implant'){
+      reqSkill = [8,11,12][Math.floor(Math.random()*3)]; // Crafting/Enchanting/Hacking
+      reqLevel = Math.floor(5 + rarity * 7 + missionLevel * 0.25);
+    }
+    reqLevel = Math.min(99, reqLevel);
+  }
+
   return {
     id: Date.now() + Math.random(),
     name: name,
@@ -372,7 +447,9 @@ function generateGear(missionLevel, isBoss){
     rarity: rarity,
     power: slot === 'weapon' ? basePower : Math.floor(basePower * 0.3),
     defense: slot === 'armor' || slot === 'shield' ? basePower : Math.floor(basePower * 0.2),
-    level: Math.max(1, Math.floor(missionLevel * mult * 0.5))
+    level: Math.max(1, Math.floor(missionLevel * mult * 0.5)),
+    reqSkill: reqSkill,
+    reqLevel: reqLevel
   };
 }
 
@@ -384,10 +461,16 @@ function runCombat(mission, zoneIdx){
   }
   G.energy -= mission.energy;
 
-  const playerPower = getCombatPower();
+  let playerPower = getCombatPower();
   const playerDef = getCombatDefense();
   const playerSpeed = getCombatSpeed();
-  const playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  // Survival skill HP bonuses
+  if(G.skillLevels[14] >= 10) playerMaxHp += 50;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 100;
+  // Hunting boss damage bonus
+  const huntingBossBonus = (mission.boss && G.skillLevels[7] >= 99) ? 2 : (mission.boss && G.skillLevels[7] >= 75) ? 1.3 : 1;
+  playerPower = Math.floor(playerPower * huntingBossBonus);
   let playerHp = playerMaxHp;
 
   let enemyHp = Math.floor(mission.enemyHp * (1 + zoneIdx * 0.15));
@@ -397,6 +480,7 @@ function runCombat(mission, zoneIdx){
   let log = [];
   let turn = 0;
   let won = false;
+  let revived = false;
 
   log.push('--- ' + mission.name + ' ---');
   log.push('Your HP: ' + playerHp + ' | Enemy HP: ' + enemyHp);
@@ -405,24 +489,69 @@ function runCombat(mission, zoneIdx){
     turn++;
     // Player attacks
     let dmg = Math.max(1, playerPower - Math.floor(enemyAtk * 0.2) + Math.floor(Math.random()*5));
-    // Crit chance
-    if(Math.random()*100 < getLuck()){
-      dmg = Math.floor(dmg * 2);
+    // Combat skill modifiers
+    const primary = getPrimaryCombatSkill();
+    // Melee bonuses
+    if(G.skillLevels[0] >= 10) dmg = Math.floor(dmg * 1.05);
+    if(G.skillLevels[0] >= 25) dmg = Math.floor(dmg * 1.05);
+    if(G.skillLevels[0] >= 75) dmg = Math.floor(dmg * 1.1);
+    if(G.skillLevels[0] >= 99 && playerHp < playerMaxHp * 0.3) dmg *= 2; // Berserker
+    // Ranged bonuses
+    if(G.skillLevels[1] >= 25) dmg += Math.floor(enemyAtk * 0.1); // Pierce
+    if(G.skillLevels[1] >= 50) dmg = Math.floor(dmg * 1.1);
+    // Corruption bonuses
+    if(G.skillLevels[2] >= 10) dmg = Math.floor(dmg * 1.05);
+    if(G.skillLevels[2] >= 50) dmg = Math.floor(dmg * 1.1);
+    let corruptionDoT = 0;
+    if(G.skillLevels[2] >= 25) corruptionDoT = Math.floor(dmg * 0.1); // Poison DoT
+    // Crit chance (stealth)
+    let critRate = getLuck();
+    if(G.skillLevels[3] >= 10) critRate += 5;
+    if(G.skillLevels[3] >= 25) critRate += 5;
+    let critMult = 2;
+    if(G.skillLevels[3] >= 50) critMult = 3;
+    // Assassination
+    if(G.skillLevels[3] >= 75 && Math.random() < 0.03){ enemyHp = 0; log.push('Turn ' + turn + ': ASSASSINATE! Instant kill!'); }
+    if(Math.random()*100 < critRate && enemyHp > 0){
+      dmg = Math.floor(dmg * critMult);
       log.push('Turn ' + turn + ': You CRIT for ' + dmg + ' damage!');
-    } else {
+    } else if(enemyHp > 0){
       log.push('Turn ' + turn + ': You deal ' + dmg + ' damage.');
+    }
+    // Corruption DoT
+    if(corruptionDoT > 0 && enemyHp > 0){ enemyHp -= corruptionDoT; }
+    // Corruption life drain
+    if(G.skillLevels[2] >= 75){ playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg * 0.1)); }
+    // Melee cleave
+    if(G.skillLevels[0] >= 50 && Math.random() < 0.25){
+      const cleave = Math.floor(dmg * 0.5);
+      enemyHp -= cleave;
+      log.push('  CLEAVE! +' + cleave + ' bonus damage!');
+    }
+    // Ranged double tap
+    if(G.skillLevels[1] >= 75 && Math.random() < 0.2){
+      const dt = Math.floor(dmg * 0.6);
+      enemyHp -= dt;
+      log.push('  DOUBLE TAP! +' + dt + ' bonus damage!');
     }
     enemyHp -= dmg;
     if(enemyHp <= 0){ won = true; break; }
 
     // Enemy attacks
     let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
+    // Survival energy cost reduction already passive
     // Dodge chance based on speed
     if(Math.random()*100 < Math.min(30, playerSpeed * 0.5)){
       log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
     } else {
       playerHp -= eDmg;
       log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
+    }
+    // Survival 99: Revive once
+    if(playerHp <= 0 && G.skillLevels[14] >= 99 && !revived){
+      revived = true;
+      playerHp = Math.floor(playerMaxHp * 0.3);
+      log.push('IMMORTAL! You revive with ' + playerHp + ' HP!');
     }
   }
 
@@ -440,6 +569,10 @@ function runCombat(mission, zoneIdx){
 
     // Loot drop chance
     let dropChance = mission.boss ? 50 : 15 + getLuck() * 0.3;
+    // Scavenging skill boosts drop rate
+    if(G.skillLevels[5] >= 10) dropChance += 5;
+    if(G.skillLevels[5] >= 25) dropChance += 5;
+    if(G.skillLevels[5] >= 50) dropChance += 3; // Better rarity handled elsewhere
     if(Math.random()*100 < dropChance){
       rewards.gear = generateGear(G.level, mission.boss);
     }
@@ -621,7 +754,11 @@ function dismissFollower(id){
 
 // ==================== SKILL TRAINING ====================
 function trainSkill(idx){
-  const cost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
+  let cost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
+  // Survival reduces energy cost
+  if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.9);
+  if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.8);
+  cost = Math.max(1, cost);
   if(G.energy < cost){
     toast('Need ' + cost + ' energy', '#f44');
     return;
@@ -634,10 +771,29 @@ function trainSkill(idx){
   const goldGain = Math.floor(2 + G.skillLevels[idx] * 0.5);
   G.gold += goldGain;
 
-  // Gem chance from hacking
-  if(idx === 3 && Math.random() < 0.05){
-    G.gems += 1;
-    toast('+1 Gem from hacking!', '#b026ff');
+  // Skill-specific bonuses
+  // Hacking: gem chance
+  if(idx === 12){
+    let gemChance = 0.03;
+    if(G.skillLevels[12] >= 10) gemChance += 0.02;
+    if(G.skillLevels[12] >= 25) gemChance += 0.03;
+    if(G.skillLevels[12] >= 99) gemChance *= 2; // HACKER LORD
+    if(Math.random() < gemChance){
+      G.gems += 1;
+      toast('+1 Gem from hacking!', '#b026ff');
+    }
+  }
+  // Mining: ore/gold bonus
+  if(idx === 4){
+    let bonus = Math.floor(G.skillLevels[4] * 0.3);
+    if(G.skillLevels[4] >= 10) bonus = Math.floor(bonus * 1.1);
+    if(G.skillLevels[4] >= 50 && Math.random() < 0.2) bonus *= 2; // Double ore
+    if(G.skillLevels[4] >= 75 && Math.random() < 0.05){ G.gems += 1; toast('+1 Gem from mining!', '#b026ff'); }
+    G.gold += bonus;
+  }
+  // Scavenging: extra gold
+  if(idx === 5){
+    G.gold += Math.floor(G.skillLevels[5] * 0.5);
   }
 
   save();
@@ -870,21 +1026,39 @@ function renderMissions(c){
 }
 
 function renderSkills(c){
-  let html = '<h2>Skills</h2>';
-  html += '<div class="text-sm text-dim mb">Train skills to level them up. Costs energy.</div>';
-  SKILL_NAMES.forEach((name, i) => {
-    const lv = G.skillLevels[i];
-    const xp = G.skills[i];
-    const needed = xpForSkillLevel(lv);
-    const pct = Math.min(100, (xp/needed)*100);
-    const cost = 3 + Math.floor(lv * 0.5);
-    html += '<div class="card">';
-    html += '<b>' + name + '</b> Lv.' + lv + '/99';
-    html += '<div class="pbar pbar-purple"><div class="pbar-fill" style="width:' + pct + '%"></div>';
-    html += '<span class="pbar-text">' + xp + '/' + needed + '</span></div>';
-    html += '<button class="btn btn-purple" onclick="trainSkill(' + i + ')">Train (EN:' + cost + ')</button>';
-    html += '</div>';
-  });
+  let html = '<h2>Skills (15)</h2>';
+  html += '<div class="text-sm text-dim mb">Train skills to level them up. Higher levels unlock bonuses and gear requirements.</div>';
+  for(const cat in SKILL_CATEGORIES){
+    const color = cat==='Combat'?'#f44':cat==='Gathering'?'#0f0':cat==='Production'?'#ffd700':'#0ff';
+    html += '<h3 style="color:'+color+'">-- ' + cat + ' --</h3>';
+    SKILL_CATEGORIES[cat].forEach(i => {
+      const name = SKILL_NAMES[i];
+      const lv = G.skillLevels[i];
+      const xp = G.skills[i];
+      const needed = xpForSkillLevel(lv);
+      const pct = Math.min(100, (xp/needed)*100);
+      let cost = 3 + Math.floor(lv * 0.5);
+      if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.9);
+      if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.8);
+      cost = Math.max(1, cost);
+      html += '<div class="card">';
+      html += '<b>' + name + '</b> Lv.' + lv + '/99';
+      html += ' <span class="text-sm text-dim">- ' + SKILL_DESCS[i] + '</span>';
+      html += '<div class="pbar pbar-purple"><div class="pbar-fill" style="width:' + pct + '%"></div>';
+      html += '<span class="pbar-text">' + xp + '/' + needed + '</span></div>';
+      // Show unlocks
+      const unlocks = getSkillUnlocks(i);
+      if(unlocks.length > 0){
+        html += '<div class="text-sm">';
+        unlocks.forEach(u => {
+          html += '<span style="color:' + (u.unlocked?'#0f0':'#444') + '">' + (u.unlocked?'*':'') + 'Lv.' + u.lv + ': ' + u.desc + '</span> ';
+        });
+        html += '</div>';
+      }
+      html += '<button class="btn btn-purple" onclick="trainSkill(' + i + ')">Train (EN:' + cost + ')</button>';
+      html += '</div>';
+    });
+  }
   c.innerHTML = html;
 }
 
@@ -912,6 +1086,11 @@ function renderGear(c){
     html += '<div class="card">';
     html += '<span class="' + RARITIES[item.rarity] + '">' + item.name + '</span>';
     html += ' [' + item.slot + '] PWR:' + item.power + ' DEF:' + item.defense + ' Lv.' + item.level;
+    // Skill requirement
+    if(item.reqSkill >= 0 && item.reqLevel > 0){
+      const met = G.skillLevels[item.reqSkill] >= item.reqLevel;
+      html += ' <span style="color:' + (met?'#0f0':'#f44') + '">[Req: ' + SKILL_NAMES[item.reqSkill] + ' ' + item.reqLevel + ']</span>';
+    }
     html += ' <button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
     html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
     html += '</div>';
@@ -922,6 +1101,13 @@ function renderGear(c){
 function equipItem(idx){
   const item = G.inventory[idx];
   if(!item) return;
+  // Check skill requirement
+  if(item.reqSkill >= 0 && item.reqLevel > 0){
+    if(G.skillLevels[item.reqSkill] < item.reqLevel){
+      toast('Need ' + SKILL_NAMES[item.reqSkill] + ' Lv.' + item.reqLevel + ' to equip!', '#f44');
+      return;
+    }
+  }
   // Swap if something equipped
   if(G.gear[item.slot]){
     G.inventory.push(G.gear[item.slot]);
@@ -1231,13 +1417,13 @@ function gameLoop(){
           toast(f.name + ' found a gem on patrol!', '#b026ff');
         }
       }
-      // Mining followers give skill xp
+      // Mining followers give skill xp (Mining = index 4)
       if(f.assigned === 'mining' && f.happiness > 20){
-        addSkillXp(1, Math.floor(f.level * 2));
+        addSkillXp(4, Math.floor(f.level * 2));
       }
-      // Crafting followers give crafting xp
+      // Crafting followers give crafting xp (Crafting = index 8)
       if(f.assigned === 'crafting' && f.happiness > 20){
-        addSkillXp(2, Math.floor(f.level * 2));
+        addSkillXp(8, Math.floor(f.level * 2));
       }
       // Slow happiness decay
       if(Math.random() < 0.1){
