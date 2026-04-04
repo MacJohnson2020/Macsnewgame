@@ -306,11 +306,10 @@ function getCombatPower(){
   p += Math.floor(G.skillLevels[0] * 1.5); // Melee: raw power
   p += Math.floor(G.skillLevels[1] * 1.0); // Ranged: steady power
   p += Math.floor(G.skillLevels[2] * 2.0); // Corruption: high burst
-  if(G.skillLevels[2] >= 99) p += Math.floor(p * 0.3); // VOID LORD passive power
   // Stealth gives crit not power
   // Leadership boosts follower contribution
-  let leadershipMult = 1 + G.skillLevels[13] * 0.02;
-  if(G.skillLevels[13] >= 99) leadershipMult *= 2; // COMMANDER: x2 follower power
+  let leadershipMult = 1 + G.skillLevels[13] * 0.015;
+  if(G.skillLevels[13] >= 99) leadershipMult += 0.5; // COMMANDER: +50% follower power
   const activeFollowers = G.followers.filter(f => f.assigned === 'combat');
   activeFollowers.forEach(f => { p += Math.floor(f.level * f.power * 0.5 * leadershipMult); });
   return Math.floor(p);
@@ -354,21 +353,21 @@ function getLuck(){
 function getSkillUnlocks(idx){
   const lv = G.skillLevels[idx];
   const unlocks = {
-    0: [{lv:10,desc:'+5% melee dmg'},{lv:25,desc:'+10% melee dmg'},{lv:50,desc:'Cleave: hit twice sometimes'},{lv:75,desc:'+20% melee dmg'},{lv:99,desc:'BERSERKER: 2x dmg at low HP'}],
-    1: [{lv:10,desc:'+5% ranged dmg'},{lv:25,desc:'Piercing: ignore 10% def'},{lv:50,desc:'+15% ranged dmg'},{lv:75,desc:'Double tap chance'},{lv:99,desc:'DEADEYE: never miss'}],
-    2: [{lv:10,desc:'+5% corruption dmg'},{lv:25,desc:'Poison: DoT on hit'},{lv:50,desc:'+20% corruption burst'},{lv:75,desc:'Life drain: heal on hit'},{lv:99,desc:'VOID LORD: 3x burst chance'}],
-    3: [{lv:10,desc:'+5% crit rate'},{lv:25,desc:'+10% crit rate'},{lv:50,desc:'Crit dmg x3 (was x2)'},{lv:75,desc:'Assassinate: 1-hit kill chance'},{lv:99,desc:'SHADOW: always crit from stealth'}],
-    4: [{lv:10,desc:'+10% ore yield'},{lv:25,desc:'Rare ore chance'},{lv:50,desc:'Double ore chance'},{lv:75,desc:'+gem chance from mining'},{lv:99,desc:'MASTER MINER: auto-mine passive'}],
-    5: [{lv:10,desc:'+5% loot drop rate'},{lv:25,desc:'+10% loot drop rate'},{lv:50,desc:'Better rarity rolls'},{lv:75,desc:'Double scavenge'},{lv:99,desc:'SCAVENGER LORD: free loot/min'}],
-    6: [{lv:10,desc:'Basic potions unlocked'},{lv:25,desc:'Medium potions'},{lv:50,desc:'Strong potions'},{lv:75,desc:'Rare herb find'},{lv:99,desc:'HERBALIST: infinite ingredients'}],
-    7: [{lv:10,desc:'+trophy drops'},{lv:25,desc:'Monster parts +50%'},{lv:50,desc:'Rare beast tracking'},{lv:75,desc:'Boss weak spots (+dmg)'},{lv:99,desc:'APEX HUNTER: boss dmg x2'}],
+    0: [{lv:10,desc:'+5% melee dmg'},{lv:25,desc:'+8% melee dmg'},{lv:50,desc:'Cleave: 20% chance hit twice'},{lv:75,desc:'+12% melee dmg'},{lv:99,desc:'BERSERKER: +30% dmg under 40% HP'}],
+    1: [{lv:10,desc:'+5% ranged dmg'},{lv:25,desc:'Piercing: ignore 8% def'},{lv:50,desc:'+10% ranged dmg'},{lv:75,desc:'15% double tap chance'},{lv:99,desc:'DEADEYE: +20% accuracy & dmg'}],
+    2: [{lv:10,desc:'+5% corruption dmg'},{lv:25,desc:'Poison: DoT 8% per hit'},{lv:50,desc:'+12% corruption dmg'},{lv:75,desc:'Life drain: heal 5% of dmg'},{lv:99,desc:'VOID LORD: 12% chance 2x burst'}],
+    3: [{lv:10,desc:'+3% crit rate'},{lv:25,desc:'+5% crit rate'},{lv:50,desc:'Crit dmg x2.5 (was x2)'},{lv:75,desc:'2% assassinate chance on low HP'},{lv:99,desc:'SHADOW: +15% crit, +10% dodge'}],
+    4: [{lv:10,desc:'+8% ore yield'},{lv:25,desc:'Rare ore chance'},{lv:50,desc:'15% double ore chance'},{lv:75,desc:'+gem chance from mining'},{lv:99,desc:'MASTER MINER: +5 passive gold/min'}],
+    5: [{lv:10,desc:'+3% loot drop rate'},{lv:25,desc:'+5% loot drop rate'},{lv:50,desc:'Slightly better rarity rolls'},{lv:75,desc:'+8% loot drop rate'},{lv:99,desc:'SCAVENGER LORD: +8 passive gold/min'}],
+    6: [{lv:10,desc:'Basic potions unlocked'},{lv:25,desc:'Medium potions'},{lv:50,desc:'Strong potions'},{lv:75,desc:'Rare herb find'},{lv:99,desc:'HERBALIST: potions cost 50% less'}],
+    7: [{lv:10,desc:'+trophy drops'},{lv:25,desc:'Monster parts +30%'},{lv:50,desc:'Rare beast tracking'},{lv:75,desc:'Boss weak spots (+15% dmg)'},{lv:99,desc:'APEX HUNTER: +25% boss dmg'}],
     8: [{lv:10,desc:'Craft uncommon gear'},{lv:25,desc:'Craft rare gear'},{lv:50,desc:'Craft epic gear'},{lv:75,desc:'Craft legendary gear'},{lv:99,desc:'ARTISAN: craft mythic gear'}],
-    9: [{lv:10,desc:'-5% building cost'},{lv:25,desc:'-10% building cost'},{lv:50,desc:'-20% building cost'},{lv:75,desc:'Buildings +1 max level'},{lv:99,desc:'ARCHITECT: half cost everything'}],
-    10:[{lv:10,desc:'Craft HP potions'},{lv:25,desc:'Craft buff potions'},{lv:50,desc:'Stronger buffs'},{lv:75,desc:'Rare elixirs'},{lv:99,desc:'ALCHEMIST: permanent buffs'}],
-    11:[{lv:10,desc:'Reroll 1 stat on gear'},{lv:25,desc:'Add +1 stat to gear'},{lv:50,desc:'Upgrade rarity chance'},{lv:75,desc:'Guaranteed stat boost'},{lv:99,desc:'ENCHANTER: perfect rolls'}],
-    12:[{lv:10,desc:'+2% gem find'},{lv:25,desc:'+5% gem find'},{lv:50,desc:'Bounty board unlocked'},{lv:75,desc:'Intel: see enemy stats'},{lv:99,desc:'HACKER LORD: double gems'}],
-    13:[{lv:10,desc:'+1 follower slot effect'},{lv:25,desc:'Follower XP +25%'},{lv:50,desc:'Follower happiness decay -50%'},{lv:75,desc:'Follower auto-feed'},{lv:99,desc:'COMMANDER: followers x2 power'}],
-    14:[{lv:10,desc:'+50 max HP'},{lv:25,desc:'-10% energy cost'},{lv:50,desc:'+100 max HP'},{lv:75,desc:'-20% energy cost'},{lv:99,desc:'IMMORTAL: revive once per fight'}]
+    9: [{lv:10,desc:'-5% building cost'},{lv:25,desc:'-10% building cost'},{lv:50,desc:'-15% building cost'},{lv:75,desc:'-20% building cost'},{lv:99,desc:'ARCHITECT: -30% building cost'}],
+    10:[{lv:10,desc:'Craft HP potions'},{lv:25,desc:'Craft buff potions'},{lv:50,desc:'Stronger buffs'},{lv:75,desc:'Rare elixirs'},{lv:99,desc:'ALCHEMIST: buffs last 50% longer'}],
+    11:[{lv:10,desc:'Reroll 1 stat on gear'},{lv:25,desc:'Boost gear +10%'},{lv:50,desc:'Attempt rarity upgrade'},{lv:75,desc:'Better boost rates'},{lv:99,desc:'ENCHANTER: +50% enchant success'}],
+    12:[{lv:10,desc:'+2% gem find'},{lv:25,desc:'+3% gem find'},{lv:50,desc:'Bounty board unlocked'},{lv:75,desc:'Intel: see enemy stats'},{lv:99,desc:'HACKER LORD: +50% gem find'}],
+    13:[{lv:10,desc:'Follower stats +5%'},{lv:25,desc:'Follower XP +20%'},{lv:50,desc:'Happiness decay -30%'},{lv:75,desc:'Happiness decay -50%'},{lv:99,desc:'COMMANDER: follower power +50%'}],
+    14:[{lv:10,desc:'+30 max HP'},{lv:25,desc:'-8% energy cost'},{lv:50,desc:'+60 max HP'},{lv:75,desc:'-15% energy cost'},{lv:99,desc:'SURVIVOR: +100 HP, -20% energy cost'}]
   };
   return (unlocks[idx]||[]).map(u => ({...u, unlocked: lv >= u.lv}));
 }
@@ -378,10 +377,10 @@ function getGoldPerMin(){
   let base = fLv * 2;
   const workers = G.followers.filter(f => f.assigned === 'foundry');
   workers.forEach(f => { base += Math.floor(f.level * 0.5) + 1; });
-  // Master Miner 99: passive ore income
-  if(G.skillLevels[4] >= 99) base += 10 + G.level;
-  // Scavenger Lord 99: free loot income as gold
-  if(G.skillLevels[5] >= 99) base += 15 + G.level;
+  // Master Miner 99: passive gold income
+  if(G.skillLevels[4] >= 99) base += 5;
+  // Scavenger Lord 99: passive gold income
+  if(G.skillLevels[5] >= 99) base += 8;
   return base;
 }
 
@@ -474,10 +473,11 @@ function runCombat(mission, zoneIdx){
   const playerSpeed = getCombatSpeed();
   let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
   // Survival skill HP bonuses
-  if(G.skillLevels[14] >= 10) playerMaxHp += 50;
-  if(G.skillLevels[14] >= 50) playerMaxHp += 100;
+  if(G.skillLevels[14] >= 10) playerMaxHp += 30;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 60;
+  if(G.skillLevels[14] >= 99) playerMaxHp += 100; // SURVIVOR
   // Hunting boss damage bonus
-  const huntingBossBonus = (mission.boss && G.skillLevels[7] >= 99) ? 2 : (mission.boss && G.skillLevels[7] >= 75) ? 1.3 : 1;
+  const huntingBossBonus = (mission.boss && G.skillLevels[7] >= 99) ? 1.25 : (mission.boss && G.skillLevels[7] >= 75) ? 1.15 : 1;
   playerPower = Math.floor(playerPower * huntingBossBonus);
   let playerHp = playerMaxHp;
 
@@ -488,7 +488,7 @@ function runCombat(mission, zoneIdx){
   let log = [];
   let turn = 0;
   let won = false;
-  let revived = false;
+
 
   log.push('--- ' + mission.name + ' ---');
   log.push('Your HP: ' + playerHp + ' | Enemy HP: ' + enemyHp);
@@ -501,33 +501,32 @@ function runCombat(mission, zoneIdx){
     const primary = getPrimaryCombatSkill();
     // Melee bonuses
     if(G.skillLevels[0] >= 10) dmg = Math.floor(dmg * 1.05);
-    if(G.skillLevels[0] >= 25) dmg = Math.floor(dmg * 1.05);
-    if(G.skillLevels[0] >= 75) dmg = Math.floor(dmg * 1.1);
-    if(G.skillLevels[0] >= 99 && playerHp < playerMaxHp * 0.3) dmg *= 2; // Berserker
+    if(G.skillLevels[0] >= 25) dmg = Math.floor(dmg * 1.08);
+    if(G.skillLevels[0] >= 75) dmg = Math.floor(dmg * 1.12);
+    if(G.skillLevels[0] >= 99 && playerHp < playerMaxHp * 0.4) dmg = Math.floor(dmg * 1.3); // Berserker
     // Ranged bonuses
-    if(G.skillLevels[1] >= 25) dmg += Math.floor(enemyAtk * 0.1); // Pierce
+    if(G.skillLevels[1] >= 25) dmg += Math.floor(enemyAtk * 0.08); // Pierce
     if(G.skillLevels[1] >= 50) dmg = Math.floor(dmg * 1.1);
+    if(G.skillLevels[1] >= 99) dmg = Math.floor(dmg * 1.2); // Deadeye
     // Corruption bonuses
     if(G.skillLevels[2] >= 10) dmg = Math.floor(dmg * 1.05);
-    if(G.skillLevels[2] >= 50) dmg = Math.floor(dmg * 1.1);
-    // VOID LORD: 20% chance for 3x burst
-    if(G.skillLevels[2] >= 99 && Math.random() < 0.2){
-      dmg = Math.floor(dmg * 3);
-      log.push('  VOID BURST! x3 damage!');
+    if(G.skillLevels[2] >= 50) dmg = Math.floor(dmg * 1.12);
+    // VOID LORD: 12% chance for 2x burst
+    if(G.skillLevels[2] >= 99 && Math.random() < 0.12){
+      dmg = Math.floor(dmg * 2);
+      log.push('  VOID BURST! x2 damage!');
     }
     let corruptionDoT = 0;
-    if(G.skillLevels[2] >= 25) corruptionDoT = Math.floor(dmg * 0.1); // Poison DoT
+    if(G.skillLevels[2] >= 25) corruptionDoT = Math.floor(dmg * 0.08); // Poison DoT
     // Crit chance (stealth)
     let critRate = getLuck();
-    if(G.skillLevels[3] >= 10) critRate += 5;
+    if(G.skillLevels[3] >= 10) critRate += 3;
     if(G.skillLevels[3] >= 25) critRate += 5;
-    // SHADOW 99: guaranteed crit on first 3 turns
-    if(G.skillLevels[3] >= 99 && turn <= 3) critRate = 100;
+    if(G.skillLevels[3] >= 99) critRate += 15; // Shadow: +15% crit
     let critMult = 2;
-    if(G.skillLevels[3] >= 50) critMult = 3;
-    // Assassination (higher chance at 99)
-    const assassinChance = G.skillLevels[3] >= 99 ? 0.08 : 0.03;
-    if(G.skillLevels[3] >= 75 && Math.random() < assassinChance){ enemyHp = 0; log.push('Turn ' + turn + ': ASSASSINATE! Instant kill!'); }
+    if(G.skillLevels[3] >= 50) critMult = 2.5;
+    // Assassination: only on enemies below 20% HP
+    if(G.skillLevels[3] >= 75 && enemyHp < enemyMaxHp * 0.2 && Math.random() < 0.02){ enemyHp = 0; log.push('Turn ' + turn + ': ASSASSINATE! Finished them off!'); }
     if(Math.random()*100 < critRate && enemyHp > 0){
       dmg = Math.floor(dmg * critMult);
       log.push('Turn ' + turn + ': You CRIT for ' + dmg + ' damage!');
@@ -536,8 +535,8 @@ function runCombat(mission, zoneIdx){
     }
     // Corruption DoT
     if(corruptionDoT > 0 && enemyHp > 0){ enemyHp -= corruptionDoT; }
-    // Corruption life drain
-    if(G.skillLevels[2] >= 75){ playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg * 0.1)); }
+    // Corruption life drain (5% of dmg)
+    if(G.skillLevels[2] >= 75){ playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg * 0.05)); }
     // Melee cleave
     if(G.skillLevels[0] >= 50 && Math.random() < 0.25){
       const cleave = Math.floor(dmg * 0.5);
@@ -555,19 +554,14 @@ function runCombat(mission, zoneIdx){
 
     // Enemy attacks
     let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
-    // Survival energy cost reduction already passive
-    // Dodge chance based on speed
-    if(Math.random()*100 < Math.min(30, playerSpeed * 0.5)){
+    // Dodge chance based on speed + Shadow bonus
+    let dodgeRate = Math.min(35, playerSpeed * 0.5);
+    if(G.skillLevels[3] >= 99) dodgeRate += 10; // Shadow dodge bonus
+    if(Math.random()*100 < dodgeRate){
       log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
     } else {
       playerHp -= eDmg;
       log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
-    }
-    // Survival 99: Revive once
-    if(playerHp <= 0 && G.skillLevels[14] >= 99 && !revived){
-      revived = true;
-      playerHp = Math.floor(playerMaxHp * 0.3);
-      log.push('IMMORTAL! You revive with ' + playerHp + ' HP!');
     }
   }
 
@@ -662,7 +656,7 @@ function runDungeon(dungeonIdx){
   if(G.skillLevels[14] >= 10) playerMaxHp += 50;
   if(G.skillLevels[14] >= 50) playerMaxHp += 100;
   let playerHp = playerMaxHp;
-  let revived = false;
+
   let log = [];
   let totalGold = 0, totalXp = 0;
   let lootDrops = [];
@@ -675,7 +669,7 @@ function runDungeon(dungeonIdx){
     const waveScale = 1 + (wave - 1) * 0.3;
     let enemyHp = Math.floor(dg.baseHp * waveScale * (isFinalWave ? 2.5 : 1));
     let enemyAtk = Math.floor(dg.baseAtk * waveScale * (isFinalWave ? 1.8 : 1));
-    const huntingBossBonus = (isFinalWave && G.skillLevels[7] >= 99) ? 2 : (isFinalWave && G.skillLevels[7] >= 75) ? 1.3 : 1;
+    const huntingBossBonus = (isFinalWave && G.skillLevels[7] >= 99) ? 1.25 : (isFinalWave && G.skillLevels[7] >= 75) ? 1.15 : 1;
     let wavePower = Math.floor(playerPower * huntingBossBonus);
 
     log.push('--- Wave ' + wave + '/' + dg.waves + (isFinalWave ? ' [BOSS]' : '') + ' ---');
@@ -706,10 +700,6 @@ function runDungeon(dungeonIdx){
       } else {
         playerHp -= eDmg;
         log.push('W'+wave+' T'+turn+': Took ' + eDmg + ' (HP:' + Math.max(0,playerHp) + ')');
-      }
-      if(playerHp <= 0 && G.skillLevels[14] >= 99 && !revived){
-        revived = true; playerHp = Math.floor(playerMaxHp * 0.3);
-        log.push('IMMORTAL REVIVE! HP:' + playerHp);
       }
     }
 
@@ -861,17 +851,12 @@ function enchantReroll(invIdx){
   G.gold -= cost;
 
   // Reroll one stat randomly
-  const variance = G.skillLevels[11] >= 99 ? 0 : (G.skillLevels[11] >= 75 ? 0.1 : 0.3);
+  const variance = G.skillLevels[11] >= 99 ? 0.1 : (G.skillLevels[11] >= 75 ? 0.15 : 0.3);
   const basePower = Math.floor((3 + item.level * 1.5) * RARITY_MULT[item.rarity]);
   if(Math.random() < 0.5){
     item.power = Math.floor(basePower * (item.slot === 'weapon' ? 1 : 0.3) * (1 + (Math.random() * 0.4 - variance)));
   } else {
     item.defense = Math.floor(basePower * (item.slot === 'armor' || item.slot === 'shield' ? 1 : 0.2) * (1 + (Math.random() * 0.4 - variance)));
-  }
-  // Enchanting 99: ENCHANTER - always roll high
-  if(G.skillLevels[11] >= 99){
-    item.power = Math.max(item.power, Math.floor(basePower * (item.slot === 'weapon' ? 1.3 : 0.4)));
-    item.defense = Math.max(item.defense, Math.floor(basePower * (item.slot === 'armor' || item.slot === 'shield' ? 1.3 : 0.3)));
   }
   toast('Rerolled ' + item.name + ' stats!', '#b026ff');
   save();
@@ -886,7 +871,7 @@ function enchantBoost(invIdx){
   if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
   G.gold -= cost;
 
-  const boost = G.skillLevels[11] >= 75 ? 0.2 : 0.1;
+  const boost = G.skillLevels[11] >= 99 ? 0.15 : (G.skillLevels[11] >= 75 ? 0.12 : 0.1);
   item.power = Math.floor(item.power * (1 + boost));
   item.defense = Math.floor(item.defense * (1 + boost));
   item.level += 1;
@@ -903,7 +888,7 @@ function enchantUpgradeRarity(invIdx){
   if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
   G.gold -= cost;
 
-  let chance = 15 + (G.skillLevels[11] >= 99 ? 50 : G.skillLevels[11] >= 75 ? 20 : 0);
+  let chance = 12 + (G.skillLevels[11] >= 99 ? 18 : G.skillLevels[11] >= 75 ? 8 : 0);
   if(Math.random() * 100 < chance){
     item.rarity++;
     const names = GEAR_NAMES[item.slot];
@@ -943,10 +928,10 @@ function craftGear(slot){
   gear.power = slot === 'weapon' ? basePower : Math.floor(basePower * 0.3);
   gear.defense = (slot === 'armor' || slot === 'shield') ? basePower : Math.floor(basePower * 0.2);
   gear.level = Math.max(1, Math.floor(G.level * mult * 0.5));
-  // Artisan: crafted mythics get bonus stats
+  // Artisan: crafted mythics get small bonus stats
   if(G.skillLevels[8] >= 99 && gear.rarity >= 5){
-    gear.power = Math.floor(gear.power * 1.3);
-    gear.defense = Math.floor(gear.defense * 1.3);
+    gear.power = Math.floor(gear.power * 1.15);
+    gear.defense = Math.floor(gear.defense * 1.15);
   }
 
   G.inventory.push(gear);
@@ -1091,8 +1076,9 @@ function dismissFollower(id){
 function trainSkill(idx){
   let cost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
   // Survival reduces energy cost
-  if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.9);
-  if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.8);
+  if(G.skillLevels[14] >= 99) cost = Math.floor(cost * 0.8);
+  else if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.85);
+  else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
   cost = Math.max(1, cost);
   if(G.energy < cost){
     toast('Need ' + cost + ' energy', '#f44');
@@ -1116,7 +1102,7 @@ function trainSkill(idx){
     let gemChance = 0.03;
     if(G.skillLevels[12] >= 10) gemChance += 0.02;
     if(G.skillLevels[12] >= 25) gemChance += 0.03;
-    if(G.skillLevels[12] >= 99) gemChance *= 2; // HACKER LORD
+    if(G.skillLevels[12] >= 99) gemChance += 0.04; // HACKER LORD: +50% total
     if(Math.random() < gemChance){
       G.gems += 1;
       toast('+1 Gem from hacking!', '#b026ff');
@@ -1145,8 +1131,9 @@ function getBuildingCost(bId){
   const lv = G.buildings[bId] || 0;
   let cost = Math.floor(b.baseCost * Math.pow(b.costMult, lv));
   // Engineering skill reduces building cost
-  if(G.skillLevels[9] >= 99) cost = Math.floor(cost * 0.5); // ARCHITECT
-  else if(G.skillLevels[9] >= 50) cost = Math.floor(cost * 0.8);
+  if(G.skillLevels[9] >= 99) cost = Math.floor(cost * 0.7); // ARCHITECT
+  else if(G.skillLevels[9] >= 75) cost = Math.floor(cost * 0.8);
+  else if(G.skillLevels[9] >= 50) cost = Math.floor(cost * 0.85);
   else if(G.skillLevels[9] >= 25) cost = Math.floor(cost * 0.9);
   else if(G.skillLevels[9] >= 10) cost = Math.floor(cost * 0.95);
   return cost;
@@ -1433,8 +1420,9 @@ function renderSkills(c){
       const needed = xpForSkillLevel(lv);
       const pct = Math.min(100, (xp/needed)*100);
       let cost = 3 + Math.floor(lv * 0.5);
-      if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.9);
-      if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.8);
+      if(G.skillLevels[14] >= 99) cost = Math.floor(cost * 0.8);
+      else if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.85);
+      else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
       cost = Math.max(1, cost);
       html += '<div class="card">';
       html += '<b>' + name + '</b> Lv.' + lv + '/99';
