@@ -32,7 +32,7 @@ body { background:#0a0a1a; color:#ccc; font-family: 'Courier New', monospace; fo
 .btn-red { border-color:#f44; color:#f44; }
 /* Rarity Colors */
 .common { color:#aaa; } .uncommon { color:#0f0; } .rare { color:#44f; }
-.epic { color:#b026ff; } .legendary { color:#ffd700; }
+.epic { color:#b026ff; } .legendary { color:#ffd700; } .mythic { color:#ff2060; text-shadow:0 0 6px #ff2060; }
 /* Progress Bar */
 .pbar { background:#1a1a2e; border:1px solid #333; height:16px; margin:4px 0; position:relative; }
 .pbar-fill { height:100%; transition:width 0.3s; }
@@ -104,44 +104,59 @@ const CLASSES = {
 const SKILL_NAMES = ['Combat','Mining','Crafting','Hacking','Scavenging','Engineering'];
 const SKILL_RESOURCES = ['','ore','parts','data','scrap','components'];
 
-function xpForSkillLevel(lv){ return Math.floor(50 * Math.pow(1.15, lv-1)); }
-function xpForLevel(lv){ return Math.floor(100 * Math.pow(1.2, lv-1)); }
+function xpForSkillLevel(lv){ return Math.floor(80 * Math.pow(1.18, lv-1)); }
+function xpForLevel(lv){ return Math.floor(150 * Math.pow(1.25, lv-1)); }
 
 const ZONES = [
   { name:'Rust Flats', minLv:1, missions:[
-    {name:'Scavenge Wreckage',energy:5,enemyHp:30,enemyAtk:3,gold:10,xp:20,skillXp:{0:10}},
-    {name:'Fight Drifters',energy:8,enemyHp:50,enemyAtk:5,gold:20,xp:35,skillXp:{0:15}},
-    {name:'Clear Outpost',energy:12,enemyHp:80,enemyAtk:8,gold:35,xp:55,skillXp:{0:25},boss:true}
+    {name:'Scavenge Wreckage',energy:5,enemyHp:50,enemyAtk:5,gold:8,xp:15,skillXp:{0:8}},
+    {name:'Fight Drifters',energy:8,enemyHp:90,enemyAtk:8,gold:15,xp:25,skillXp:{0:12}},
+    {name:'Clear Outpost',energy:14,enemyHp:160,enemyAtk:14,gold:30,xp:45,skillXp:{0:20},boss:true}
   ]},
-  { name:'Neon Undercity', minLv:5, missions:[
-    {name:'Hack Terminal',energy:8,enemyHp:60,enemyAtk:6,gold:25,xp:40,skillXp:{3:15}},
-    {name:'Gang Turf War',energy:12,enemyHp:100,enemyAtk:10,gold:45,xp:65,skillXp:{0:20}},
-    {name:'Syndicate Boss',energy:18,enemyHp:180,enemyAtk:15,gold:80,xp:100,skillXp:{0:35},boss:true}
+  { name:'Neon Undercity', minLv:6, missions:[
+    {name:'Hack Terminal',energy:10,enemyHp:120,enemyAtk:11,gold:20,xp:30,skillXp:{3:12}},
+    {name:'Gang Turf War',energy:14,enemyHp:200,enemyAtk:16,gold:35,xp:50,skillXp:{0:18}},
+    {name:'Syndicate Boss',energy:20,enemyHp:400,enemyAtk:25,gold:65,xp:80,skillXp:{0:30},boss:true}
   ]},
-  { name:'The Crucible', minLv:12, missions:[
-    {name:'Mine Void Ore',energy:10,enemyHp:90,enemyAtk:9,gold:35,xp:50,skillXp:{1:20}},
-    {name:'Ambush Convoy',energy:15,enemyHp:150,enemyAtk:14,gold:60,xp:85,skillXp:{0:30,4:15}},
-    {name:'Warden Mech',energy:22,enemyHp:300,enemyAtk:22,gold:120,xp:150,skillXp:{0:50},boss:true}
+  { name:'The Crucible', minLv:14, missions:[
+    {name:'Mine Void Ore',energy:12,enemyHp:180,enemyAtk:15,gold:28,xp:40,skillXp:{1:15}},
+    {name:'Ambush Convoy',energy:18,enemyHp:320,enemyAtk:24,gold:50,xp:70,skillXp:{0:25,4:12}},
+    {name:'Warden Mech',energy:26,enemyHp:650,enemyAtk:38,gold:100,xp:120,skillXp:{0:40},boss:true}
   ]},
-  { name:'Phantom Reach', minLv:22, missions:[
-    {name:'Scout Anomaly',energy:12,enemyHp:140,enemyAtk:13,gold:50,xp:70,skillXp:{3:25,4:15}},
-    {name:'Void Incursion',energy:18,enemyHp:220,enemyAtk:20,gold:85,xp:110,skillXp:{0:40}},
-    {name:'Rift Guardian',energy:28,enemyHp:500,enemyAtk:35,gold:200,xp:250,skillXp:{0:70},boss:true}
+  { name:'Phantom Reach', minLv:24, missions:[
+    {name:'Scout Anomaly',energy:15,enemyHp:300,enemyAtk:22,gold:40,xp:55,skillXp:{3:20,4:12}},
+    {name:'Void Incursion',energy:22,enemyHp:500,enemyAtk:35,gold:70,xp:90,skillXp:{0:35}},
+    {name:'Rift Guardian',energy:32,enemyHp:1000,enemyAtk:55,gold:160,xp:200,skillXp:{0:60},boss:true}
   ]},
-  { name:'Iron Spire', minLv:35, missions:[
-    {name:'Infiltrate Labs',energy:15,enemyHp:200,enemyAtk:18,gold:70,xp:95,skillXp:{3:30,5:20}},
-    {name:'Siege Walls',energy:22,enemyHp:350,enemyAtk:28,gold:120,xp:160,skillXp:{0:50,5:25}},
-    {name:'Overlord Prime',energy:35,enemyHp:800,enemyAtk:50,gold:350,xp:400,skillXp:{0:100},boss:true}
+  { name:'Iron Spire', minLv:36, missions:[
+    {name:'Infiltrate Labs',energy:18,enemyHp:450,enemyAtk:30,gold:55,xp:75,skillXp:{3:25,5:15}},
+    {name:'Siege Walls',energy:26,enemyHp:750,enemyAtk:48,gold:100,xp:130,skillXp:{0:45,5:20}},
+    {name:'Overlord Prime',energy:38,enemyHp:1600,enemyAtk:80,gold:280,xp:320,skillXp:{0:80},boss:true}
   ]},
-  { name:'The Abyss', minLv:50, missions:[
-    {name:'Descend Layer',energy:20,enemyHp:400,enemyAtk:30,gold:120,xp:150,skillXp:{0:60,4:30}},
-    {name:'Abyssal Horde',energy:30,enemyHp:600,enemyAtk:45,gold:200,xp:250,skillXp:{0:80}},
-    {name:'Void Titan',energy:45,enemyHp:1500,enemyAtk:80,gold:600,xp:600,skillXp:{0:150},boss:true}
+  { name:'Deadzone', minLv:48, missions:[
+    {name:'Toxic Wastes',energy:20,enemyHp:600,enemyAtk:40,gold:75,xp:100,skillXp:{4:30,1:20}},
+    {name:'Mutant Swarm',energy:28,enemyHp:1000,enemyAtk:60,gold:130,xp:170,skillXp:{0:55}},
+    {name:'The Abomination',energy:42,enemyHp:2500,enemyAtk:110,gold:400,xp:450,skillXp:{0:100},boss:true}
   ]},
-  { name:'Endgame: Nexus', minLv:70, missions:[
-    {name:'Nexus Breach',energy:25,enemyHp:700,enemyAtk:50,gold:200,xp:250,skillXp:{0:80}},
-    {name:'Omega Squad',energy:35,enemyHp:1000,enemyAtk:70,gold:350,xp:400,skillXp:{0:100}},
-    {name:'Nexus Core',energy:50,enemyHp:3000,enemyAtk:120,gold:1000,xp:1000,skillXp:{0:250},boss:true}
+  { name:'The Abyss', minLv:58, missions:[
+    {name:'Descend Layer',energy:24,enemyHp:900,enemyAtk:55,gold:100,xp:130,skillXp:{0:50,4:25}},
+    {name:'Abyssal Horde',energy:34,enemyHp:1400,enemyAtk:80,gold:170,xp:220,skillXp:{0:70}},
+    {name:'Void Titan',energy:50,enemyHp:3500,enemyAtk:140,gold:500,xp:500,skillXp:{0:120},boss:true}
+  ]},
+  { name:'Shattered Realm', minLv:72, missions:[
+    {name:'Reality Fracture',energy:28,enemyHp:1400,enemyAtk:75,gold:150,xp:200,skillXp:{3:40,0:60}},
+    {name:'Dimensional Rift',energy:40,enemyHp:2200,enemyAtk:110,gold:280,xp:350,skillXp:{0:90}},
+    {name:'Realm Eater',energy:55,enemyHp:5000,enemyAtk:180,gold:750,xp:750,skillXp:{0:180},boss:true}
+  ]},
+  { name:'The Nexus', minLv:84, missions:[
+    {name:'Nexus Breach',energy:32,enemyHp:2000,enemyAtk:100,gold:200,xp:280,skillXp:{0:80}},
+    {name:'Omega Squad',energy:45,enemyHp:3500,enemyAtk:150,gold:400,xp:500,skillXp:{0:120}},
+    {name:'Nexus Core',energy:60,enemyHp:8000,enemyAtk:250,gold:1200,xp:1000,skillXp:{0:250},boss:true}
+  ]},
+  { name:'Endgame: Void Heart', minLv:95, missions:[
+    {name:'Final Approach',energy:40,enemyHp:4000,enemyAtk:180,gold:350,xp:500,skillXp:{0:120}},
+    {name:'Void Legion',energy:55,enemyHp:6500,enemyAtk:250,gold:600,xp:800,skillXp:{0:180}},
+    {name:'THE VOID ITSELF',energy:75,enemyHp:15000,enemyAtk:400,gold:2500,xp:2000,skillXp:{0:400},boss:true}
   ]}
 ];
 
@@ -158,14 +173,14 @@ const BUILDINGS = [
 
 const GEAR_SLOTS = ['weapon','armor','shield','implant'];
 const GEAR_NAMES = {
-  weapon:['Rusty Blade','Plasma Cutter','Void Edge','Nexus Cannon','Abyssal Reaper'],
-  armor:['Scrap Vest','Nano Weave','Void Plate','Nexus Shell','Abyssal Shroud'],
-  shield:['Tin Buckler','Energy Barrier','Void Ward','Nexus Aegis','Abyssal Wall'],
-  implant:['Basic Chip','Neural Link','Void Eye','Nexus Core','Abyssal Mind']
+  weapon:['Rusty Blade','Plasma Cutter','Void Edge','Nexus Cannon','Abyssal Reaper','GODSLAYER'],
+  armor:['Scrap Vest','Nano Weave','Void Plate','Nexus Shell','Abyssal Shroud','VOIDBORN MANTLE'],
+  shield:['Tin Buckler','Energy Barrier','Void Ward','Nexus Aegis','Abyssal Wall','ETERNAL AEGIS'],
+  implant:['Basic Chip','Neural Link','Void Eye','Nexus Core','Abyssal Mind','OMNISCIENT EYE']
 };
-const RARITIES = ['common','uncommon','rare','epic','legendary'];
-const RARITY_MULT = [1, 1.5, 2.2, 3.5, 5];
-const RARITY_NAMES = ['Common','Uncommon','Rare','Epic','Legendary'];
+const RARITIES = ['common','uncommon','rare','epic','legendary','mythic'];
+const RARITY_MULT = [1, 1.5, 2.2, 3.5, 5, 8];
+const RARITY_NAMES = ['Common','Uncommon','Rare','Epic','Legendary','Mythic'];
 
 const FOLLOWER_NAMES = ['Kira','Rex','Nova','Bolt','Shade','Ember','Frost','Nyx','Axel','Vex','Luna','Drift','Scar','Echo','Blitz','Rune','Cipher','Jinx','Havoc','Onyx','Zara','Pike','Ash','Wraith','Pulse'];
 const FOLLOWER_CLASSES = ['Fighter','Miner','Crafter','Hacker','Scout'];
@@ -332,12 +347,16 @@ function addSkillXp(skillIdx, amount){
 
 function generateGear(missionLevel, isBoss){
   const luck = getLuck();
-  let rarityRoll = Math.random() * 100 + luck * 0.5;
+  let rarityRoll = Math.random() * 10000;
+  let luckBonus = luck * 3; // luck shifts the roll
+  rarityRoll = Math.max(0, rarityRoll - luckBonus);
   let rarity = 0;
-  if(rarityRoll > 95) rarity = 4;
-  else if(rarityRoll > 80) rarity = 3;
-  else if(rarityRoll > 55) rarity = 2;
-  else if(rarityRoll > 30) rarity = 1;
+  if(rarityRoll < 0.1) rarity = 5;         // 0.001% Mythic
+  else if(rarityRoll < 10) rarity = 4;     // 0.1% Legendary
+  else if(rarityRoll < 400) rarity = 3;    // 4% Epic
+  else if(rarityRoll < 1500) rarity = 2;   // 11% Rare
+  else if(rarityRoll < 4000) rarity = 1;   // 25% Uncommon
+  // else ~60% Common
   if(isBoss && rarity < 2) rarity = 2; // boss guarantees rare+
 
   const slot = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
@@ -371,9 +390,9 @@ function runCombat(mission, zoneIdx){
   const playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
   let playerHp = playerMaxHp;
 
-  let enemyHp = Math.floor(mission.enemyHp * (1 + zoneIdx * 0.1));
+  let enemyHp = Math.floor(mission.enemyHp * (1 + zoneIdx * 0.15));
   const enemyMaxHp = enemyHp;
-  const enemyAtk = Math.floor(mission.enemyAtk * (1 + zoneIdx * 0.05));
+  const enemyAtk = Math.floor(mission.enemyAtk * (1 + zoneIdx * 0.1));
 
   let log = [];
   let turn = 0;
@@ -420,7 +439,7 @@ function runCombat(mission, zoneIdx){
     rewards.skillXp = mission.skillXp || {};
 
     // Loot drop chance
-    let dropChance = mission.boss ? 80 : 30 + getLuck();
+    let dropChance = mission.boss ? 50 : 15 + getLuck() * 0.3;
     if(Math.random()*100 < dropChance){
       rewards.gear = generateGear(G.level, mission.boss);
     }
@@ -475,12 +494,13 @@ function generateFollower(guaranteed_rarity){
   if(guaranteed_rarity !== undefined){
     rarity = guaranteed_rarity;
   } else {
-    const roll = Math.random() * 100;
-    if(roll < 1) rarity = 4;       // 1% legendary
-    else if(roll < 6) rarity = 3;  // 5% epic
-    else if(roll < 20) rarity = 2; // 14% rare
-    else if(roll < 50) rarity = 1; // 30% uncommon
-    // else common 50%
+    const roll = Math.random() * 10000;
+    if(roll < 1) rarity = 5;         // 0.01% mythic
+    else if(roll < 11) rarity = 4;   // 0.1% legendary
+    else if(roll < 411) rarity = 3;  // 4% epic
+    else if(roll < 1411) rarity = 2; // 10% rare
+    else if(roll < 4411) rarity = 1; // 30% uncommon
+    // else ~56% common
   }
 
   const name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
@@ -516,7 +536,9 @@ function doPull(count){
   for(let i = 0; i < count; i++){
     // Pity: every 10th pull guarantees rare+
     let f;
-    if(G.total_gacha_pulls % 50 === 0){
+    if(G.total_gacha_pulls % 200 === 0){
+      f = generateFollower(5); // mythic pity at 200
+    } else if(G.total_gacha_pulls % 50 === 0){
       f = generateFollower(4); // legendary pity at 50
     } else if(G.total_gacha_pulls % 10 === 0){
       f = generateFollower(Math.max(2, Math.floor(Math.random()*3)+2));
@@ -647,23 +669,78 @@ function upgradeBuilding(bId){
 
 // ==================== ACHIEVEMENTS ====================
 const ACHIEVEMENT_DEFS = [
+  // Missions
   {id:'first_kill',name:'First Blood',desc:'Complete your first mission',check:()=>G.missions_completed>=1},
   {id:'kill_10',name:'Getting Started',desc:'Complete 10 missions',check:()=>G.missions_completed>=10},
+  {id:'kill_50',name:'Grinder',desc:'Complete 50 missions',check:()=>G.missions_completed>=50},
   {id:'kill_100',name:'Veteran',desc:'Complete 100 missions',check:()=>G.missions_completed>=100},
+  {id:'kill_250',name:'War Machine',desc:'Complete 250 missions',check:()=>G.missions_completed>=250},
+  {id:'kill_500',name:'Relentless',desc:'Complete 500 missions',check:()=>G.missions_completed>=500},
+  {id:'kill_1000',name:'Unstoppable',desc:'Complete 1000 missions',check:()=>G.missions_completed>=1000},
+  // Bosses
   {id:'boss_1',name:'Boss Slayer',desc:'Kill your first boss',check:()=>G.bosses_killed>=1},
   {id:'boss_10',name:'Boss Hunter',desc:'Kill 10 bosses',check:()=>G.bosses_killed>=10},
+  {id:'boss_25',name:'Boss Farmer',desc:'Kill 25 bosses',check:()=>G.bosses_killed>=25},
+  {id:'boss_50',name:'Boss Destroyer',desc:'Kill 50 bosses',check:()=>G.bosses_killed>=50},
+  {id:'boss_100',name:'Raid Leader',desc:'Kill 100 bosses',check:()=>G.bosses_killed>=100},
+  // Levels
+  {id:'level_5',name:'Rookie',desc:'Reach level 5',check:()=>G.level>=5},
   {id:'level_10',name:'Rising Star',desc:'Reach level 10',check:()=>G.level>=10},
   {id:'level_25',name:'Hardened',desc:'Reach level 25',check:()=>G.level>=25},
   {id:'level_50',name:'Elite',desc:'Reach level 50',check:()=>G.level>=50},
+  {id:'level_75',name:'Legendary Raider',desc:'Reach level 75',check:()=>G.level>=75},
   {id:'level_100',name:'Max Power',desc:'Reach level 100',check:()=>G.level>=100},
-  {id:'gold_1k',name:'Stacked',desc:'Earn 1000 total gold',check:()=>G.total_gold_earned>=1000},
-  {id:'gold_10k',name:'Rich',desc:'Earn 10000 total gold',check:()=>G.total_gold_earned>=10000},
+  // Gold
+  {id:'gold_500',name:'Some Coins',desc:'Earn 500 total gold',check:()=>G.total_gold_earned>=500},
+  {id:'gold_1k',name:'Stacked',desc:'Earn 1,000 total gold',check:()=>G.total_gold_earned>=1000},
+  {id:'gold_5k',name:'Wealthy',desc:'Earn 5,000 total gold',check:()=>G.total_gold_earned>=5000},
+  {id:'gold_10k',name:'Rich',desc:'Earn 10,000 total gold',check:()=>G.total_gold_earned>=10000},
+  {id:'gold_50k',name:'Tycoon',desc:'Earn 50,000 total gold',check:()=>G.total_gold_earned>=50000},
+  {id:'gold_100k',name:'Mogul',desc:'Earn 100,000 total gold',check:()=>G.total_gold_earned>=100000},
+  // Gacha
+  {id:'pull_1',name:'First Pull',desc:'Do your first gacha pull',check:()=>G.total_gacha_pulls>=1},
   {id:'pull_10',name:'Gambler',desc:'Do 10 gacha pulls',check:()=>G.total_gacha_pulls>=10},
-  {id:'pull_50',name:'Whale',desc:'Do 50 gacha pulls',check:()=>G.total_gacha_pulls>=50},
+  {id:'pull_50',name:'Addict',desc:'Do 50 gacha pulls',check:()=>G.total_gacha_pulls>=50},
+  {id:'pull_100',name:'Whale',desc:'Do 100 gacha pulls',check:()=>G.total_gacha_pulls>=100},
+  {id:'pull_200',name:'Mega Whale',desc:'Do 200 gacha pulls',check:()=>G.total_gacha_pulls>=200},
+  // Followers
+  {id:'followers_1',name:'First Recruit',desc:'Have 1 follower',check:()=>G.followers.length>=1},
   {id:'followers_5',name:'Squad Up',desc:'Have 5 followers',check:()=>G.followers.length>=5},
+  {id:'followers_10',name:'Crew',desc:'Have 10 followers',check:()=>G.followers.length>=10},
   {id:'followers_15',name:'Army',desc:'Have 15 followers',check:()=>G.followers.length>=15},
+  {id:'followers_25',name:'Legion',desc:'Have 25 followers',check:()=>G.followers.length>=25},
+  // Followers by rarity
+  {id:'epic_follower',name:'Epic Find',desc:'Get an Epic follower',check:()=>G.followers.some(f=>f.rarity>=3)},
+  {id:'legend_follower',name:'Legendary Pull',desc:'Get a Legendary follower',check:()=>G.followers.some(f=>f.rarity>=4)},
+  {id:'mythic_follower',name:'MYTHIC!!!',desc:'Get a Mythic follower',check:()=>G.followers.some(f=>f.rarity>=5)},
+  // Buildings
+  {id:'building_1',name:'Foundation',desc:'Build your first building',check:()=>Object.values(G.buildings).some(v=>v>=1)},
   {id:'building_5',name:'Builder',desc:'Have any building at level 5',check:()=>Object.values(G.buildings).some(v=>v>=5)},
+  {id:'building_10',name:'Architect',desc:'Have any building at level 10',check:()=>Object.values(G.buildings).some(v=>v>=10)},
+  {id:'building_20',name:'Master Builder',desc:'Max out a building (level 20)',check:()=>Object.values(G.buildings).some(v=>v>=20)},
+  {id:'all_buildings',name:'Town Complete',desc:'Have all 8 buildings at level 1+',check:()=>BUILDINGS.every(b=>(G.buildings[b.id]||0)>=1)},
+  // Skills
+  {id:'skill_10',name:'Apprentice',desc:'Get any skill to level 10',check:()=>G.skillLevels.some(v=>v>=10)},
+  {id:'skill_25',name:'Journeyman',desc:'Get any skill to level 25',check:()=>G.skillLevels.some(v=>v>=25)},
+  {id:'skill_50',name:'Expert',desc:'Get any skill to level 50',check:()=>G.skillLevels.some(v=>v>=50)},
+  {id:'skill_75',name:'Master',desc:'Get any skill to level 75',check:()=>G.skillLevels.some(v=>v>=75)},
+  {id:'skill_99',name:'Skill Maxed',desc:'Get any skill to level 99',check:()=>G.skillLevels.some(v=>v>=99)},
+  {id:'all_skills_10',name:'Well Rounded',desc:'All skills at level 10+',check:()=>G.skillLevels.every(v=>v>=10)},
+  {id:'all_skills_50',name:'Renaissance',desc:'All skills at level 50+',check:()=>G.skillLevels.every(v=>v>=50)},
+  {id:'all_skills_99',name:'COMPLETIONIST',desc:'All skills at level 99',check:()=>G.skillLevels.every(v=>v>=99)},
+  // Gear
+  {id:'equip_all',name:'Geared Up',desc:'Equip all 4 gear slots',check:()=>GEAR_SLOTS.every(s=>G.gear[s]!==null)},
+  {id:'legendary_gear',name:'Golden Touch',desc:'Find a Legendary item',check:()=>G.inventory.some(i=>i.rarity>=4)||GEAR_SLOTS.some(s=>G.gear[s]&&G.gear[s].rarity>=4)},
+  {id:'mythic_gear',name:'MYTHIC GEAR',desc:'Find a Mythic item',check:()=>G.inventory.some(i=>i.rarity>=5)||GEAR_SLOTS.some(s=>G.gear[s]&&G.gear[s].rarity>=5)},
+  // Prestige
   {id:'prestige_1',name:'Reborn',desc:'Prestige once',check:()=>G.prestige>=1},
+  {id:'prestige_3',name:'Veteran Rebirth',desc:'Prestige 3 times',check:()=>G.prestige>=3},
+  {id:'prestige_5',name:'Eternal',desc:'Prestige 5 times',check:()=>G.prestige>=5},
+  {id:'prestige_10',name:'Transcendent',desc:'Prestige 10 times',check:()=>G.prestige>=10},
+  // Total kills
+  {id:'kills_500',name:'500 Kills',desc:'Kill 500 enemies total',check:()=>G.total_kills>=500},
+  {id:'kills_1000',name:'1000 Kills',desc:'Kill 1000 enemies total',check:()=>G.total_kills>=1000},
+  {id:'kills_5000',name:'Genocide',desc:'Kill 5000 enemies total',check:()=>G.total_kills>=5000},
 ];
 
 function checkAchievements(){
@@ -964,11 +1041,12 @@ function renderGacha(c){
   let html = '<h2>Void Summons</h2>';
   html += '<div class="card text-center">';
   html += '<div style="font-size:20px;color:#b026ff;margin:10px">Summon Followers</div>';
-  html += '<div class="text-sm text-dim">Rates: Common 50% | Uncommon 30% | Rare 14% | Epic 5% | Legendary 1%</div>';
-  html += '<div class="text-sm text-dim">Pity: Guaranteed Rare+ every 10 pulls | Legendary every 50 pulls</div>';
+  html += '<div class="text-sm text-dim">Rates: Common 56% | Uncommon 30% | Rare 10% | Epic 4% | <span class="legendary">Legendary 0.1%</span> | <span class="mythic">Mythic 0.01%</span></div>';
+  html += '<div class="text-sm text-dim">Pity: Rare+ every 10 | Legendary every 50 | <span class="mythic">Mythic every 200</span></div>';
   html += '<div class="text-sm mt">Total pulls: ' + G.total_gacha_pulls + '</div>';
   html += '<div class="text-sm">Next pity (Rare+): in ' + (10 - (G.total_gacha_pulls % 10)) + ' pulls</div>';
   html += '<div class="text-sm">Next pity (Legendary): in ' + (50 - (G.total_gacha_pulls % 50)) + ' pulls</div>';
+  html += '<div class="text-sm mythic">Next pity (MYTHIC): in ' + (200 - (G.total_gacha_pulls % 200)) + ' pulls</div>';
   html += '<div class="mt">';
   html += '<button class="btn btn-purple" onclick="doPull(1)">Single Pull (3 Gems)</button> ';
   html += '<button class="btn btn-gold" onclick="doPull(10)">10x Pull (25 Gems)</button>';
