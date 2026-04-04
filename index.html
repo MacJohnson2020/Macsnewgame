@@ -229,7 +229,10 @@ function newGame(name, cls){
     lastSave: Date.now(),
     lastOnline: Date.now(),
     achievements: [],
-    combatLog: []
+    combatLog: [],
+    bounties: [],
+    bountyRefreshTime: 0,
+    dungeons_cleared: 0
   };
 }
 
@@ -303,9 +306,11 @@ function getCombatPower(){
   p += Math.floor(G.skillLevels[0] * 1.5); // Melee: raw power
   p += Math.floor(G.skillLevels[1] * 1.0); // Ranged: steady power
   p += Math.floor(G.skillLevels[2] * 2.0); // Corruption: high burst
+  if(G.skillLevels[2] >= 99) p += Math.floor(p * 0.3); // VOID LORD passive power
   // Stealth gives crit not power
   // Leadership boosts follower contribution
-  const leadershipMult = 1 + G.skillLevels[13] * 0.02;
+  let leadershipMult = 1 + G.skillLevels[13] * 0.02;
+  if(G.skillLevels[13] >= 99) leadershipMult *= 2; // COMMANDER: x2 follower power
   const activeFollowers = G.followers.filter(f => f.assigned === 'combat');
   activeFollowers.forEach(f => { p += Math.floor(f.level * f.power * 0.5 * leadershipMult); });
   return Math.floor(p);
@@ -371,9 +376,12 @@ function getSkillUnlocks(idx){
 function getGoldPerMin(){
   const fLv = G.buildings.foundry || 0;
   let base = fLv * 2;
-  // followers assigned to foundry
   const workers = G.followers.filter(f => f.assigned === 'foundry');
   workers.forEach(f => { base += Math.floor(f.level * 0.5) + 1; });
+  // Master Miner 99: passive ore income
+  if(G.skillLevels[4] >= 99) base += 10 + G.level;
+  // Scavenger Lord 99: free loot income as gold
+  if(G.skillLevels[5] >= 99) base += 15 + G.level;
   return base;
 }
 
@@ -502,16 +510,24 @@ function runCombat(mission, zoneIdx){
     // Corruption bonuses
     if(G.skillLevels[2] >= 10) dmg = Math.floor(dmg * 1.05);
     if(G.skillLevels[2] >= 50) dmg = Math.floor(dmg * 1.1);
+    // VOID LORD: 20% chance for 3x burst
+    if(G.skillLevels[2] >= 99 && Math.random() < 0.2){
+      dmg = Math.floor(dmg * 3);
+      log.push('  VOID BURST! x3 damage!');
+    }
     let corruptionDoT = 0;
     if(G.skillLevels[2] >= 25) corruptionDoT = Math.floor(dmg * 0.1); // Poison DoT
     // Crit chance (stealth)
     let critRate = getLuck();
     if(G.skillLevels[3] >= 10) critRate += 5;
     if(G.skillLevels[3] >= 25) critRate += 5;
+    // SHADOW 99: guaranteed crit on first 3 turns
+    if(G.skillLevels[3] >= 99 && turn <= 3) critRate = 100;
     let critMult = 2;
     if(G.skillLevels[3] >= 50) critMult = 3;
-    // Assassination
-    if(G.skillLevels[3] >= 75 && Math.random() < 0.03){ enemyHp = 0; log.push('Turn ' + turn + ': ASSASSINATE! Instant kill!'); }
+    // Assassination (higher chance at 99)
+    const assassinChance = G.skillLevels[3] >= 99 ? 0.08 : 0.03;
+    if(G.skillLevels[3] >= 75 && Math.random() < assassinChance){ enemyHp = 0; log.push('Turn ' + turn + ': ASSASSINATE! Instant kill!'); }
     if(Math.random()*100 < critRate && enemyHp > 0){
       dmg = Math.floor(dmg * critMult);
       log.push('Turn ' + turn + ': You CRIT for ' + dmg + ' damage!');
@@ -561,7 +577,8 @@ function runCombat(mission, zoneIdx){
     log.push('=== VICTORY! ===');
     G.total_kills++;
     G.missions_completed++;
-    if(mission.boss) G.bosses_killed++;
+    if(mission.boss){ G.bosses_killed++; updateBountyProgress('boss', 1); }
+    updateBountyProgress('kill', 1);
 
     rewards.gold = Math.floor(mission.gold * (1 + Math.random()*0.3));
     rewards.xp = mission.xp;
@@ -619,6 +636,324 @@ function showCombatResult(log, won, rewards){
   }
   html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
   document.getElementById('content').innerHTML = html;
+}
+
+// ==================== DUNGEONS (Multi-wave) ====================
+const DUNGEONS = [
+  {name:'Scrap Pit',minLv:5,waves:3,energy:25,baseHp:80,baseAtk:8,goldMult:3,xpMult:3,desc:'3 waves of junk bots'},
+  {name:'Neon Catacombs',minLv:15,waves:4,energy:40,baseHp:200,baseAtk:18,goldMult:4,xpMult:4,desc:'4 waves of undercity gangs'},
+  {name:'Void Rift Alpha',minLv:30,waves:5,energy:60,baseHp:500,baseAtk:35,goldMult:5,xpMult:5,desc:'5 waves + Rift Boss'},
+  {name:'Iron Gauntlet',minLv:45,waves:6,energy:80,baseHp:900,baseAtk:55,goldMult:6,xpMult:6,desc:'6 waves of war machines'},
+  {name:'Abyssal Depths',minLv:60,waves:7,energy:100,baseHp:1500,baseAtk:85,goldMult:8,xpMult:8,desc:'7 waves into the void'},
+  {name:'Nexus Trials',minLv:80,waves:8,energy:130,baseHp:2500,baseAtk:130,goldMult:10,xpMult:10,desc:'8 waves, legendary loot'},
+  {name:'VOID HEART GAUNTLET',minLv:95,waves:10,energy:180,baseHp:4000,baseAtk:200,goldMult:15,xpMult:15,desc:'10 waves, mythic chance'}
+];
+
+function runDungeon(dungeonIdx){
+  const dg = DUNGEONS[dungeonIdx];
+  if(G.level < dg.minLv){ toast('Need level ' + dg.minLv,'#f44'); return; }
+  if(G.energy < dg.energy){ toast('Need ' + dg.energy + ' energy','#f44'); return; }
+  G.energy -= dg.energy;
+
+  const playerPower = getCombatPower();
+  const playerDef = getCombatDefense();
+  const playerSpeed = getCombatSpeed();
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  if(G.skillLevels[14] >= 10) playerMaxHp += 50;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 100;
+  let playerHp = playerMaxHp;
+  let revived = false;
+  let log = [];
+  let totalGold = 0, totalXp = 0;
+  let lootDrops = [];
+  let wavesCleared = 0;
+
+  log.push('=== DUNGEON: ' + dg.name + ' ===');
+
+  for(let wave = 1; wave <= dg.waves; wave++){
+    const isFinalWave = wave === dg.waves;
+    const waveScale = 1 + (wave - 1) * 0.3;
+    let enemyHp = Math.floor(dg.baseHp * waveScale * (isFinalWave ? 2.5 : 1));
+    let enemyAtk = Math.floor(dg.baseAtk * waveScale * (isFinalWave ? 1.8 : 1));
+    const huntingBossBonus = (isFinalWave && G.skillLevels[7] >= 99) ? 2 : (isFinalWave && G.skillLevels[7] >= 75) ? 1.3 : 1;
+    let wavePower = Math.floor(playerPower * huntingBossBonus);
+
+    log.push('--- Wave ' + wave + '/' + dg.waves + (isFinalWave ? ' [BOSS]' : '') + ' ---');
+    log.push('Enemy HP: ' + enemyHp + ' | Your HP: ' + playerHp);
+
+    let turn = 0;
+    while(playerHp > 0 && enemyHp > 0 && turn < 40){
+      turn++;
+      let dmg = Math.max(1, wavePower - Math.floor(enemyAtk * 0.15) + Math.floor(Math.random()*5));
+      // Skill bonuses (simplified for dungeon speed)
+      if(G.skillLevels[0] >= 50 && Math.random() < 0.25) dmg = Math.floor(dmg * 1.5);
+      if(G.skillLevels[2] >= 25) enemyHp -= Math.floor(dmg * 0.1); // DoT
+      if(G.skillLevels[2] >= 75) playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg * 0.08));
+      let critRate = getLuck();
+      if(G.skillLevels[3] >= 10) critRate += 5;
+      if(G.skillLevels[3] >= 25) critRate += 5;
+      let critMult = G.skillLevels[3] >= 50 ? 3 : 2;
+      if(Math.random()*100 < critRate){ dmg = Math.floor(dmg * critMult); log.push('W'+wave+' T'+turn+': CRIT ' + dmg + '!'); }
+      else { log.push('W'+wave+' T'+turn+': Hit ' + dmg); }
+      if(G.skillLevels[3] >= 75 && Math.random() < 0.02){ enemyHp = 0; log.push('ASSASSINATE!'); }
+      if(G.skillLevels[1] >= 75 && Math.random() < 0.2){ const dt = Math.floor(dmg*0.5); enemyHp -= dt; log.push('  Double tap +'+dt); }
+      enemyHp -= dmg;
+      if(enemyHp <= 0) break;
+
+      let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
+      if(Math.random()*100 < Math.min(30, playerSpeed * 0.5)){
+        log.push('W'+wave+' T'+turn+': DODGE!');
+      } else {
+        playerHp -= eDmg;
+        log.push('W'+wave+' T'+turn+': Took ' + eDmg + ' (HP:' + Math.max(0,playerHp) + ')');
+      }
+      if(playerHp <= 0 && G.skillLevels[14] >= 99 && !revived){
+        revived = true; playerHp = Math.floor(playerMaxHp * 0.3);
+        log.push('IMMORTAL REVIVE! HP:' + playerHp);
+      }
+    }
+
+    if(enemyHp <= 0){
+      wavesCleared++;
+      G.total_kills++;
+      let waveGold = Math.floor(dg.goldMult * wave * (10 + G.level) * (isFinalWave ? 3 : 1));
+      let waveXp = Math.floor(dg.xpMult * wave * (5 + G.level) * (isFinalWave ? 3 : 1));
+      totalGold += waveGold; totalXp += waveXp;
+      log.push('Wave ' + wave + ' cleared! +' + waveGold + 'g +' + waveXp + 'xp');
+
+      // Loot per wave (higher chance on later waves)
+      let dropChance = 10 + wave * 8 + getLuck() * 0.3;
+      if(G.skillLevels[5] >= 10) dropChance += 5;
+      if(G.skillLevels[5] >= 25) dropChance += 5;
+      if(isFinalWave) dropChance += 30;
+      if(Math.random()*100 < dropChance){
+        const gear = generateGear(G.level + wave * 2, isFinalWave);
+        G.inventory.push(gear);
+        lootDrops.push(gear);
+        log.push('LOOT: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']');
+      }
+      // Heal between waves
+      playerHp = Math.min(playerMaxHp, playerHp + Math.floor(playerMaxHp * 0.15));
+    } else {
+      log.push('=== WIPED on Wave ' + wave + '! ===');
+      break;
+    }
+  }
+
+  if(wavesCleared === dg.waves){
+    log.push('=== DUNGEON COMPLETE! ===');
+    G.bosses_killed++;
+    G.dungeons_cleared++;
+    updateBountyProgress('dungeon', wavesCleared);
+    // Bonus completion reward
+    totalGold = Math.floor(totalGold * 1.5);
+    totalXp = Math.floor(totalXp * 1.5);
+    // Gem reward for dungeon clear
+    const gemReward = Math.floor(dg.waves * 0.5);
+    G.gems += gemReward;
+    log.push('Completion bonus! +' + gemReward + ' gems!');
+  } else {
+    log.push('Cleared ' + wavesCleared + '/' + dg.waves + ' waves.');
+  }
+
+  G.gold += totalGold;
+  G.total_gold_earned += totalGold;
+  addXp(totalXp);
+  G.missions_completed += wavesCleared;
+  log.push('Total: +' + totalGold + 'g +' + totalXp + 'xp, ' + lootDrops.length + ' items');
+
+  checkAchievements();
+  save();
+  showDungeonResult(log, wavesCleared, dg.waves, lootDrops);
+}
+
+function showDungeonResult(log, cleared, total, loot){
+  let html = '<h2>Dungeon ' + (cleared === total ? 'COMPLETE!' : 'Result') + '</h2>';
+  html += '<div class="text-sm">Waves: ' + cleared + '/' + total + '</div>';
+  html += '<div class="log" style="max-height:300px">';
+  log.forEach(line => {
+    let cls = '';
+    if(line.includes('CRIT') || line.includes('Hit ') || line.includes('Double tap')) cls = 'dmg-enemy';
+    else if(line.includes('Took ')) cls = 'dmg-player';
+    else if(line.includes('DODGE') || line.includes('REVIVE') || line.includes('COMPLETE')) cls = 'heal';
+    else if(line.includes('LOOT')) cls = 'legendary';
+    else if(line.includes('ASSASSINATE')) cls = 'epic';
+    html += '<div class="log-line ' + cls + '">' + line + '</div>';
+  });
+  html += '</div>';
+  if(loot.length > 0){
+    html += '<h3>Loot</h3>';
+    loot.forEach(g => {
+      html += '<div class="card"><span class="' + RARITIES[g.rarity] + '">' + g.name + '</span> PWR:' + g.power + ' DEF:' + g.defense + '</div>';
+    });
+  }
+  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== BOUNTY BOARD ====================
+function generateBounties(){
+  const bounties = [];
+  const types = [
+    {name:'Kill Contract',desc:'Eliminate targets',type:'kill',target:5+G.level,gold:50+G.level*8,xp:30+G.level*5,gems:1},
+    {name:'Gather Intel',desc:'Hack data nodes',type:'hack',target:3+Math.floor(G.level/3),gold:40+G.level*6,xp:25+G.level*4,gems:1},
+    {name:'Ore Requisition',desc:'Mine raw materials',type:'mine',target:4+Math.floor(G.level/2),gold:35+G.level*5,xp:20+G.level*3,gems:0},
+    {name:'Scavenge Run',desc:'Find salvage',type:'scavenge',target:4+Math.floor(G.level/2),gold:30+G.level*5,xp:25+G.level*4,gems:1},
+    {name:'Boss Bounty',desc:'Slay a boss',type:'boss',target:1,gold:100+G.level*15,xp:80+G.level*10,gems:2},
+    {name:'Dungeon Dive',desc:'Clear dungeon waves',type:'dungeon',target:3,gold:80+G.level*12,xp:60+G.level*8,gems:2},
+    {name:'Training Regimen',desc:'Train any skill',type:'train',target:5+Math.floor(G.level/3),gold:25+G.level*4,xp:20+G.level*3,gems:0},
+  ];
+  // Pick 3-4 random bounties
+  const count = 3 + (G.skillLevels[12] >= 50 ? 1 : 0);
+  const shuffled = types.sort(() => Math.random() - 0.5);
+  for(let i = 0; i < Math.min(count, shuffled.length); i++){
+    bounties.push({...shuffled[i], progress:0, completed:false, claimed:false});
+  }
+  return bounties;
+}
+
+function refreshBounties(){
+  G.bounties = generateBounties();
+  G.bountyRefreshTime = Date.now();
+  save();
+}
+
+function claimBounty(idx){
+  const b = G.bounties[idx];
+  if(!b || !b.completed || b.claimed) return;
+  b.claimed = true;
+  G.gold += b.gold;
+  G.total_gold_earned += b.gold;
+  addXp(b.xp);
+  if(b.gems > 0) G.gems += b.gems;
+  toast('Bounty claimed! +' + b.gold + 'g +' + b.xp + 'xp' + (b.gems > 0 ? ' +' + b.gems + ' gems' : ''), '#ffd700');
+  checkAchievements();
+  save();
+  showTab('missions');
+}
+
+// Track bounty progress (called after relevant actions)
+function updateBountyProgress(type, amount){
+  if(!G.bounties) return;
+  G.bounties.forEach(b => {
+    if(b.completed || b.claimed) return;
+    if(b.type === type){
+      b.progress = Math.min(b.target, b.progress + amount);
+      if(b.progress >= b.target){
+        b.completed = true;
+        toast('Bounty complete: ' + b.name + '!', '#ffd700');
+      }
+    }
+  });
+}
+
+// ==================== ENCHANTING SYSTEM ====================
+function getEnchantCost(item){
+  return Math.floor(50 * (item.rarity + 1) * (item.level + 1) * 0.5);
+}
+
+function enchantReroll(invIdx){
+  if(G.skillLevels[11] < 10){ toast('Need Enchanting Lv.10','#f44'); return; }
+  const item = G.inventory[invIdx];
+  if(!item) return;
+  const cost = getEnchantCost(item);
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+
+  // Reroll one stat randomly
+  const variance = G.skillLevels[11] >= 99 ? 0 : (G.skillLevels[11] >= 75 ? 0.1 : 0.3);
+  const basePower = Math.floor((3 + item.level * 1.5) * RARITY_MULT[item.rarity]);
+  if(Math.random() < 0.5){
+    item.power = Math.floor(basePower * (item.slot === 'weapon' ? 1 : 0.3) * (1 + (Math.random() * 0.4 - variance)));
+  } else {
+    item.defense = Math.floor(basePower * (item.slot === 'armor' || item.slot === 'shield' ? 1 : 0.2) * (1 + (Math.random() * 0.4 - variance)));
+  }
+  // Enchanting 99: ENCHANTER - always roll high
+  if(G.skillLevels[11] >= 99){
+    item.power = Math.max(item.power, Math.floor(basePower * (item.slot === 'weapon' ? 1.3 : 0.4)));
+    item.defense = Math.max(item.defense, Math.floor(basePower * (item.slot === 'armor' || item.slot === 'shield' ? 1.3 : 0.3)));
+  }
+  toast('Rerolled ' + item.name + ' stats!', '#b026ff');
+  save();
+  showTab('gear');
+}
+
+function enchantBoost(invIdx){
+  if(G.skillLevels[11] < 25){ toast('Need Enchanting Lv.25','#f44'); return; }
+  const item = G.inventory[invIdx];
+  if(!item) return;
+  const cost = getEnchantCost(item) * 2;
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+
+  const boost = G.skillLevels[11] >= 75 ? 0.2 : 0.1;
+  item.power = Math.floor(item.power * (1 + boost));
+  item.defense = Math.floor(item.defense * (1 + boost));
+  item.level += 1;
+  toast(item.name + ' boosted! +' + Math.floor(boost*100) + '% stats!', '#ffd700');
+  save();
+  showTab('gear');
+}
+
+function enchantUpgradeRarity(invIdx){
+  if(G.skillLevels[11] < 50){ toast('Need Enchanting Lv.50','#f44'); return; }
+  const item = G.inventory[invIdx];
+  if(!item || item.rarity >= 5) return;
+  const cost = getEnchantCost(item) * 5;
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+
+  let chance = 15 + (G.skillLevels[11] >= 99 ? 50 : G.skillLevels[11] >= 75 ? 20 : 0);
+  if(Math.random() * 100 < chance){
+    item.rarity++;
+    const names = GEAR_NAMES[item.slot];
+    item.name = names[item.rarity] || names[names.length-1];
+    item.power = Math.floor(item.power * RARITY_MULT[item.rarity] / RARITY_MULT[item.rarity-1]);
+    item.defense = Math.floor(item.defense * RARITY_MULT[item.rarity] / RARITY_MULT[item.rarity-1]);
+    toast('SUCCESS! ' + item.name + ' upgraded to ' + RARITY_NAMES[item.rarity] + '!', '#ffd700');
+  } else {
+    toast('Upgrade failed... item preserved.', '#f44');
+  }
+  save();
+  showTab('gear');
+}
+
+// ==================== CRAFTING SYSTEM ====================
+function craftGear(slot){
+  // Determine max craftable rarity from Crafting skill
+  let maxRarity = 0;
+  if(G.skillLevels[8] >= 99) maxRarity = 5; // Mythic
+  else if(G.skillLevels[8] >= 75) maxRarity = 4;
+  else if(G.skillLevels[8] >= 50) maxRarity = 3;
+  else if(G.skillLevels[8] >= 25) maxRarity = 2;
+  else if(G.skillLevels[8] >= 10) maxRarity = 1;
+  else { toast('Need Crafting Lv.10','#f44'); return; }
+
+  const cost = Math.floor(100 * Math.pow(2.5, maxRarity));
+  if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
+  G.gold -= cost;
+
+  const gear = generateGear(G.level, false);
+  gear.slot = slot;
+  gear.rarity = maxRarity;
+  const names = GEAR_NAMES[slot];
+  gear.name = names[gear.rarity] || names[names.length-1];
+  const mult = RARITY_MULT[gear.rarity];
+  const basePower = Math.floor((3 + G.level * 1.5) * mult);
+  gear.power = slot === 'weapon' ? basePower : Math.floor(basePower * 0.3);
+  gear.defense = (slot === 'armor' || slot === 'shield') ? basePower : Math.floor(basePower * 0.2);
+  gear.level = Math.max(1, Math.floor(G.level * mult * 0.5));
+  // Artisan: crafted mythics get bonus stats
+  if(G.skillLevels[8] >= 99 && gear.rarity >= 5){
+    gear.power = Math.floor(gear.power * 1.3);
+    gear.defense = Math.floor(gear.defense * 1.3);
+  }
+
+  G.inventory.push(gear);
+  addSkillXp(8, 20 + maxRarity * 10);
+  toast('Crafted ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']!', '#ffd700');
+  save();
+  showTab('gear');
 }
 
 // ==================== GACHA SYSTEM ====================
@@ -766,6 +1101,10 @@ function trainSkill(idx){
   G.energy -= cost;
   const xpGain = 15 + G.skillLevels[idx] * 2;
   addSkillXp(idx, xpGain);
+  updateBountyProgress('train', 1);
+  if(idx === 12) updateBountyProgress('hack', 1);
+  if(idx === 4) updateBountyProgress('mine', 1);
+  if(idx === 5) updateBountyProgress('scavenge', 1);
 
   // Resource rewards
   const goldGain = Math.floor(2 + G.skillLevels[idx] * 0.5);
@@ -804,7 +1143,13 @@ function trainSkill(idx){
 function getBuildingCost(bId){
   const b = BUILDINGS.find(x => x.id === bId);
   const lv = G.buildings[bId] || 0;
-  return Math.floor(b.baseCost * Math.pow(b.costMult, lv));
+  let cost = Math.floor(b.baseCost * Math.pow(b.costMult, lv));
+  // Engineering skill reduces building cost
+  if(G.skillLevels[9] >= 99) cost = Math.floor(cost * 0.5); // ARCHITECT
+  else if(G.skillLevels[9] >= 50) cost = Math.floor(cost * 0.8);
+  else if(G.skillLevels[9] >= 25) cost = Math.floor(cost * 0.9);
+  else if(G.skillLevels[9] >= 10) cost = Math.floor(cost * 0.95);
+  return cost;
 }
 
 function upgradeBuilding(bId){
@@ -897,6 +1242,18 @@ const ACHIEVEMENT_DEFS = [
   {id:'kills_500',name:'500 Kills',desc:'Kill 500 enemies total',check:()=>G.total_kills>=500},
   {id:'kills_1000',name:'1000 Kills',desc:'Kill 1000 enemies total',check:()=>G.total_kills>=1000},
   {id:'kills_5000',name:'Genocide',desc:'Kill 5000 enemies total',check:()=>G.total_kills>=5000},
+  // Dungeons
+  {id:'dungeon_1',name:'Dungeon Crawler',desc:'Clear your first dungeon',check:()=>(G.dungeons_cleared||0)>=1},
+  {id:'dungeon_5',name:'Dungeon Runner',desc:'Clear 5 dungeons',check:()=>(G.dungeons_cleared||0)>=5},
+  {id:'dungeon_25',name:'Dungeon Master',desc:'Clear 25 dungeons',check:()=>(G.dungeons_cleared||0)>=25},
+  {id:'dungeon_50',name:'Abyssal Conqueror',desc:'Clear 50 dungeons',check:()=>(G.dungeons_cleared||0)>=50},
+  // Mastery
+  {id:'mastery_1',name:'First Mastery',desc:'Get any skill to 99',check:()=>G.skillLevels.some(v=>v>=99)},
+  {id:'mastery_5',name:'Multi-Master',desc:'Get 5 skills to 99',check:()=>G.skillLevels.filter(v=>v>=99).length>=5},
+  {id:'mastery_all',name:'GRANDMASTER',desc:'All 15 skills at 99',check:()=>G.skillLevels.every(v=>v>=99)},
+  // Enchanting
+  {id:'enchant_1',name:'First Enchant',desc:'Enchant an item',check:()=>G.skillLevels[11]>=10},
+  {id:'craft_mythic',name:'Mythic Crafter',desc:'Craft a Mythic item',check:()=>G.skillLevels[8]>=99},
 ];
 
 function checkAchievements(){
@@ -1007,6 +1364,44 @@ function showTab(tab, extra){
 
 function renderMissions(c){
   let html = '<h2>Missions</h2>';
+
+  // Bounty Board
+  if(G.skillLevels[12] >= 50 || G.bounties.length > 0){
+    if(!G.bounties || G.bounties.length === 0) refreshBounties();
+    // Auto refresh bounties every 30 min
+    if(Date.now() - G.bountyRefreshTime > 30*60*1000) refreshBounties();
+    html += '<div class="card"><h3 style="color:#ffd700">Bounty Board</h3>';
+    html += '<div class="text-sm text-dim">Refreshes every 30 min. Hacking Lv.50 required.</div>';
+    G.bounties.forEach((b, i) => {
+      const pct = Math.floor((b.progress/b.target)*100);
+      const status = b.claimed ? '<span class="text-dim">CLAIMED</span>' : b.completed ? '<button class="btn btn-gold" onclick="claimBounty('+i+')">CLAIM</button>' : '<span class="text-sm">'+b.progress+'/'+b.target+'</span>';
+      html += '<div class="card" style="border-color:'+(b.completed?'#ffd700':'#333')+'">';
+      html += '<b>' + b.name + '</b> - ' + b.desc + '<br>';
+      html += '<div class="pbar pbar-gold"><div class="pbar-fill" style="width:'+pct+'%"></div><span class="pbar-text">'+b.progress+'/'+b.target+'</span></div>';
+      html += 'Reward: ' + b.gold + 'g ' + b.xp + 'xp' + (b.gems > 0 ? ' ' + b.gems + ' gems' : '') + ' | ' + status;
+      html += '</div>';
+    });
+    html += '<button class="btn" onclick="refreshBounties();showTab(\'missions\')">Refresh Bounties</button>';
+    html += '</div>';
+  }
+
+  // Dungeons
+  html += '<h3 style="color:#f44;margin-top:12px">Dungeons (Multi-Wave)</h3>';
+  DUNGEONS.forEach((dg, di) => {
+    if(G.level < dg.minLv){
+      html += '<div class="card text-dim">??? ' + dg.name + ' (Lv.' + dg.minLv + ')</div>';
+      return;
+    }
+    html += '<div class="card">';
+    html += '<button class="btn btn-red" onclick="runDungeon(' + di + ')">';
+    html += dg.name + ' [' + dg.waves + ' waves] (EN:' + dg.energy + ')';
+    html += '</button>';
+    html += ' <span class="text-sm text-dim">' + dg.desc + '</span>';
+    html += '</div>';
+  });
+
+  // Regular Missions
+  html += '<h3 style="margin-top:12px">Missions</h3>';
   ZONES.forEach((zone, zi) => {
     if(G.level < zone.minLv){
       html += '<div class="card text-dim">??? ' + zone.name + ' (Requires Lv.' + zone.minLv + ')</div>';
@@ -1091,10 +1486,47 @@ function renderGear(c){
       const met = G.skillLevels[item.reqSkill] >= item.reqLevel;
       html += ' <span style="color:' + (met?'#0f0':'#f44') + '">[Req: ' + SKILL_NAMES[item.reqSkill] + ' ' + item.reqLevel + ']</span>';
     }
-    html += ' <button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
+    html += '<br>';
+    html += '<button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
     html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
+    // Enchanting options
+    if(G.skillLevels[11] >= 10){
+      html += ' <button class="btn btn-purple" onclick="enchantReroll(' + i + ')">Reroll(' + getEnchantCost(item) + 'g)</button>';
+    }
+    if(G.skillLevels[11] >= 25){
+      html += ' <button class="btn btn-purple" onclick="enchantBoost(' + i + ')">Boost(' + (getEnchantCost(item)*2) + 'g)</button>';
+    }
+    if(G.skillLevels[11] >= 50 && item.rarity < 5){
+      html += ' <button class="btn btn-gold" onclick="enchantUpgradeRarity(' + i + ')">Upgrade Rarity(' + (getEnchantCost(item)*5) + 'g)</button>';
+    }
     html += '</div>';
   });
+
+  // Crafting section
+  if(G.skillLevels[8] >= 10){
+    let maxRarity = 0;
+    if(G.skillLevels[8] >= 99) maxRarity = 5;
+    else if(G.skillLevels[8] >= 75) maxRarity = 4;
+    else if(G.skillLevels[8] >= 50) maxRarity = 3;
+    else if(G.skillLevels[8] >= 25) maxRarity = 2;
+    else maxRarity = 1;
+    const craftCost = Math.floor(100 * Math.pow(2.5, maxRarity));
+    html += '<h2>Crafting (Max: ' + RARITY_NAMES[maxRarity] + ')</h2>';
+    html += '<div class="text-sm text-dim mb">Craft gear at your max rarity. Cost: ' + craftCost + 'g</div>';
+    GEAR_SLOTS.forEach(slot => {
+      html += '<button class="btn btn-cyan" onclick="craftGear(\'' + slot + '\')">Craft ' + slot + '</button> ';
+    });
+  }
+
+  // Enchanting info
+  if(G.skillLevels[11] >= 10){
+    html += '<h2>Enchanting (Lv.' + G.skillLevels[11] + ')</h2>';
+    html += '<div class="card text-sm">';
+    html += 'Lv.10: Reroll stats | Lv.25: Boost +10-20% | Lv.50: Upgrade rarity<br>';
+    html += 'Lv.75: Guaranteed boost | Lv.99: ENCHANTER - perfect rolls, high upgrade chance';
+    html += '</div>';
+  }
+
   c.innerHTML = html;
 }
 
