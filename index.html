@@ -219,7 +219,8 @@ const BUILDINGS = [
   {id:'barracks',name:'Barracks',desc:'Combat power +3/lv',baseCost:120,costMult:2.0,effect:'combat_power',slotBonus:'+combat power per soldier'},
   {id:'tavern',name:'Tavern',desc:'Follower happiness +',baseCost:100,costMult:1.8,effect:'happiness',slotBonus:'Slows happiness decay'},
   {id:'workshop',name:'Workshop',desc:'Crafting speed +',baseCost:90,costMult:1.9,effect:'craft_speed',slotBonus:'+crafting XP per worker'},
-  {id:'shrine',name:'Shrine',desc:'Luck boost +',baseCost:150,costMult:2.2,effect:'luck_boost',slotBonus:'+luck per worker'}
+  {id:'shrine',name:'Shrine',desc:'Luck boost +',baseCost:150,costMult:2.2,effect:'luck_boost',slotBonus:'+luck per worker'},
+  {id:'gemmine',name:'Gem Mine',desc:'Passive gem income',baseCost:500,costMult:2.5,effect:'gem_income',slotBonus:'Workers find gems faster'}
 ];
 
 function getBuildingSlots(bId, cityIdx){
@@ -499,7 +500,45 @@ function newGame(name, cls){
     // Milestone rewards tracking (#11)
     skillMilestonesAwarded: [],
     // Damage recap tracking (#9 combat)
-    lastDamageRecap: null
+    lastDamageRecap: null,
+    // === 25 NEW FEATURES ===
+    // 1. Stock Market
+    investments: {},
+    stockPrices: { VoidCorp:100, NeonTech:80, IronWorks:60, BioGen:120, CryptoVoid:200 },
+    // 2. Crafting Queue
+    craftQueue: [],
+    // 4. (Follower Salary handled in game loop)
+    // 6. Bounty Hunter Rank
+    bountiesCompleted: 0,
+    // 7. Material Quality
+    fineResources: { ore:0, scrap:0, data:0, bio:0 },
+    pristineResources: { ore:0, scrap:0, data:0, bio:0 },
+    // 8. Luxury Upgrades
+    luxuryPurchases: { goldenName:0, extraStat:0, energyBoost:0, luckCharm:0, xpTome:0 },
+    // 9. Daily Gift Exchange
+    lastGiftExchange: 0,
+    // 11. Gear Loadout Presets
+    gearPresets: [],
+    // 12. Battle Statistics
+    combatStats: { totalDmgDealt:0, totalHits:0, totalCrits:0, dodgeCount:0, potionsUsed:0, highestCombo:0 },
+    // 16. Session Stats
+    sessionStart: Date.now(),
+    sessionStats: { gold:0, xp:0, kills:0 },
+    // 18. Auto-Potion Toggle
+    autoPotionEnabled: true,
+    // 19. Compact Mode
+    compactMode: false,
+    // 21. Challenge Dungeons
+    challengeDungeonClears: {},
+    // 22. Seasonal Boss
+    lastSeasonalBossKill: '',
+    // 23. World Events
+    worldEvent: null,
+    worldEventEnd: 0,
+    // 24. Memory Match high score
+    memoryMatchWins: 0,
+    // 25. Prestige Shop
+    prestigeShopPurchases: {}
   };
 }
 
@@ -788,6 +827,9 @@ function getGoldPerMin(){
   base += getClanBonus('gold');
   // Talent bonus (#14)
   if(G.talents) base += getTalentLevel('goldmin') * 3;
+  // Feature 10: Inflation Protection
+  if(G.gold > 100000) base = Math.floor(base * 0.75);
+  else if(G.gold > 50000) base = Math.floor(base * 0.90);
   return base;
 }
 
@@ -1217,12 +1259,14 @@ function runCombat(mission, zoneIdx){
           log.push('  >> Enemy summons add! +50% HP! (+' + addHp + ')');
         }
       }
-      // HP potion auto-use at low HP
-      if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0){
+      // HP potion auto-use at low HP (Feature 18: respects toggle)
+      if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0 && (G.autoPotionEnabled !== false)){
         G.potions.hp--;
         const heal = Math.floor(playerMaxHp * 0.3);
         playerHp = Math.min(playerMaxHp, playerHp + heal);
         log.push('  Auto-used HP Potion! Healed ' + heal + ' HP');
+        if(!G.combatStats) G.combatStats = {totalDmgDealt:0,totalHits:0,totalCrits:0,dodgeCount:0,potionsUsed:0,highestCombo:0};
+        G.combatStats.potionsUsed = (G.combatStats.potionsUsed||0) + 1;
       }
     }
   }
