@@ -425,7 +425,21 @@ function newGame(name, cls){
     // Quick actions
     quickActions: [],
     // Gambling
-    gamblingWins: 0, gamblingLosses: 0
+    gamblingWins: 0, gamblingLosses: 0,
+    // Win streak
+    winStreak: 0, bestWinStreak: 0,
+    // Daily dungeon
+    dailyDungeonDate: '', dailyDungeonCleared: false,
+    // Wanted board
+    wantedTargets: [], wantedRefreshTime: 0,
+    // Awakened followers
+    awakenedCount: 0,
+    // City sieges
+    capturedCities: [], tributeGold: 0,
+    // Corruption zones
+    corruptedZones: {},
+    // Bounty contracts
+    followerContracts: []
   };
 }
 
@@ -1044,6 +1058,9 @@ function runCombat(mission, zoneIdx){
     }
     log.push('+' + rewards.gold + ' gold, +' + Math.floor(rewards.xp * xpMult) + ' XP');
     addFactionRep(1 + (mission.boss ? 5 : 0));
+    addWinStreak();
+    // Apply streak multiplier to rewards
+    rewards.gold = Math.floor(rewards.gold * getStreakMult());
     checkTitles();
     // Lore fragment chance
     if(Math.random() < 0.02){ const lf = findLoreFragment(); if(lf) log.push('LORE: Found "'+lf.piece+'" ('+lf.set+')'); }
@@ -1075,6 +1092,7 @@ function runCombat(mission, zoneIdx){
   } else {
     log.push('=== DEFEAT ===');
     log.push('You were overwhelmed...');
+    resetWinStreak();
   }
 
   // Decrement potion buff
@@ -2960,6 +2978,404 @@ function getIdleSummary(){
   return { goldMin, energyRate, autoBattleActive, expeditionsActive, followerHappiness, passiveXpMin };
 }
 
+// ==================== WIN STREAK ====================
+function addWinStreak(){
+  G.winStreak = (G.winStreak||0) + 1;
+  G.bestWinStreak = Math.max(G.bestWinStreak||0, G.winStreak);
+  if(G.winStreak >= 5) addNotification('Win streak: ' + G.winStreak + '!');
+}
+function resetWinStreak(){ G.winStreak = 0; }
+function getStreakMult(){
+  const s = G.winStreak || 0;
+  if(s >= 20) return 1.5;
+  if(s >= 10) return 1.3;
+  if(s >= 5) return 1.15;
+  if(s >= 3) return 1.05;
+  return 1;
+}
+
+// ==================== DAILY DUNGEON ====================
+function getDailyDungeonSeed(){
+  return new Date().toISOString().split('T')[0];
+}
+
+function runDailyDungeon(){
+  const today = getDailyDungeonSeed();
+  if(G.dailyDungeonDate === today && G.dailyDungeonCleared){ toast('Already cleared today! Come back tomorrow.','#f44'); return; }
+  if(G.energy < 50){ toast('Need 50 energy','#f44'); return; }
+  G.energy -= 50;
+
+  // Seed-based randomization
+  const seed = today.split('').reduce((a,c)=>a+c.charCodeAt(0),0);
+  const waves = 4 + (seed % 3); // 4-6 waves
+  const baseHp = 300 + G.level * 15 + (seed % 200);
+  const baseAtk = 20 + G.level * 2 + (seed % 20);
+
+  const playerPower = getCombatPower();
+  const playerDef = getCombatDefense();
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  let playerHp = playerMaxHp;
+  let log = [];
+  let totalGold = 0, totalXp = 0, lootDrops = [];
+
+  const names = ['Void Sentinel','Corrupted Guardian','Daily Warden','Shifting Shade','Temporal Echo','Reality Fragment'];
+  log.push('=== DAILY DUNGEON (' + today + ') ===');
+  log.push('Waves: ' + waves + ' | Unique modifiers active');
+
+  for(let w = 1; w <= waves; w++){
+    const isBoss = w === waves;
+    let enemyHp = Math.floor(baseHp * (1 + w * 0.35) * (isBoss ? 2.5 : 1));
+    let enemyAtk = Math.floor(baseAtk * (1 + w * 0.25) * (isBoss ? 1.8 : 1));
+    const eName = names[(seed + w) % names.length];
+    log.push('--- Wave ' + w + ': ' + eName + (isBoss?' [BOSS]':'') + ' ---');
+
+    let turn = 0;
+    while(playerHp > 0 && enemyHp > 0 && turn < 35){
+      turn++;
+      let dmg = Math.max(1, playerPower - Math.floor(enemyAtk*0.12) + Math.floor(Math.random()*6));
+      if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg*2); log.push('T'+turn+': CRIT '+dmg); }
+      else { log.push('T'+turn+': Hit '+dmg); }
+      enemyHp -= dmg;
+      if(enemyHp <= 0) break;
+      let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef*0.25) + Math.floor(Math.random()*4));
+      if(Math.random()*100 < Math.min(30, getCombatSpeed()*0.5)){ log.push('T'+turn+': DODGE'); }
+      else { playerHp -= eDmg; log.push('T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')'); }
+    }
+
+    if(enemyHp <= 0){
+      G.total_kills++;
+      const wGold = Math.floor((40+G.level*6)*w*(isBoss?3:1));
+      const wXp = Math.floor((30+G.level*5)*w*(isBoss?3:1));
+      totalGold += wGold; totalXp += wXp;
+      recordBestiaryKill(eName, wGold, wXp);
+      if(isBoss || Math.random() < 0.3){
+        const gear = generateGear(G.level + w*2, isBoss);
+        G.inventory.push(gear); lootDrops.push(gear);
+        log.push('LOOT: '+gear.name+' ['+RARITY_NAMES[gear.rarity]+']');
+      }
+      playerHp = Math.min(playerMaxHp, playerHp + Math.floor(playerMaxHp*0.15));
+    } else { log.push('WIPED on wave ' + w); break; }
+  }
+
+  const cleared = lootDrops.length > 0 || totalGold > 0;
+  if(cleared){
+    totalGold = Math.floor(totalGold * 1.5); totalXp = Math.floor(totalXp * 1.5);
+    G.gold += totalGold; G.total_gold_earned += totalGold; addXp(totalXp);
+    G.dailyDungeonDate = today; G.dailyDungeonCleared = true;
+    log.push('=== DAILY COMPLETE! +' + totalGold + 'g +' + totalXp + 'xp ===');
+    // Guaranteed rewards
+    G.tickets1x = (G.tickets1x||0) + 1; log.push('+1 Summon Ticket!');
+    if(Math.random() < 0.08){ G.tickets10x = (G.tickets10x||0) + 1; log.push('+10x Ticket!!'); }
+    if(Math.random() < 0.1){ const r = dropRelic(); if(r) log.push('RELIC: '+r.name); }
+    if(Math.random() < 0.05){ const lf = findLoreFragment(); if(lf) log.push('LORE: '+lf.piece); }
+    addFactionRep(30);
+  }
+  checkAchievements(); save();
+  showDungeonResult(log, cleared ? waves : 0, waves, lootDrops);
+}
+
+// ==================== WANTED BOARD ====================
+const WANTED_PREFIXES = ['Corrupted','Rogue','Void-Touched','Shadow','Crimson','Iron','Nexus','Abyssal'];
+const WANTED_TITLES = ['the Butcher','the Silent','Deathbringer','Soulstealer','the Undying','Ironhide','Voidborn','the Cursed'];
+
+function generateWantedTargets(){
+  const targets = [];
+  const count = 3 + Math.floor(G.level / 25);
+  for(let i = 0; i < Math.min(count, 5); i++){
+    const prefix = WANTED_PREFIXES[Math.floor(Math.random()*WANTED_PREFIXES.length)];
+    const name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
+    const title = WANTED_TITLES[Math.floor(Math.random()*WANTED_TITLES.length)];
+    const fullName = prefix + ' ' + name + ' ' + title;
+    const lvScale = 1 + i * 0.3 + G.level * 0.05;
+    const zones = ZONES.filter(z => G.level >= z.minLv);
+    const zone = zones[Math.floor(Math.random()*zones.length)];
+    targets.push({
+      name: fullName,
+      hp: Math.floor(500 * lvScale + G.level * 20),
+      atk: Math.floor(30 * lvScale + G.level * 3),
+      gold: Math.floor(150 * lvScale),
+      xp: Math.floor(100 * lvScale),
+      zone: zone.name,
+      timeLimit: Date.now() + 7200000, // 2 hours
+      killed: false
+    });
+  }
+  return targets;
+}
+
+function refreshWanted(){
+  G.wantedTargets = generateWantedTargets();
+  G.wantedRefreshTime = Date.now();
+  save();
+}
+
+function fightWanted(idx){
+  const target = G.wantedTargets[idx];
+  if(!target || target.killed){ toast('Target already dead!','#f44'); return; }
+  if(Date.now() > target.timeLimit){ toast('Target fled!','#f44'); G.wantedTargets.splice(idx,1); save(); return; }
+  if(G.energy < 15){ toast('Need 15 energy','#f44'); return; }
+  G.energy -= 15;
+
+  const power = getCombatPower();
+  const def = getCombatDefense();
+  let playerHp = 50 + G.level*10 + G.stats.defense*3;
+  const playerMaxHp = playerHp;
+  let enemyHp = target.hp;
+  let log = [];
+  log.push('=== WANTED: ' + target.name + ' ===');
+  log.push('Bounty: ' + target.gold + 'g | Last seen: ' + target.zone);
+
+  let turn = 0;
+  while(playerHp > 0 && enemyHp > 0 && turn < 40){
+    turn++;
+    let dmg = Math.max(1, power - Math.floor(target.atk*0.12) + Math.floor(Math.random()*6));
+    dmg = Math.floor(dmg * getBestiaryBonus(target.name));
+    if(G.class === 'striker' && enemyHp < target.hp*0.5) dmg = Math.floor(dmg*1.15);
+    if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg*2); log.push('T'+turn+': CRIT '+dmg); }
+    else { log.push('T'+turn+': Hit '+dmg); }
+    enemyHp -= dmg;
+    if(enemyHp <= 0) break;
+    let eDmg = Math.max(1, target.atk - Math.floor(def*0.25) + Math.floor(Math.random()*4));
+    if(Math.random()*100 < Math.min(30, getCombatSpeed()*0.5)){ log.push('T'+turn+': DODGE'); }
+    else { playerHp -= eDmg; log.push('T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')'); }
+  }
+
+  if(enemyHp <= 0){
+    log.push('=== BOUNTY CLAIMED: ' + target.name + ' ===');
+    target.killed = true;
+    G.gold += target.gold; G.total_gold_earned += target.gold; addXp(target.xp);
+    G.total_kills++; G.bosses_killed++;
+    addWinStreak();
+    recordBestiaryKill(target.name, target.gold, target.xp);
+    log.push('+' + target.gold + 'g +' + target.xp + 'xp');
+    if(Math.random() < 0.15){ G.tickets1x=(G.tickets1x||0)+1; log.push('+1 Ticket!'); }
+    if(Math.random() < 0.2){ const gear = generateGear(G.level+5, true); G.inventory.push(gear); log.push('LOOT: '+gear.name); }
+    addFactionRep(10);
+  } else {
+    log.push('=== TARGET ESCAPED ===');
+    resetWinStreak();
+  }
+  checkAchievements(); save();
+  let html = '<h2>'+(enemyHp<=0?'Bounty Claimed!':'Target Escaped')+'</h2>';
+  html += '<div class="log" style="max-height:250px">';
+  log.forEach(l => { let c=''; if(l.includes('CRIT')||l.includes('Hit '))c='dmg-enemy'; else if(l.includes('Took'))c='dmg-player'; else if(l.includes('BOUNTY')||l.includes('LOOT'))c='heal'; html+='<div class="log-line '+c+'">'+l+'</div>'; });
+  html += '</div><div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== FOLLOWER AWAKENING ====================
+function awakenFollower(fId){
+  const f = G.followers.find(x => x.id === fId);
+  if(!f) return;
+  if((f.stars||1) < 5){ toast('Need 5 stars!','#f44'); return; }
+  if(f.level < 50){ toast('Need level 50!','#f44'); return; }
+  if(f.awakened){ toast('Already awakened!','#f44'); return; }
+  const cost = 5000 * (f.rarity + 1);
+  const shardCost = 50 * (f.rarity + 1);
+  if(G.gold < cost){ toast('Need '+cost+' gold','#f44'); return; }
+  if((G.shards||0) < shardCost){ toast('Need '+shardCost+' shards','#f44'); return; }
+  G.gold -= cost;
+  G.shards -= shardCost;
+  f.awakened = true;
+  f.power = Math.floor(f.power * 1.5);
+  f.defense = Math.floor(f.defense * 1.5);
+  // Upgrade ability
+  const abilities = FOLLOWER_ABILITIES[f.class] || FOLLOWER_ABILITIES['Fighter'];
+  f.ability = 'Awakened: ' + abilities[abilities.length-1];
+  f.name = 'Awakened ' + f.name;
+  G.awakenedCount = (G.awakenedCount||0) + 1;
+  toast(f.name + ' has AWAKENED! +50% stats, ultimate ability!', '#ff2060');
+  if(G.awakenedCount === 1) unlockTitle('Soul Forger');
+  if(G.awakenedCount >= 5) unlockTitle('Awakener');
+  checkAchievements(); save();
+  showTab('followers_detail', f.id);
+}
+
+// ==================== CITY SIEGES ====================
+const SIEGE_TARGETS = [
+  {name:'Bandit Camp',defense:50,tribute:5,minLv:15},
+  {name:'Syndicate Outpost',defense:120,tribute:12,minLv:30},
+  {name:'Void Fortress',defense:250,tribute:25,minLv:50},
+  {name:'Iron Citadel',defense:500,tribute:50,minLv:70},
+  {name:'Nexus Command',defense:1000,tribute:100,minLv:90}
+];
+
+function siegeCity(targetIdx){
+  const target = SIEGE_TARGETS[targetIdx];
+  if(G.level < target.minLv){ toast('Need level '+target.minLv,'#f44'); return; }
+  if((G.capturedCities||[]).includes(target.name)){ toast('Already captured!','#f44'); return; }
+  if(G.energy < 60){ toast('Need 60 energy','#f44'); return; }
+  G.energy -= 60;
+
+  // Your attack power = combat followers + your power
+  const combatFollowers = G.followers.filter(f => f.assigned === 'combat' && f.happiness > 20);
+  let attackPower = getCombatPower();
+  combatFollowers.forEach(f => { attackPower += getFollowerTotalPower(f); });
+
+  let log = [];
+  log.push('=== SIEGE: ' + target.name + ' ===');
+  log.push('Your Army: ' + attackPower + ' power (' + combatFollowers.length + ' soldiers)');
+  log.push('Enemy Defense: ' + target.defense);
+
+  let armyHp = attackPower * 2;
+  let defenseHp = target.defense * 3;
+  let turn = 0;
+
+  while(armyHp > 0 && defenseHp > 0 && turn < 30){
+    turn++;
+    const aDmg = Math.floor(attackPower * (0.6 + Math.random()*0.6));
+    defenseHp -= aDmg;
+    log.push('T'+turn+': Army deals ' + aDmg + ' (Def HP: '+Math.max(0,defenseHp)+')');
+    if(defenseHp <= 0) break;
+    const dDmg = Math.floor(target.defense * (0.4 + Math.random()*0.5));
+    armyHp -= dDmg;
+    log.push('T'+turn+': Defenders deal ' + dDmg + ' (Army HP: '+Math.max(0,armyHp)+')');
+  }
+
+  if(defenseHp <= 0){
+    log.push('=== ' + target.name + ' CAPTURED! ===');
+    if(!G.capturedCities) G.capturedCities = [];
+    G.capturedCities.push(target.name);
+    G.tributeGold = (G.tributeGold||0) + target.tribute;
+    log.push('Tribute income: +' + target.tribute + ' gold/min');
+    const goldReward = 200 + target.defense * 2;
+    G.gold += goldReward; G.total_gold_earned += goldReward;
+    log.push('+' + goldReward + ' gold from plunder!');
+    addFactionRep(30);
+    if(Math.random() < 0.2){ G.tickets1x=(G.tickets1x||0)+1; log.push('+1 Ticket!'); }
+    unlockTitle('Conqueror');
+  } else {
+    log.push('=== SIEGE FAILED ===');
+    log.push('Your army was repelled. Followers demoralized.');
+    combatFollowers.forEach(f => { f.happiness = Math.max(0, f.happiness - 10); });
+  }
+
+  checkAchievements(); save();
+  let html = '<h2>Siege '+(defenseHp<=0?'Victory!':'Failed')+'</h2>';
+  html += '<div class="log" style="max-height:300px">';
+  log.forEach(l => { let c=''; if(l.includes('Army deals'))c='dmg-enemy'; else if(l.includes('Defenders deal'))c='dmg-player'; else if(l.includes('CAPTURED')||l.includes('Tribute'))c='heal'; html+='<div class="log-line '+c+'">'+l+'</div>'; });
+  html += '</div><div class="mt"><button class="btn btn-cyan" onclick="showTab(\'town\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== CORRUPTION ZONES ====================
+function updateCorruptionZones(){
+  if(!G.corruptedZones) G.corruptedZones = {};
+  const leader = getLeadingFaction();
+  if(!leader) return;
+  // Leading faction corrupts random zones
+  ZONES.forEach((z, i) => {
+    if(Math.random() < 0.1){
+      G.corruptedZones[z.name] = leader;
+    }
+  });
+}
+
+function getZoneCorruptionBonus(zoneName){
+  if(!G.corruptedZones || !G.corruptedZones[zoneName]) return {gold:1,xp:1,loot:1};
+  const controller = G.corruptedZones[zoneName];
+  if(controller === G.faction){
+    // Your faction controls it: bonus
+    return {gold:1.15,xp:1.15,loot:1.1};
+  } else {
+    // Enemy faction: harder but better loot
+    return {gold:0.9,xp:0.9,loot:1.2};
+  }
+}
+
+// ==================== RESOURCE RECIPES ====================
+const RESOURCE_RECIPES = [
+  {name:'Basic Key',result:'dungeonKey',keyType:'basic',cost:{ore:10,scrap:5},gold:50},
+  {name:'Advanced Key',result:'dungeonKey',keyType:'advanced',cost:{ore:30,scrap:15,data:10},gold:200},
+  {name:'Nightmare Key',result:'dungeonKey',keyType:'nightmare',cost:{ore:50,scrap:30,data:20,bio:10},gold:800},
+  {name:'HP Potion',result:'potion',potionType:'hp',cost:{bio:5},gold:15},
+  {name:'Power Elixir',result:'potion',potionType:'power',cost:{bio:10,ore:5},gold:30},
+  {name:'Defense Tonic',result:'potion',potionType:'defense',cost:{bio:10,scrap:5},gold:30},
+  {name:'Luck Brew',result:'potion',potionType:'luck',cost:{bio:15,data:5},gold:50},
+  {name:'XP Serum',result:'potion',potionType:'xp',cost:{bio:20,data:10},gold:75},
+  {name:'Summon Shard',result:'shards',amount:10,cost:{ore:20,scrap:20,data:20,bio:20},gold:300},
+  {name:'Void Essence',result:'gems',amount:1,cost:{ore:50,scrap:50,data:50,bio:50},gold:1000}
+];
+
+function craftResourceRecipe(idx){
+  const recipe = RESOURCE_RECIPES[idx];
+  if(G.gold < recipe.gold){ toast('Need '+recipe.gold+' gold','#f44'); return; }
+  const res = getResources();
+  for(const r in recipe.cost){
+    if((res[r]||0) < recipe.cost[r]){ toast('Need '+recipe.cost[r]+' '+r+' (have '+(res[r]||0)+')','#f44'); return; }
+  }
+  G.gold -= recipe.gold;
+  for(const r in recipe.cost){ G.resources[r] -= recipe.cost[r]; }
+
+  if(recipe.result === 'dungeonKey'){ G.dungeonKeys[recipe.keyType]=(G.dungeonKeys[recipe.keyType]||0)+1; }
+  else if(recipe.result === 'potion'){ G.potions[recipe.potionType]=(G.potions[recipe.potionType]||0)+1; }
+  else if(recipe.result === 'shards'){ G.shards=(G.shards||0)+recipe.amount; }
+  else if(recipe.result === 'gems'){ G.gems+=recipe.amount; }
+
+  toast('Crafted '+recipe.name+'!', '#0ff');
+  addSkillXp(8, 10);
+  save();
+}
+
+// ==================== BOUNTY CONTRACTS ====================
+function postBountyContract(targetName, reward){
+  if(!G.followerContracts) G.followerContracts = [];
+  if(G.followerContracts.length >= 3){ toast('Max 3 contracts!','#f44'); return; }
+  if(G.gold < reward){ toast('Need '+reward+' gold for bounty','#f44'); return; }
+  G.gold -= reward;
+  G.followerContracts.push({
+    target: targetName, reward: reward,
+    startTime: Date.now(), duration: 3600000, // 1 hour
+    completed: false
+  });
+  toast('Contract posted: ' + targetName + ' for ' + reward + 'g', '#0ff');
+  save();
+}
+
+function processContracts(){
+  if(!G.followerContracts) return;
+  G.followerContracts.forEach(c => {
+    if(c.completed) return;
+    if(Date.now() - c.startTime >= c.duration){
+      // Followers attempt the bounty
+      const hunters = G.followers.filter(f => f.assigned === 'combat' && f.happiness > 30);
+      if(hunters.length > 0){
+        const power = hunters.reduce((s,f) => s + getFollowerTotalPower(f), 0);
+        const difficulty = c.reward * 2;
+        if(power > difficulty * (0.5 + Math.random())){
+          c.completed = true;
+          const goldReturn = Math.floor(c.reward * 2.5);
+          G.gold += goldReturn; G.total_gold_earned += goldReturn;
+          addNotification('Contract complete: ' + c.target + ' eliminated! +' + goldReturn + 'g');
+          toast('Contract: ' + c.target + ' eliminated! +' + goldReturn + 'g', '#ffd700');
+          if(Math.random() < 0.1){ G.tickets1x=(G.tickets1x||0)+1; }
+          hunters.forEach(f => { f.xp += 20; updateBond(f.id, hunters[0].id, 1); });
+        } else {
+          c.completed = true;
+          addNotification('Contract failed: ' + c.target + ' escaped. Bounty lost.');
+          toast('Contract failed: ' + c.target + ' escaped.', '#f44');
+        }
+      }
+    }
+  });
+  // Clean up completed contracts
+  G.followerContracts = G.followerContracts.filter(c => !c.completed || Date.now() - c.startTime < 300000);
+}
+
+// ==================== RECOMMENDED POWER ====================
+function getRecommendedPower(enemyHp, enemyAtk){
+  return Math.floor(enemyAtk * 2 + enemyHp * 0.05);
+}
+
+function getPowerIndicator(recommended){
+  const myPower = getCombatPower();
+  const ratio = myPower / Math.max(1, recommended);
+  if(ratio >= 2) return {text:'EASY',color:'#0f0'};
+  if(ratio >= 1.2) return {text:'FAIR',color:'#ffd700'};
+  if(ratio >= 0.8) return {text:'HARD',color:'#f80'};
+  return {text:'DEADLY',color:'#f44'};
+}
+
 // ==================== FACTION SYSTEM ====================
 const FACTIONS = {
   ironOrder: {name:'Iron Order',desc:'Military discipline. Combat power reigns.',color:'#888',
@@ -4196,6 +4612,9 @@ function showTab(tab, extra){
     case 'titles': renderTitles(c); break;
     case 'lore': renderLore(c); break;
     case 'notifications': renderNotifications(c); break;
+    case 'sieges': renderSieges(c); break;
+    case 'resourcecraft': renderResourceCraft(c); break;
+    case 'contracts': renderContracts(c); break;
     case 'followers_detail': renderFollowerDetail(c, extra); break;
     case 'inventory': renderInventory(c); break;
     default: renderMissions(c);
@@ -4237,6 +4656,42 @@ function renderMissions(c){
     html += 'Zone: ' + G.autoBattle.zoneName + ' | Mission: ' + G.autoBattle.missionName + '<br>';
     html += 'Earned: ' + G.autoBattleEarnings.gold + 'g | ' + G.autoBattleEarnings.kills + ' kills | ' + (G.autoBattleEarnings.items||0) + ' items<br>';
     html += '<button class="btn btn-red" onclick="stopAutoBattle()">Stop Auto-Battle</button>';
+    html += '</div>';
+  }
+
+  // Win streak
+  if((G.winStreak||0) >= 3){
+    html += '<div class="text-sm" style="color:#ffd700">Win Streak: ' + G.winStreak + ' (x' + getStreakMult().toFixed(2) + ' gold) | Best: ' + (G.bestWinStreak||0) + '</div>';
+  }
+
+  // Daily Dungeon
+  const ddToday = getDailyDungeonSeed();
+  const ddDone = G.dailyDungeonDate === ddToday && G.dailyDungeonCleared;
+  html += '<div class="card" style="border-color:'+(ddDone?'#333':'#ffd700')+'">';
+  html += '<h3 style="color:#ffd700">Daily Dungeon</h3>';
+  if(ddDone){ html += '<span class="text-dim">Cleared today! Come back tomorrow.</span>'; }
+  else { html += '<div class="text-sm">Unique dungeon, guaranteed ticket. Resets daily.</div>';
+    html += '<button class="btn btn-gold" onclick="runDailyDungeon()">Enter (50 EN)</button>'; }
+  html += '</div>';
+
+  // Wanted Board
+  if(!G.wantedTargets || G.wantedTargets.length === 0) refreshWanted();
+  const activeWanted = (G.wantedTargets||[]).filter(t => !t.killed && Date.now() < t.timeLimit);
+  if(activeWanted.length > 0){
+    html += '<div class="card" style="border-color:#f80">';
+    html += '<h3 style="color:#f80">Wanted Board</h3>';
+    G.wantedTargets.forEach((t, i) => {
+      if(t.killed || Date.now() > t.timeLimit) return;
+      const timeLeft = Math.floor((t.timeLimit - Date.now()) / 60000);
+      const rec = getRecommendedPower(t.hp, t.atk);
+      const ind = getPowerIndicator(rec);
+      html += '<div class="card">';
+      html += '<b style="color:#f80">' + t.name + '</b> <span class="text-sm" style="color:'+ind.color+'">['+ind.text+']</span><br>';
+      html += '<span class="text-sm">HP:'+t.hp+' ATK:'+t.atk+' | Near: '+t.zone+' | '+timeLeft+'m left</span><br>';
+      html += '<span class="text-sm">Bounty: '+t.gold+'g +'+t.xp+'xp</span> ';
+      html += '<button class="btn btn-red" onclick="fightWanted('+i+')">Hunt (15 EN)</button>';
+      html += '</div>';
+    });
     html += '</div>';
   }
 
@@ -4392,16 +4847,20 @@ function renderMissions(c){
       html += '<div class="card text-dim">??? ' + zone.name + ' (Requires Lv.' + zone.minLv + ')</div>';
       return;
     }
-    html += '<div class="card"><h3>' + zone.name + '</h3>';
+    // Corruption zone indicator
+    const zoneCorruption = G.corruptedZones?.[zone.name];
+    const corruptTag = zoneCorruption ? ' <span style="color:'+(FACTIONS[zoneCorruption]?.color||'#666')+'">['+FACTIONS[zoneCorruption]?.name+' territory]</span>' : '';
+    html += '<div class="card"><h3>' + zone.name + corruptTag + '</h3>';
     zone.missions.forEach((m, mi) => {
       const enemyPwr = Math.floor(m.enemyAtk * (1 + zi * 0.1));
-      const diff = myPower > enemyPwr * 3 ? '#0f0' : myPower > enemyPwr ? '#ffd700' : '#f44';
+      const rec = getRecommendedPower(m.enemyHp, m.enemyAtk);
+      const ind = getPowerIndicator(rec);
       const color = m.boss ? 'btn-gold' : 'btn-cyan';
       const tag = m.boss ? ' [BOSS]' : '';
       html += '<button class="btn ' + color + '" onclick=\'runCombat(' + JSON.stringify(m).replace(/'/g,"\\'") + ',' + zi + ')\'>';
       html += m.name + tag + ' (EN:' + m.energy + ' | +' + m.gold + 'g +' + m.xp + 'xp)';
       html += '</button>';
-      html += '<span class="text-sm" style="color:'+diff+'"> [Enemy:' + enemyPwr + ']</span>';
+      html += '<span class="text-sm" style="color:'+ind.color+'"> ['+ind.text+']</span>';
       if(!G.autoBattle && !m.boss){
         html += ' <button class="btn" style="padding:2px 6px;min-height:28px;font-size:10px;color:#0f0;border-color:#0f0" onclick="startAutoBattle('+zi+','+mi+')">AUTO</button>';
       }
@@ -4836,6 +5295,13 @@ function renderFollowerDetail(c, fId){
     const sShards = getStarUpgradeShards(f.stars||1);
     html += ' <button class="btn btn-gold" onclick="upgradeFollowerStar(' + f.id + ')">★ Upgrade Star (' + sCost + 'g + ' + sShards + ' shards)</button>';
   }
+  // Awakening
+  if((f.stars||1) >= 5 && f.level >= 50 && !f.awakened){
+    const aCost = 5000 * (f.rarity+1);
+    const aShards = 50 * (f.rarity+1);
+    html += ' <button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="awakenFollower('+f.id+')">AWAKEN ('+aCost+'g + '+aShards+' shards)</button>';
+  }
+  if(f.awakened) html += ' <span style="color:#ff2060">[AWAKENED]</span>';
   html += '<br>';
 
   // Follower Equipment
@@ -5130,6 +5596,9 @@ function renderMore(c){
   html += '<button class="btn" onclick="showTab(\'titles\')">Titles</button> ';
   html += '<button class="btn btn-purple" onclick="showTab(\'lore\')">Lore</button> ';
   html += '<button class="btn" onclick="showTab(\'notifications\')">Notifications</button> ';
+  html += '<button class="btn btn-red" onclick="showTab(\'sieges\')">City Sieges</button> ';
+  html += '<button class="btn" style="color:#f80;border-color:#f80" onclick="showTab(\'resourcecraft\')">Resource Crafting</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'contracts\')">Bounty Contracts</button> ';
   // Ascension
   if(hasResearch('ascend') && G.level >= 100){
     html += '<div class="card mt" style="border-color:#ff2060"><button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button></div>';
@@ -5604,6 +6073,73 @@ function renderNotifications(c){
   c.innerHTML = html;
 }
 
+// ==================== SIEGES / RESOURCE CRAFT / CONTRACTS UI ====================
+function renderSieges(c){
+  let html = '<h2>City Sieges</h2>';
+  html += '<div class="text-sm text-dim mb">Attack NPC cities. Capture for tribute gold/min. Costs 60 energy.</div>';
+  if(G.tributeGold > 0) html += '<div class="card">Tribute income: <span style="color:#ffd700">+' + G.tributeGold + ' gold/min</span> from ' + (G.capturedCities||[]).length + ' cities</div>';
+  SIEGE_TARGETS.forEach((t, i) => {
+    const captured = (G.capturedCities||[]).includes(t.name);
+    const rec = getRecommendedPower(t.defense*3, t.defense);
+    const ind = getPowerIndicator(rec);
+    html += '<div class="card" style="border-color:'+(captured?'#0f0':'#333')+'">';
+    html += '<b>' + t.name + '</b> (Lv.' + t.minLv + '+) <span style="color:'+ind.color+'">['+ind.text+']</span><br>';
+    html += '<span class="text-sm">Defense: ' + t.defense + ' | Tribute: +' + t.tribute + ' gold/min</span><br>';
+    if(captured){ html += '<span style="color:#0f0">CAPTURED - Earning tribute</span>'; }
+    else if(G.level >= t.minLv){ html += '<button class="btn btn-red" onclick="siegeCity('+i+')">Siege! (60 EN)</button>'; }
+    else { html += '<span class="text-dim">Locked (Lv.'+t.minLv+')</span>'; }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderResourceCraft(c){
+  let html = '<h2>Resource Crafting</h2>';
+  const res = getResources();
+  html += '<div class="card">Resources: <span style="color:#888">Ore:'+res.ore+' Scrap:'+res.scrap+' Data:'+res.data+' Bio:'+res.bio+'</span></div>';
+  html += '<div class="text-sm text-dim mb">Use resources from skill training and salvaging to craft items.</div>';
+  RESOURCE_RECIPES.forEach((r, i) => {
+    const canCraft = G.gold >= r.gold && Object.keys(r.cost).every(k => (res[k]||0) >= r.cost[k]);
+    html += '<div class="card" style="border-color:'+(canCraft?'#0ff':'#333')+'">';
+    html += '<b>' + r.name + '</b><br>';
+    html += '<span class="text-sm">Cost: ' + r.gold + 'g';
+    for(const k in r.cost) html += ' + ' + r.cost[k] + ' ' + k;
+    html += '</span> ';
+    if(canCraft){ html += '<button class="btn btn-cyan" onclick="craftResourceRecipe('+i+');showTab(\'resourcecraft\')">Craft</button>'; }
+    else { html += '<span class="text-dim">Missing resources</span>'; }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderContracts(c){
+  let html = '<h2>Bounty Contracts</h2>';
+  html += '<div class="text-sm text-dim mb">Post bounties for your combat followers to attempt. 1 hour. Costs gold upfront, returns 2.5x on success.</div>';
+  // Active contracts
+  if(G.followerContracts && G.followerContracts.length > 0){
+    html += '<h3>Active</h3>';
+    G.followerContracts.forEach(c2 => {
+      const timeLeft = Math.max(0, Math.floor((c2.duration - (Date.now() - c2.startTime)) / 60000));
+      html += '<div class="card">';
+      html += '<b>' + c2.target + '</b> | Bounty: ' + c2.reward + 'g | ' + (c2.completed ? '<span style="color:#0f0">DONE</span>' : timeLeft + 'm left');
+      html += '</div>';
+    });
+  }
+  // Post new
+  if(!G.followerContracts || G.followerContracts.length < 3){
+    html += '<h3>Post Contract</h3>';
+    const targets = ['Void Stalker','Corrupted Agent','Rogue Mech','Shadow Beast','Nexus Drone'];
+    targets.forEach(t => {
+      const cost = 100 + G.level * 5;
+      html += '<button class="btn btn-cyan" onclick="postBountyContract(\''+t+'\','+cost+');showTab(\'contracts\')">' + t + ' ('+cost+'g)</button> ';
+    });
+  }
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
 // ==================== FOLLOWER EQUIPMENT UI ====================
 // Added to follower detail - show in renderFollowerDetail
 
@@ -5750,6 +6286,20 @@ function gameLoop(){
 
   // Update weather
   updateWeather();
+
+  // Tribute gold from captured cities
+  if(goldTimer === 0 && G.tributeGold > 0){
+    G.gold += G.tributeGold;
+  }
+
+  // Process bounty contracts
+  if(energyTimer % 60 === 0) processContracts();
+
+  // Update corruption zones every 10 min
+  if(energyTimer % 600 === 0) updateCorruptionZones();
+
+  // Wanted board refresh (every 2 hours)
+  if(!G.wantedTargets || G.wantedTargets.length === 0 || Date.now() - (G.wantedRefreshTime||0) > 7200000) refreshWanted();
 
   // Void rift spawn check (every ~5 min, 3% chance)
   if(energyTimer % 300 === 0 && Math.random() < 0.03) spawnRift();
