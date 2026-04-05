@@ -813,6 +813,11 @@ function runCombat(mission, zoneIdx){
       log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']');
     }
     log.push('+' + rewards.gold + ' gold, +' + Math.floor(rewards.xp * xpMult) + ' XP');
+    // Tiny ticket chance on any mission win
+    if(Math.random() < 0.008){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      log.push('+1 Summon Ticket!');
+    }
   } else {
     log.push('=== DEFEAT ===');
     log.push('You were overwhelmed...');
@@ -1045,7 +1050,13 @@ function claimBounty(idx){
   G.total_gold_earned += b.gold;
   addXp(b.xp);
   if(b.gems > 0) G.gems += b.gems;
-  toast('Bounty claimed! +' + b.gold + 'g +' + b.xp + 'xp' + (b.gems > 0 ? ' +' + b.gems + ' gems' : ''), '#ffd700');
+  let bmsg = 'Bounty claimed! +' + b.gold + 'g +' + b.xp + 'xp' + (b.gems > 0 ? ' +' + b.gems + ' gems' : '');
+  // Boss and dungeon bounties have ticket chance
+  if((b.type === 'boss' || b.type === 'dungeon') && Math.random() < 0.08){
+    G.tickets1x = (G.tickets1x||0) + 1;
+    bmsg += ' +1 Summon Ticket!';
+  }
+  toast(bmsg, '#ffd700');
   checkAchievements();
   save();
   showTab('missions');
@@ -1698,6 +1709,15 @@ function triggerRaid(cityIdx){
       G.inventory.push(gear);
       log.push('LOOT: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + '] from the ' + army.faction.name + '!');
     }
+    // Summon ticket chance from raid defense
+    if(Math.random() < 0.05){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      log.push('Found a Summon Ticket in the wreckage!');
+    }
+    if(wavesRepelled >= 4 && Math.random() < 0.02){
+      G.tickets10x = (G.tickets10x||0) + 1;
+      log.push('The raiders carried a rare 10x Summon Ticket!');
+    }
   } else {
     log.push('=== CITY BREACHED! ===');
     city.raidLosses++;
@@ -1848,6 +1868,12 @@ function fightRoamer(roamerId){
       G.inventory.push(gear);
       log.push('LOOT: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']');
     }
+    // Ticket chance from roamers (rarer enemies = better chance)
+    const roamerTicketChance = 0.02 + (enemy.atk / (50 + G.level * 3)) * 0.03;
+    if(Math.random() < roamerTicketChance){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      log.push('+1 Summon Ticket!');
+    }
     // Remove roamer
     G.roamingEnemies.splice(idx, 1);
     updateBountyProgress('kill', 1);
@@ -1969,6 +1995,16 @@ function collectExpedition(idx){
   if(Math.random() < type.gemChance){
     const gems = 1 + Math.floor(Math.random() * 3);
     G.gems += gems; msg += ' +' + gems + ' gems';
+  }
+  // Ticket chance scales with expedition duration
+  const ticketChance = exp.type === 0 ? 0.02 : exp.type === 1 ? 0.04 : exp.type === 2 ? 0.07 : 0.12;
+  if(Math.random() < ticketChance){
+    G.tickets1x = (G.tickets1x||0) + 1;
+    msg += ' +1 Summon Ticket!';
+  }
+  if(exp.type >= 3 && Math.random() < 0.03){
+    G.tickets10x = (G.tickets10x||0) + 1;
+    msg += ' +10x Ticket!!';
   }
   // Follower XP
   followers.forEach(f => { f.assigned = 'idle'; f.xp += 20 + type.duration / 100; });
@@ -2169,6 +2205,7 @@ function exploreTile(tileIdx){
         G.inventory.push(gear);
         msg += ' + ' + gear.name;
       }
+      if(Math.random() < 0.05){ G.tickets1x = (G.tickets1x||0) + 1; msg += ' +Ticket!'; }
       break;
     case 'shrine':
       G.energy = Math.min(getMaxEnergy(), G.energy + 20);
@@ -2198,6 +2235,7 @@ function exploreTile(tileIdx){
         msg += ' + ' + gear.name + '!';
       }
       G.gems += 2; msg += ' +2 gems';
+      if(Math.random() < 0.1){ G.tickets1x = (G.tickets1x||0) + 1; msg += ' +Ticket!'; }
       break;
   }
   toast(msg, '#0ff');
@@ -2555,6 +2593,11 @@ function processAutoBattle(){
       const gear = generateGear(G.level, false);
       G.inventory.push(gear);
       G.autoBattleEarnings.items++;
+    }
+    // Very small ticket chance from auto-battle
+    if(Math.random() < 0.01){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      toast('Auto-battle found a Summon Ticket!', '#0ff');
     }
 
     // Follower XP
