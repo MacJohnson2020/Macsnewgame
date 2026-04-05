@@ -5,70 +5,95 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Void Raiders</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#0a0a1a; color:#ccc; font-family: 'Courier New', monospace; font-size:14px; overflow-x:hidden; }
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body { background:#0a0a1a; color:#d0d0d0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:14px; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
 #app { max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
 /* Top Bar */
-#top-bar { background:#111; padding:8px 12px; border-bottom:1px solid #333; position:sticky; top:0; z-index:10; }
-#top-bar .row { display:flex; justify-content:space-between; align-items:center; }
-.stat-label { color:#888; font-size:11px; }
-.stat-val { color:#0ff; font-size:13px; font-weight:bold; }
-.gold-val { color:#ffd700; }
-.energy-val { color:#0f0; }
+#top-bar { background:linear-gradient(180deg,#141428,#0d0d1f); padding:10px 14px 6px; border-bottom:1px solid #2a2a4a; position:sticky; top:0; z-index:10; }
+#top-bar .row { display:flex; justify-content:space-between; align-items:center; gap:4px; }
+.stat-label { color:#667; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
+.stat-val { color:#0ff; font-size:14px; font-weight:700; font-family:'Courier New',monospace; }
+.gold-val { color:#ffd700; font-family:'Courier New',monospace; font-weight:700; }
+.energy-val { color:#0f0; font-family:'Courier New',monospace; font-weight:700; }
 /* Main Content */
-#content { flex:1; overflow-y:auto; padding:10px; padding-bottom:70px; }
+#content { flex:1; overflow-y:auto; padding:12px; padding-bottom:75px; scroll-behavior:smooth; }
 /* Bottom Nav */
-#nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; display:flex; background:#111; border-top:1px solid #333; z-index:10; }
-#nav button { flex:1; padding:12px 4px; background:none; border:none; color:#666; font-family:inherit; font-size:11px; cursor:pointer; }
-#nav button.active { color:#0ff; border-top:2px solid #0ff; }
+#nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; display:flex; background:linear-gradient(180deg,#0d0d1f,#141428); border-top:1px solid #2a2a4a; z-index:10; padding-bottom:env(safe-area-inset-bottom); }
+#nav button { flex:1; padding:10px 4px 8px; background:none; border:none; border-top:2px solid transparent; color:#556; font-family:inherit; font-size:10px; font-weight:600; cursor:pointer; transition:all 0.2s; text-transform:uppercase; letter-spacing:0.3px; }
+#nav button.active { color:#0ff; border-top-color:#0ff; background:rgba(0,255,255,0.03); }
+#nav button:active { background:rgba(0,255,255,0.08); }
 /* Buttons */
-.btn { display:inline-block; padding:10px 16px; margin:4px; background:#1a1a2e; border:1px solid #333; color:#ccc; font-family:inherit; font-size:13px; cursor:pointer; min-height:44px; min-width:44px; }
-.btn:active { background:#2a2a4e; }
-.btn:disabled { opacity:0.4; }
-.btn-cyan { border-color:#0ff; color:#0ff; }
-.btn-purple { border-color:#b026ff; color:#b026ff; }
-.btn-gold { border-color:#ffd700; color:#ffd700; }
-.btn-green { border-color:#0f0; color:#0f0; }
-.btn-red { border-color:#f44; color:#f44; }
+.btn { display:inline-block; padding:10px 16px; margin:3px; background:#16162e; border:1px solid #333; border-radius:6px; color:#ccc; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; min-height:44px; min-width:44px; transition:all 0.15s; user-select:none; }
+.btn:active { background:#2a2a50; transform:scale(0.97); }
+.btn:disabled { opacity:0.35; pointer-events:none; }
+.btn-cyan { border-color:#0cc; color:#0ff; background:rgba(0,255,255,0.05); }
+.btn-cyan:active { background:rgba(0,255,255,0.15); }
+.btn-purple { border-color:#9020dd; color:#b026ff; background:rgba(176,38,255,0.05); }
+.btn-purple:active { background:rgba(176,38,255,0.15); }
+.btn-gold { border-color:#cc9900; color:#ffd700; background:rgba(255,215,0,0.05); }
+.btn-gold:active { background:rgba(255,215,0,0.15); }
+.btn-green { border-color:#0a0; color:#0f0; background:rgba(0,255,0,0.05); }
+.btn-green:active { background:rgba(0,255,0,0.15); }
+.btn-red { border-color:#c33; color:#f44; background:rgba(255,68,68,0.05); }
+.btn-red:active { background:rgba(255,68,68,0.15); }
 /* Rarity Colors */
-.common { color:#aaa; } .uncommon { color:#0f0; } .rare { color:#44f; }
-.epic { color:#b026ff; } .legendary { color:#ffd700; } .mythic { color:#ff2060; text-shadow:0 0 6px #ff2060; }
+.common { color:#999; } .uncommon { color:#0f0; } .rare { color:#5588ff; }
+.epic { color:#b026ff; } .legendary { color:#ffd700; text-shadow:0 0 4px rgba(255,215,0,0.3); } .mythic { color:#ff2060; text-shadow:0 0 8px rgba(255,32,96,0.4); font-weight:700; }
 /* Progress Bar */
-.pbar { background:#1a1a2e; border:1px solid #333; height:16px; margin:4px 0; position:relative; }
-.pbar-fill { height:100%; transition:width 0.3s; }
-.pbar-text { position:absolute; top:0; left:4px; font-size:10px; line-height:16px; color:#fff; }
-.pbar-cyan .pbar-fill { background:#0ff; }
-.pbar-green .pbar-fill { background:#0a0; }
-.pbar-purple .pbar-fill { background:#b026ff; }
-.pbar-gold .pbar-fill { background:#ffd700; }
+.pbar { background:#0e0e20; border:1px solid #2a2a3a; height:18px; margin:4px 0; position:relative; border-radius:9px; overflow:hidden; }
+.pbar-fill { height:100%; transition:width 0.4s ease-out; border-radius:9px; }
+.pbar-text { position:absolute; top:0; left:0; right:0; font-size:10px; line-height:18px; color:#fff; text-align:center; font-weight:600; text-shadow:0 1px 2px rgba(0,0,0,0.8); font-family:'Courier New',monospace; }
+.pbar-cyan .pbar-fill { background:linear-gradient(90deg,#066,#0ff); }
+.pbar-green .pbar-fill { background:linear-gradient(90deg,#050,#0a0); }
+.pbar-purple .pbar-fill { background:linear-gradient(90deg,#408,#b026ff); }
+.pbar-gold .pbar-fill { background:linear-gradient(90deg,#860,#ffd700); }
 /* Sections */
-h2 { color:#0ff; font-size:16px; margin:12px 0 8px; border-bottom:1px solid #333; padding-bottom:4px; }
-h3 { color:#b026ff; font-size:14px; margin:8px 0 4px; }
-.card { background:#111; border:1px solid #222; padding:10px; margin:6px 0; }
-.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+h2 { color:#0ff; font-size:17px; margin:16px 0 8px; border-bottom:1px solid #1a1a3a; padding-bottom:6px; font-weight:700; letter-spacing:0.3px; }
+h3 { color:#b026ff; font-size:13px; margin:10px 0 6px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+.card { background:linear-gradient(135deg,#111122,#0e0e1e); border:1px solid #1e1e3a; border-radius:8px; padding:12px; margin:8px 0; transition:border-color 0.2s; }
+.card:active { border-color:#333; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
 .text-center { text-align:center; }
 .text-sm { font-size:11px; }
-.text-dim { color:#666; }
-.mt { margin-top:8px; }
-.mb { margin-bottom:8px; }
+.text-dim { color:#556; }
+.mt { margin-top:10px; }
+.mb { margin-bottom:10px; }
+/* Collapsible Sections */
+.collapse-header { cursor:pointer; user-select:none; padding:8px 0; }
+.collapse-header:after { content:' [-]'; color:#556; font-size:11px; }
+.collapse-header.collapsed:after { content:' [+]'; }
+.collapse-body { transition:max-height 0.3s; overflow:hidden; }
+.collapse-body.hidden { max-height:0 !important; padding:0; margin:0; }
 /* Toast */
-#toast-container { position:fixed; top:50px; left:50%; transform:translateX(-50%); z-index:100; width:90%; max-width:400px; }
-.toast { background:#1a1a2e; border:1px solid #0ff; padding:10px; margin:4px 0; text-align:center; animation: fadeIn 0.3s; }
-@keyframes fadeIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+#toast-container { position:fixed; top:55px; left:50%; transform:translateX(-50%); z-index:100; width:90%; max-width:420px; pointer-events:none; }
+.toast { background:linear-gradient(135deg,#1a1a35,#12122a); border:1px solid #0ff; border-radius:8px; padding:10px 14px; margin:6px 0; text-align:center; animation:toastIn 0.3s ease-out; font-size:13px; box-shadow:0 4px 20px rgba(0,0,0,0.5); backdrop-filter:blur(4px); }
+@keyframes toastIn { from{opacity:0;transform:translateY(-15px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)} }
 /* Modal */
-.modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:50; display:flex; align-items:center; justify-content:center; }
-.modal { background:#111; border:1px solid #0ff; padding:20px; max-width:90%; max-height:80vh; overflow-y:auto; }
+.modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:50; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.2s; }
+.modal { background:#111122; border:1px solid #0ff; border-radius:12px; padding:20px; max-width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 8px 40px rgba(0,255,255,0.1); }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
 /* Combat Log */
-.log { max-height:200px; overflow-y:auto; background:#050510; border:1px solid #222; padding:6px; font-size:12px; }
-.log-line { margin:2px 0; }
-.dmg-player { color:#f44; } .dmg-enemy { color:#0ff; } .heal { color:#0f0; }
+.log { max-height:220px; overflow-y:auto; background:#060612; border:1px solid #1a1a2a; border-radius:6px; padding:8px; font-size:12px; font-family:'Courier New',monospace; line-height:1.5; }
+.log-line { margin:1px 0; padding:1px 4px; border-radius:2px; }
+.dmg-player { color:#f55; background:rgba(255,68,68,0.05); } .dmg-enemy { color:#0ff; background:rgba(0,255,255,0.05); } .heal { color:#0f0; background:rgba(0,255,0,0.05); }
 /* Followers */
-.follower-card { background:#0a0a1a; border:1px solid #333; padding:8px; margin:4px 0; }
-.follower-card .name { font-weight:bold; }
+.follower-card { background:linear-gradient(135deg,#0c0c1e,#0a0a18); border:1px solid #1e1e3a; border-radius:6px; padding:10px; margin:5px 0; transition:border-color 0.2s; }
+.follower-card .name { font-weight:700; }
 /* Input */
-input[type="text"] { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; font-family:inherit; font-size:14px; width:100%; }
-select { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; font-family:inherit; font-size:14px; }
+input[type="text"] { background:#12122a; border:1px solid #2a2a4a; border-radius:6px; color:#ddd; padding:10px 12px; font-family:inherit; font-size:14px; width:100%; transition:border-color 0.2s; }
+input[type="text"]:focus { border-color:#0ff; outline:none; }
+select { background:#12122a; border:1px solid #2a2a4a; border-radius:6px; color:#ddd; padding:10px 12px; font-family:inherit; font-size:14px; appearance:none; -webkit-appearance:none; }
+select:focus { border-color:#0ff; outline:none; }
+/* Number display */
+.num { font-family:'Courier New',monospace; font-weight:700; }
+/* Scrollbar */
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:#0a0a1a; }
+::-webkit-scrollbar-thumb { background:#2a2a4a; border-radius:2px; }
+::-webkit-scrollbar-thumb:hover { background:#3a3a5a; }
+/* Safe area */
+@supports(padding: max(0px)) { #nav { padding-bottom:max(4px, env(safe-area-inset-bottom)); } }
 </style>
 </head>
 <body>
@@ -574,7 +599,31 @@ function toast(msg, color){
   if(color) d.style.borderColor = color;
   d.textContent = msg;
   c.appendChild(d);
-  setTimeout(()=> d.remove(), 2500);
+  setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity 0.3s'; setTimeout(()=>d.remove(),300); }, 2500);
+}
+
+// Format large numbers: 1200 -> "1.2K", 1500000 -> "1.5M"
+function fmtNum(n){
+  if(n === undefined || n === null) return '0';
+  if(n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if(n >= 10000) return (n/1000).toFixed(1) + 'K';
+  if(n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+// Collapsible section helper
+function toggleCollapse(id){
+  const el = document.getElementById('collapse-'+id);
+  const header = document.getElementById('ch-'+id);
+  if(!el) return;
+  el.classList.toggle('hidden');
+  if(header) header.classList.toggle('collapsed');
+}
+
+function collapseSection(id, title, content, startOpen){
+  const open = startOpen !== false;
+  return '<div id="ch-'+id+'" class="collapse-header'+(open?'':' collapsed')+'" onclick="toggleCollapse(\''+id+'\')"><b>'+title+'</b></div>' +
+    '<div id="collapse-'+id+'" class="collapse-body'+(open?'':' hidden')+'">'+content+'</div>';
 }
 
 // ==================== WEATHER SYSTEM ====================
@@ -660,6 +709,8 @@ function getMaxEnergy(){
   base += getRelicBonus('maxEnergy');
   // Talent bonus (#14)
   if(G.talents) base += getTalentLevel('energy') * 5;
+  // Feature 8: Luxury Energy Boost
+  if(G.luxuryPurchases) base += (G.luxuryPurchases.energyBoost||0) * 20;
   return base;
 }
 
@@ -684,6 +735,10 @@ function getXpBoost(){
   boost += loreBonuses.xp || 0;
   // Talent bonus (#14)
   if(G.talents) boost += getTalentBonus('xp');
+  // Feature 8: XP Tome
+  if(G.luxuryPurchases) boost += (G.luxuryPurchases.xpTome||0) * 0.03;
+  // Feature 25: Prestige Shop permanent XP
+  if(G.prestigeShopPurchases && G.prestigeShopPurchases.permDropRate) boost += 0; // xp handled separately
   return boost;
 }
 
@@ -735,6 +790,12 @@ function getCombatPower(){
   if(G.talents) p = Math.floor(p * (1 + getTalentBonus('power')));
   // Legacy bonus from awakened (#17)
   if(G.awakenedDmgBonus) p = Math.floor(p * (1 + G.awakenedDmgBonus * 0.01));
+  // Feature 25: Prestige Shop follower power bonus
+  if(G.prestigeShopPurchases && G.prestigeShopPurchases.permFollowerPower){
+    const fpBonus = G.prestigeShopPurchases.permFollowerPower * 0.10;
+    const followerContrib = activeFollowers.reduce((s,f) => s + Math.floor(f.level * f.power * 0.5), 0);
+    p += Math.floor(followerContrib * fpBonus);
+  }
   return Math.floor(p);
 }
 
@@ -777,6 +838,8 @@ function getLuck(){
   l += getRelicBonus('speed'); // speed relic adds to luck calc too
   // Talent bonus (#14)
   if(G.talents) l = Math.floor(l * (1 + getTalentBonus('luck')));
+  // Feature 8: Luck Charm
+  if(G.luxuryPurchases) l += (G.luxuryPurchases.luckCharm||0) * 5;
   return Math.floor(l);
 }
 
@@ -1281,6 +1344,17 @@ function runCombat(mission, zoneIdx){
     log.push('Turns: ' + turn + ' | Crits: ' + critsLanded);
     G.total_kills++;
     G.missions_completed++;
+    // Feature 12: Battle Statistics
+    if(!G.combatStats) G.combatStats = {totalDmgDealt:0,totalHits:0,totalCrits:0,dodgeCount:0,potionsUsed:0,highestCombo:0};
+    G.combatStats.totalDmgDealt = (G.combatStats.totalDmgDealt||0) + totalDmgDealt;
+    G.combatStats.totalHits = (G.combatStats.totalHits||0) + turn;
+    G.combatStats.totalCrits = (G.combatStats.totalCrits||0) + critsLanded;
+    if(maxCombo > (G.combatStats.highestCombo||0)) G.combatStats.highestCombo = maxCombo;
+    // Feature 16: Session Stats
+    if(!G.sessionStats) G.sessionStats = {gold:0,xp:0,kills:0};
+    G.sessionStats.kills = (G.sessionStats.kills||0) + 1;
+    // Feature 6: Bounty Hunter Rank
+    G.bountiesCompleted = (G.bountiesCompleted||0) + 1;
     updateChallengeProgress('kills', 1);
     recordBestiaryKill(mission.name, mission.gold, mission.xp);
     // Boss kill counter (#8)
@@ -1337,6 +1411,9 @@ function runCombat(mission, zoneIdx){
 
     G.gold += rewards.gold;
     G.total_gold_earned += rewards.gold;
+    // Feature 16: Session Stats
+    if(G.sessionStats) G.sessionStats.gold = (G.sessionStats.gold||0) + rewards.gold;
+    if(G.sessionStats) G.sessionStats.xp = (G.sessionStats.xp||0) + Math.floor(rewards.xp * xpMult);
     addXp(Math.floor(rewards.xp * xpMult));
     for(const sk in rewards.skillXp){
       addSkillXp(parseInt(sk), Math.floor(rewards.skillXp[sk] * xpMult));
@@ -4500,6 +4577,14 @@ function getResources(){
 function addResource(type, amount){
   if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
   G.resources[type] = (G.resources[type]||0) + amount;
+  // Feature 7: Material Quality - chance for fine/pristine
+  if(!G.fineResources) G.fineResources = {ore:0,scrap:0,data:0,bio:0};
+  if(!G.pristineResources) G.pristineResources = {ore:0,scrap:0,data:0,bio:0};
+  for(let i = 0; i < amount; i++){
+    const roll = Math.random();
+    if(roll < 0.01){ G.pristineResources[type] = (G.pristineResources[type]||0) + 1; }
+    else if(roll < 0.11){ G.fineResources[type] = (G.fineResources[type]||0) + 1; }
+  }
 }
 // Skill training generates resources
 // Mining -> ore, Scavenging -> scrap, Hacking -> data, Harvesting -> bio
@@ -5091,7 +5176,7 @@ function updateHUD(){
   if(!G) return;
   document.getElementById('hud-level').textContent = G.level;
   document.getElementById('hud-energy').textContent = G.energy + '/' + getMaxEnergy();
-  document.getElementById('hud-gold').textContent = G.gold;
+  document.getElementById('hud-gold').textContent = fmtNum(G.gold);
   document.getElementById('hud-gems').textContent = G.gems;
   const needed = xpForLevel(G.level);
   const pct = Math.min(100, (G.xp / needed) * 100);
@@ -5114,6 +5199,8 @@ function showTab(tab, extra){
   if(tabBtn) tabBtn.classList.add('active');
 
   currentTab = tab;
+  document.getElementById('content').scrollTop = 0;
+  window.scrollTo(0,0);
   const c = document.getElementById('content');
 
   switch(tab){
@@ -5146,6 +5233,9 @@ function showTab(tab, extra){
     case 'contracts': renderContracts(c); break;
     case 'followers_detail': renderFollowerDetail(c, extra); break;
     case 'inventory': renderInventory(c); break;
+    case 'stockmarket': renderStockMarket(c); break;
+    case 'prestigeshop': renderPrestigeShop(c); break;
+    case 'followercompare': renderFollowerCompare(c, extra?.id1, extra?.id2); break;
     default: renderMissions(c);
   }
   updateHUD();
@@ -5176,6 +5266,9 @@ function renderMissions(c){
         html += '<button class="btn" style="padding:4px 8px;min-height:30px;border-color:'+POTIONS[t].color+';color:'+POTIONS[t].color+'" onclick="usePotion(\''+t+'\')">' + POTIONS[t].name + ' x' + G.potions[t] + '</button> ';
       }
     }
+    // Feature 18: Auto-Potion Toggle
+    const apOn = G.autoPotionEnabled !== false;
+    html += '<br><button class="btn' + (apOn?' btn-green':'') + '" style="padding:4px 8px;min-height:30px" onclick="G.autoPotionEnabled=!G.autoPotionEnabled;save();showTab(\'missions\')">Auto-Potion: ' + (apOn?'ON':'OFF') + '</button>';
     html += '</div>';
   }
 
@@ -5202,6 +5295,51 @@ function renderMissions(c){
   if(ddDone){ html += '<span class="text-dim">Cleared today! Come back tomorrow.</span>'; }
   else { html += '<div class="text-sm">Unique dungeon, guaranteed ticket. Resets daily.</div>';
     html += '<button class="btn btn-gold" onclick="runDailyDungeon()">Enter (50 EN)</button>'; }
+  html += '</div>';
+
+  // Feature 23: World Events display
+  if(G.worldEvent && Date.now() < (G.worldEventEnd||0)){
+    const weTimeLeft = Math.floor((G.worldEventEnd - Date.now()) / 60000);
+    html += '<div class="card" style="border-color:#ff2060;background:#1a0520">';
+    html += '<h3 style="color:#ff2060">WORLD EVENT: ' + G.worldEvent.name + '</h3>';
+    html += '<div class="text-sm">' + G.worldEvent.desc + '</div>';
+    html += '<div class="text-sm" style="color:#f44">' + weTimeLeft + ' min remaining</div>';
+    html += '</div>';
+  }
+
+  // Feature 22: Seasonal Boss
+  (function(){
+    const month = new Date().getMonth();
+    let sbName, sbColor, sbHp, sbAtk;
+    if(month <= 2){ sbName='Frost Wyrm'; sbColor='#4af'; sbHp=3000+G.level*80; sbAtk=80+G.level*3; }
+    else if(month <= 5){ sbName='Solar Phoenix'; sbColor='#f80'; sbHp=3500+G.level*90; sbAtk=90+G.level*3; }
+    else if(month <= 8){ sbName='Storm Titan'; sbColor='#af0'; sbHp=4000+G.level*100; sbAtk=100+G.level*4; }
+    else { sbName='Shadow Reaper'; sbColor='#b026ff'; sbHp=4500+G.level*110; sbAtk=110+G.level*4; }
+    const sbKey = sbName + '_' + new Date().getMonth();
+    const sbDone = G.lastSeasonalBossKill === sbKey;
+    html += '<div class="card" style="border-color:'+sbColor+'">';
+    html += '<h3 style="color:'+sbColor+'">Seasonal Boss: ' + sbName + '</h3>';
+    html += '<div class="text-sm">HP:'+sbHp+' ATK:'+sbAtk+'</div>';
+    if(sbDone){ html += '<span class="text-dim">Defeated this season!</span>'; }
+    else { html += '<button class="btn" style="color:'+sbColor+';border-color:'+sbColor+'" onclick="fightSeasonalBoss()">Fight (40 EN)</button>'; }
+    html += '</div>';
+  })();
+
+  // Feature 21: Challenge Dungeons
+  html += '<div class="card" style="border-color:#ff2060">';
+  html += '<h3 style="color:#ff2060">Challenge Dungeons</h3>';
+  const cdTypes = [
+    {id:'no_skills',name:'No Skills',desc:'Base stats only',reward:'Title: Purist'},
+    {id:'speed_run',name:'Speed Run',desc:'15 turns max per wave',reward:'Relic Shard x5'},
+    {id:'glass_cannon',name:'Glass Cannon',desc:'1 HP, 5x damage',reward:'Title: Glass Cannon'}
+  ];
+  cdTypes.forEach(cd => {
+    const cleared = G.challengeDungeonClears && G.challengeDungeonClears[cd.id];
+    html += '<div class="text-sm">' + cd.name + ': ' + cd.desc + ' | Reward: ' + cd.reward + ' ';
+    if(cleared){ html += '<span style="color:#0f0">CLEARED</span>'; }
+    else { html += '<button class="btn btn-red" style="padding:2px 8px;min-height:24px" onclick="runChallengeDungeon(\''+cd.id+'\')">Enter (30 EN)</button>'; }
+    html += '</div>';
+  });
   html += '</div>';
 
   // Wanted Board
@@ -5476,7 +5614,7 @@ function renderSkills(c){
       const hasBadge = G.masteryBadges && G.masteryBadges[i];
       html += '<b>' + name + '</b> Lv.' + lv + '/99';
       if(hasBadge) html += ' <span style="color:#ffd700" title="Mastered!">&#9733;</span>';
-      html += ' <span class="text-sm text-dim">- ' + SKILL_DESCS[i] + '</span>';
+      if(!G.compactMode) html += ' <span class="text-sm text-dim">- ' + SKILL_DESCS[i] + '</span>';
       html += '<div class="pbar pbar-purple"><div class="pbar-fill" style="width:' + pct + '%"></div>';
       html += '<span class="pbar-text">' + xp + '/' + needed + '</span></div>';
       // Show unlocks
@@ -5499,6 +5637,21 @@ function renderSkills(c){
 function renderGear(c){
   let html = '<h2>Loadout</h2>';
   html += '<div class="text-sm text-dim mb">Power: ' + getCombatPower() + ' | Defense: ' + getCombatDefense() + ' | Speed: ' + getCombatSpeed() + ' | Luck: ' + getLuck() + '</div>';
+
+  // Feature 11: Gear Loadout Presets
+  if(!G.gearPresets) G.gearPresets = [];
+  html += '<div class="card"><b>Presets</b> ';
+  G.gearPresets.forEach((p, i) => {
+    html += '<button class="btn btn-cyan" style="padding:4px 8px;min-height:30px" onclick="loadGearPreset('+i+');showTab(\'gear\')">' + p.name + '</button> ';
+  });
+  if(G.gearPresets.length < 3){
+    html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="var n=prompt(\'Preset name:\');if(n)saveGearPreset(n);showTab(\'gear\')">Save Current</button>';
+  }
+  if(G.gearPresets.length > 0){
+    html += ' <button class="btn btn-red" style="padding:4px 8px;min-height:24px" onclick="G.gearPresets=[];save();showTab(\'gear\')">Clear All</button>';
+  }
+  html += '</div>';
+
   GEAR_SLOTS.forEach(slot => {
     html += '<div class="card">';
     html += '<b>' + slot.charAt(0).toUpperCase() + slot.slice(1) + ':</b> ';
@@ -6081,6 +6234,14 @@ function renderFollowerDetail(c, fId){
     html += '<div class="text-sm text-dim">Reach Lv40 to become a mentor.</div>';
   }
 
+  // Feature 13: Follower Comparison
+  html += '<h3>Compare</h3>';
+  html += '<div class="text-sm text-dim">Select another follower to compare:</div>';
+  const compareTargets = G.followers.filter(x => x.id !== f.id).sort((a,b) => b.level - a.level).slice(0,8);
+  compareTargets.forEach(t => {
+    html += '<button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followercompare\',{id1:'+f.id+',id2:'+t.id+'})">' + t.name + ' Lv.' + t.level + '</button> ';
+  });
+
   html += '<h3>Assign Role</h3>';
   const ci = f.cityIdx || 0;
   // General roles
@@ -6189,6 +6350,25 @@ function renderProfile(c){
   html += 'Prestige: ' + G.prestige + ' (+' + G.prestige_bonus + '% XP)<br>';
   html += 'Login Streak: ' + (G.loginStreak || 0) + ' days<br>';
   html += 'Class Passive: <span style="color:'+clsData.passiveColor+'">' + clsData.passive + '</span> - ' + clsData.passiveDesc + '<br>';
+  // Feature 20: Last Login Display
+  if(G.lastOnline){
+    const hoursAgo = Math.floor((Date.now() - G.lastOnline) / 3600000);
+    const minsAgo = Math.floor((Date.now() - G.lastOnline) / 60000);
+    html += 'Last login: <span style="color:#888">' + (hoursAgo > 0 ? hoursAgo + ' hours ago' : minsAgo + ' min ago') + '</span><br>';
+  }
+  // Feature 8: Golden Name display
+  if(G.luxuryPurchases && G.luxuryPurchases.goldenName > 0){
+    html = html.replace('<b>' + G.name + '</b>', '<b style="color:#ffd700">' + G.name + '</b>');
+  }
+  // Feature 6: Bounty Hunter Rank
+  const bhCount = G.bountiesCompleted || 0;
+  let bhRank = 'Novice', bhColor = '#888';
+  if(bhCount >= 100){ bhRank = 'Legendary'; bhColor = '#ffd700'; }
+  else if(bhCount >= 50){ bhRank = 'Elite'; bhColor = '#b026ff'; }
+  else if(bhCount >= 25){ bhRank = 'Veteran'; bhColor = '#44f'; }
+  else if(bhCount >= 10){ bhRank = 'Hunter'; bhColor = '#0f0'; }
+  const bhBonus = Math.floor((bhCount >= 100 ? 5 : bhCount >= 50 ? 4 : bhCount >= 25 ? 3 : bhCount >= 10 ? 2 : 1) - 1) * 2;
+  html += 'Bounty Rank: <span style="color:'+bhColor+'">' + bhRank + '</span> (' + bhCount + ' kills, +' + bhBonus + '% bounty gold)<br>';
   // Skill Total Level (#13)
   const totalSkillLevel = G.skillLevels.reduce((sum, lv) => sum + lv, 0);
   html += 'Total Skill Level: <span style="color:#b026ff">' + totalSkillLevel + '</span>/1485<br>';
@@ -6342,6 +6522,137 @@ function renderProfile(c){
   }
   html += '</div>';
 
+  // Feature 5: War Chest Interest Display
+  html += '<h3>War Chest</h3>';
+  html += '<div class="card">';
+  const wcP = G.warChest || {amount:0,depositTime:0};
+  if(wcP.amount > 0){
+    const wcHours = (Date.now() - wcP.depositTime) / 3600000;
+    const wcInterest = Math.floor(wcP.amount * 0.02 * wcHours);
+    html += 'Balance: <span style="color:#ffd700">' + wcP.amount + 'g</span> | Interest: <span style="color:#0f0">+' + wcInterest + 'g</span> | Total: ' + (wcP.amount + wcInterest) + 'g<br>';
+    html += '<button class="btn btn-green" onclick="withdrawWarChest();showTab(\'profile\')">Withdraw All</button>';
+  } else {
+    html += 'No gold deposited. <span class="text-dim">Deposit from missions page.</span>';
+  }
+  html += '</div>';
+
+  // Feature 12: Battle Statistics
+  html += '<h3>Battle Statistics</h3>';
+  html += '<div class="card">';
+  const cs = G.combatStats || {};
+  html += 'Total Damage Dealt: <span style="color:#f44">' + (cs.totalDmgDealt||0) + '</span><br>';
+  html += 'Average Damage/Hit: ' + (cs.totalHits > 0 ? Math.floor((cs.totalDmgDealt||0)/(cs.totalHits||1)) : 0) + '<br>';
+  html += 'Total Crits: <span style="color:#ffd700">' + (cs.totalCrits||0) + '</span><br>';
+  html += 'Dodge Count: ' + (cs.dodgeCount||0) + '<br>';
+  html += 'Potions Used: ' + (cs.potionsUsed||0) + '<br>';
+  html += 'Highest Combo: <span style="color:#0ff">' + (cs.highestCombo||0) + '</span>';
+  html += '</div>';
+
+  // Feature 16: Session Stats
+  html += '<h3>Session Stats</h3>';
+  html += '<div class="card">';
+  const sessionMins = Math.floor((Date.now() - (G.sessionStart||Date.now())) / 60000);
+  const ss = G.sessionStats || {gold:0,xp:0,kills:0};
+  html += 'This session: <span style="color:#0ff">' + sessionMins + 'm</span>';
+  html += ' | +<span style="color:#ffd700">' + (ss.gold||0) + 'g</span>';
+  html += ' | +<span style="color:#0ff">' + (ss.xp||0) + ' XP</span>';
+  html += ' | <span style="color:#f44">' + (ss.kills||0) + ' kills</span>';
+  html += '</div>';
+
+  // Feature 17: Prestige Planner
+  if(G.level < 100){
+    html += '<h3>Prestige Planner</h3>';
+    html += '<div class="card">';
+    let xpToPrestige = 0;
+    for(let lv = G.level; lv < 100; lv++) xpToPrestige += xpForLevel(lv);
+    xpToPrestige -= G.xp;
+    const xpPerMin = ss.xp > 0 && sessionMins > 0 ? Math.floor(ss.xp / sessionMins) : 0;
+    html += 'XP to prestige (Lv.100): <span style="color:#ffd700">' + xpToPrestige + '</span><br>';
+    if(xpPerMin > 0){
+      const estMins = Math.floor(xpToPrestige / xpPerMin);
+      html += 'Est. time: <span style="color:#0ff">' + Math.floor(estMins/60) + 'h ' + (estMins%60) + 'm</span> (at ' + xpPerMin + ' XP/min)';
+    } else {
+      html += '<span class="text-dim">Play more to estimate time.</span>';
+    }
+    html += '</div>';
+  }
+
+  // Feature 8: Luxury Upgrades
+  html += '<h3>Luxury Upgrades</h3>';
+  html += '<div class="card">';
+  if(!G.luxuryPurchases) G.luxuryPurchases = {goldenName:0,extraStat:0,energyBoost:0,luckCharm:0,xpTome:0};
+  const luxItems = [
+    {id:'goldenName',name:'Golden Name',cost:500,max:1,desc:'Changes name color to gold'},
+    {id:'extraStat',name:'Extra Stat Point',cost:2000,max:5,desc:'+1 stat point'},
+    {id:'energyBoost',name:'Energy Boost',cost:1000,max:3,desc:'+20 permanent max energy'},
+    {id:'luckCharm',name:'Luck Charm',cost:1500,max:3,desc:'+5 permanent luck'},
+    {id:'xpTome',name:'XP Tome',cost:3000,max:3,desc:'+3% permanent XP'}
+  ];
+  luxItems.forEach(li => {
+    const owned = G.luxuryPurchases[li.id] || 0;
+    html += '<div>' + li.name + ' (' + owned + '/' + li.max + ') - ' + li.desc + ' ';
+    if(owned < li.max){ html += '<button class="btn btn-gold" style="padding:4px 8px;min-height:30px" onclick="buyLuxuryUpgrade(\''+li.id+'\')">Buy ('+li.cost+'g)</button>'; }
+    else { html += '<span style="color:#0f0">MAXED</span>'; }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Feature 9: Daily Gift Exchange
+  html += '<h3>Daily Gift Exchange</h3>';
+  html += '<div class="card">';
+  const lastGift = G.lastGiftExchange || 0;
+  const giftAvail = Date.now() - lastGift > 86400000;
+  if(giftAvail){
+    html += 'Trade 100g for a random gift! ';
+    html += '<button class="btn btn-gold" onclick="dailyGiftExchange();showTab(\'profile\')">Exchange (100g)</button>';
+  } else {
+    const giftTimeLeft = Math.floor((86400000 - (Date.now() - lastGift)) / 3600000);
+    html += '<span class="text-dim">Next gift in: ' + giftTimeLeft + 'h</span>';
+  }
+  html += '</div>';
+
+  // Feature 19: Compact Mode Toggle
+  html += '<h3>Settings</h3>';
+  html += '<div class="card">';
+  html += '<button class="btn' + (G.compactMode?' btn-green':'') + '" onclick="G.compactMode=!G.compactMode;save();showTab(\'profile\')">Compact Mode: ' + (G.compactMode?'ON':'OFF') + '</button>';
+  html += ' <span class="text-sm text-dim">Hides descriptions on skills/buildings</span>';
+  html += '</div>';
+
+  // Feature 7: Material Quality Display
+  html += '<h3>Material Quality</h3>';
+  html += '<div class="card text-sm">';
+  const fR = G.fineResources || {ore:0,scrap:0,data:0,bio:0};
+  const pR = G.pristineResources || {ore:0,scrap:0,data:0,bio:0};
+  ['ore','scrap','data','bio'].forEach(r => {
+    html += r + ': <span style="color:#0f0">Fine:' + (fR[r]||0) + '</span> <span style="color:#ffd700">Pristine:' + (pR[r]||0) + '</span> ';
+  });
+  html += '<br><span class="text-dim">Fine=2x recipe value, Pristine=5x recipe value</span>';
+  html += '</div>';
+
+  // Feature 15: Achievement Progress Tracker
+  html += '<h3>Achievement Progress</h3>';
+  html += '<div class="card text-sm">';
+  const progressAchs = [
+    {id:'kill_100',name:'Complete 100 missions',cur:G.missions_completed,target:100},
+    {id:'kill_250',name:'Complete 250 missions',cur:G.missions_completed,target:250},
+    {id:'kill_500',name:'Complete 500 missions',cur:G.missions_completed,target:500},
+    {id:'kill_1000',name:'Complete 1000 missions',cur:G.missions_completed,target:1000},
+    {id:'boss_10',name:'Kill 10 bosses',cur:G.bosses_killed,target:10},
+    {id:'boss_50',name:'Kill 50 bosses',cur:G.bosses_killed,target:50},
+    {id:'boss_100',name:'Kill 100 bosses',cur:G.bosses_killed,target:100},
+    {id:'gold_10k',name:'Earn 10k gold',cur:G.total_gold_earned,target:10000},
+    {id:'gold_50k',name:'Earn 50k gold',cur:G.total_gold_earned,target:50000},
+    {id:'kills_1000',name:'1000 total kills',cur:G.total_kills,target:1000},
+    {id:'kills_5000',name:'5000 total kills',cur:G.total_kills,target:5000}
+  ];
+  progressAchs.forEach(pa => {
+    if(G.achievements.includes(pa.id)) return; // already earned
+    const pct = Math.min(100, Math.floor((pa.cur / pa.target) * 100));
+    html += pa.name + ': <span style="color:#0ff">' + Math.min(pa.cur, pa.target) + '/' + pa.target + '</span>';
+    html += '<div class="pbar pbar-gold"><div class="pbar-fill" style="width:'+pct+'%"></div><span class="pbar-text">'+pct+'%</span></div>';
+  });
+  html += '</div>';
+
   // Prestige
   if(G.level >= 100){
     html += '<div class="card mt">';
@@ -6408,6 +6719,8 @@ function renderMore(c){
   html += '<button class="btn btn-red" onclick="showTab(\'sieges\')">City Sieges</button> ';
   html += '<button class="btn" style="color:#f80;border-color:#f80" onclick="showTab(\'resourcecraft\')">Resource Crafting</button> ';
   html += '<button class="btn btn-cyan" onclick="showTab(\'contracts\')">Bounty Contracts</button> ';
+  html += '<button class="btn btn-green" onclick="showTab(\'stockmarket\')">Stock Market</button> ';
+  html += '<button class="btn btn-gold" onclick="showTab(\'prestigeshop\')">Prestige Shop</button> ';
   // New feature links
   if((G.artifactFragments||0) > 0 || (G.artifacts||[]).length > 0){
     html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="showTab(\'profile\')">Artifacts ('+((G.artifacts||[]).length)+')</button> ';
@@ -6527,6 +6840,16 @@ function renderExpeditions(c){
 function renderRecipes(c){
   let html = '<h2>Crafting Recipes</h2>';
   html += '<div class="text-sm text-dim mb">Multi-skill recipes for powerful gear.</div>';
+  // Feature 2: Crafting Queue display
+  if(G.craftQueue && G.craftQueue.length > 0){
+    html += '<div class="card" style="border-color:#0ff"><b>Craft Queue (' + G.craftQueue.length + ')</b>: ';
+    G.craftQueue.forEach((idx, qi) => {
+      html += '<span class="text-sm">' + (RECIPES[idx]?.name||'?') + '</span>';
+      if(qi < G.craftQueue.length-1) html += ', ';
+    });
+    html += ' <button class="btn btn-red" style="padding:2px 6px;min-height:24px" onclick="G.craftQueue=[];save();showTab(\'recipes\')">Clear Queue</button>';
+    html += '</div>';
+  }
   RECIPES.forEach((r, i) => {
     const canCraft = Object.keys(r.reqs).every(sk => G.skillLevels[parseInt(sk)] >= r.reqs[sk]);
     html += '<div class="card" style="border-color:' + (canCraft?'#ffd700':'#333') + '">';
@@ -6535,6 +6858,8 @@ function renderRecipes(c){
     html += '<span class="text-sm">Cost: ' + r.cost + 'g</span> ';
     if(canCraft){ html += '<button class="btn btn-gold" onclick="craftRecipe('+i+');showTab(\'recipes\')">Craft!</button>'; }
     else { html += '<span class="text-dim">Skills too low</span>'; }
+    // Feature 2: Queue button
+    if(canCraft){ html += ' <button class="btn btn-cyan" style="padding:4px 8px;min-height:30px" onclick="queueCraft('+i+');showTab(\'recipes\')">+ Queue</button>'; }
     html += '</div>';
   });
   // Blueprint recipes (#24)
@@ -6749,6 +7074,18 @@ function renderHallOfFame(c){
   html += 'Artifact Fragments: ' + (G.artifactFragments||0) + '/10 | Artifacts: ' + (G.artifacts||[]).length + '<br>';
   html += 'Blueprints: ' + (G.blueprints||[]).length + '<br>';
   html += 'Mastered Skills: ' + Object.keys(G.masteryBadges||{}).length + '/15<br>';
+  // Feature 12: Battle Statistics in Hall of Fame
+  const hcs = G.combatStats || {};
+  html += '<br><b style="color:#0ff">--- Battle Statistics ---</b><br>';
+  html += 'Total Damage Dealt: ' + (hcs.totalDmgDealt||0) + '<br>';
+  html += 'Avg Damage/Hit: ' + (hcs.totalHits > 0 ? Math.floor((hcs.totalDmgDealt||0)/(hcs.totalHits||1)) : 0) + '<br>';
+  html += 'Total Crits: ' + (hcs.totalCrits||0) + '<br>';
+  html += 'Dodge Count: ' + (hcs.dodgeCount||0) + '<br>';
+  html += 'Potions Used: ' + (hcs.potionsUsed||0) + '<br>';
+  html += 'Highest Combo: ' + (hcs.highestCombo||0) + '<br>';
+  html += 'Bounties Completed: ' + (G.bountiesCompleted||0) + '<br>';
+  html += 'Memory Match Wins: ' + (G.memoryMatchWins||0) + '<br>';
+  html += 'Challenge Dungeons: ' + Object.keys(G.challengeDungeonClears||{}).length + '/3<br>';
   html += '</div>';
   html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
   c.innerHTML = html;
@@ -6791,6 +7128,30 @@ function renderDashboard(c){
   const idleCount = G.followers.filter(f=>f.assigned==='idle').length;
   html += 'Combat: ' + combatCount + ' | Garrison: ' + garrisonCount + ' | Idle: ' + idleCount + '<br>';
   html += '</div>';
+  // Feature 14: Resource Production Forecast
+  html += '<div class="card">';
+  html += '<b>Resource Forecast (per hour)</b><br>';
+  // Skills that generate resources: Mining(4)->ore, Scavenging(5)->scrap, Hacking(12)->data, Harvesting(6)->bio
+  const resRates = {ore: G.skillLevels[4] * 2, scrap: G.skillLevels[5] * 2, data: G.skillLevels[12] * 1.5, bio: G.skillLevels[6] * 2};
+  // Follower contributions
+  G.followers.forEach(f => {
+    if(f.assigned === 'foundry') resRates.ore += f.level * 0.5;
+    if(f.assigned === 'workshop') resRates.scrap += f.level * 0.5;
+  });
+  html += 'Ore: ~<span style="color:#f80">' + Math.floor(resRates.ore) + '</span>/hr | ';
+  html += 'Scrap: ~<span style="color:#888">' + Math.floor(resRates.scrap) + '</span>/hr | ';
+  html += 'Data: ~<span style="color:#0ff">' + Math.floor(resRates.data) + '</span>/hr | ';
+  html += 'Bio: ~<span style="color:#0f0">' + Math.floor(resRates.bio) + '</span>/hr';
+  html += '</div>';
+
+  // Feature 16: Session Stats on Dashboard
+  html += '<div class="card">';
+  html += '<b>Session Stats</b><br>';
+  const dashSessionMins = Math.floor((Date.now() - (G.sessionStart||Date.now())) / 60000);
+  const dashSS = G.sessionStats || {gold:0,xp:0,kills:0};
+  html += 'Duration: ' + dashSessionMins + 'm | +' + (dashSS.gold||0) + 'g | +' + (dashSS.xp||0) + ' XP | ' + (dashSS.kills||0) + ' kills';
+  html += '</div>';
+
   // Active event
   if(G.activeEvent && Date.now() < G.eventEndTime){
     const timeLeft = Math.floor((G.eventEndTime - Date.now()) / 60000);
@@ -6856,6 +7217,12 @@ function renderGambling(c){
   const cardCost = 100 + G.level * 5;
   html += '<div class="text-sm text-dim">Draw against the dealer. Higher card wins. Bigger gap = bigger payout.</div>';
   html += '<button class="btn btn-cyan" onclick="gambleHighCard();showTab(\'gambling\')">Play ('+cardCost+'g)</button>';
+  html += '</div>';
+  // Feature 24: Memory Match Mini-Game
+  html += '<div class="card"><h3>Memory Match</h3>';
+  const mmCost = 75 + G.level * 2;
+  html += '<div class="text-sm text-dim">Match 4 pairs of numbers. Win = gold + gems! (Wins: '+(G.memoryMatchWins||0)+')</div>';
+  html += '<button class="btn btn-purple" onclick="startMemoryMatch('+mmCost+')">Play ('+mmCost+'g)</button>';
   html += '</div>';
   html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
   c.innerHTML = html;
@@ -7066,6 +7433,85 @@ function gameLoop(){
     if(gpm > 0){
       G.gold += gpm;
     }
+    // Feature 1: Stock Market price fluctuation (every minute)
+    if(G.stockPrices){
+      const stocks = ['VoidCorp','NeonTech','IronWorks','BioGen','CryptoVoid'];
+      stocks.forEach(s => {
+        const change = 1 + (Math.random() * 0.10 - 0.05); // +-5%
+        G.stockPrices[s] = Math.max(1, Math.floor((G.stockPrices[s]||100) * change));
+      });
+    }
+    // Feature 2: Crafting Queue - process 1 craft every 30 seconds (check every 2nd tick)
+    // (handled below at 30s intervals)
+  }
+
+  // Feature 2: Crafting Queue processing (every 30 seconds)
+  if(energyTimer % 30 === 0 && G.craftQueue && G.craftQueue.length > 0){
+    const nextIdx = G.craftQueue.shift();
+    if(nextIdx !== undefined && RECIPES[nextIdx]){
+      const r = RECIPES[nextIdx];
+      const canCraft = Object.keys(r.reqs).every(sk => G.skillLevels[parseInt(sk)] >= r.reqs[sk]) && G.gold >= r.cost;
+      if(canCraft){
+        G.gold -= r.cost;
+        const mult = RARITY_MULT[r.rarity];
+        const basePower = Math.floor((3 + G.level * 1.5) * mult);
+        const gear = {
+          id: Date.now()+Math.random(), name: r.name, slot: r.slot, rarity: r.rarity,
+          power: r.slot==='weapon' ? basePower : Math.floor(basePower*0.3),
+          defense: (r.slot==='armor'||r.slot==='shield') ? basePower : Math.floor(basePower*0.2),
+          level: Math.max(1, Math.floor(G.level * mult * 0.5)),
+          reqSkill:-1, reqLevel:0
+        };
+        G.inventory.push(gear);
+        toast('Queue crafted: ' + r.name + '!', '#ffd700');
+      } else {
+        toast('Queue craft failed (missing reqs): ' + r.name, '#f44');
+      }
+    }
+  }
+
+  // Feature 3: Gem Mine passive income (every 5 min = 300 seconds)
+  if(energyTimer % 300 === 0){
+    const gemMineLv = getAllBuildingLevel('gemmine');
+    if(gemMineLv > 0){
+      const gemsEarned = Math.floor(gemMineLv / 3);
+      if(gemsEarned > 0){
+        G.gems += gemsEarned;
+        toast('Gem Mine produced ' + gemsEarned + ' gem(s)!', '#b026ff');
+      }
+    }
+    // Feature 4: Follower Salary - deduct 1 gold per excess follower over 10
+    if(G.followers.length > 10){
+      const excess = G.followers.length - 10;
+      const salaryCost = excess;
+      if(G.gold >= salaryCost){
+        G.gold -= salaryCost;
+        toast('Follower salaries: -' + salaryCost + 'g (' + excess + ' excess followers)', '#f80');
+      } else {
+        toast('Cannot pay follower salaries! (' + excess + ' excess followers)', '#f44');
+      }
+    }
+  }
+
+  // Feature 23: World Events (3% chance every 10 min)
+  if(energyTimer % 600 === 0 && Math.random() < 0.03){
+    const events = [
+      {id:'gold_rush',name:'Gold Rush',desc:'+50% gold from all sources for 30 min',duration:1800000},
+      {id:'void_storm',name:'Void Storm',desc:'Enemies +20% stronger but +30% XP for 30 min',duration:1800000},
+      {id:'peaceful_day',name:'Peaceful Day',desc:'No raids for 1hr, +happiness to all followers',duration:3600000}
+    ];
+    const ev = events[Math.floor(Math.random()*events.length)];
+    G.worldEvent = ev;
+    G.worldEventEnd = Date.now() + ev.duration;
+    if(ev.id === 'peaceful_day'){
+      G.followers.forEach(f => { f.happiness = Math.min(100, f.happiness + 10); });
+    }
+    toast('WORLD EVENT: ' + ev.name + ' - ' + ev.desc, '#ff2060');
+  }
+  // Clear expired world events
+  if(G.worldEvent && Date.now() > (G.worldEventEnd||0)){
+    G.worldEvent = null;
+    G.worldEventEnd = 0;
   }
 
   // Auto-battle (every 10 seconds)
