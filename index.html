@@ -395,6 +395,14 @@ function newGame(name, cls){
     nightmareClears: 0,
     // Black market
     marketStock: [],
+    // Weather system
+    weather: 'clear',
+    weatherChangeTime: 0,
+    // Secret achievement tracking
+    secretAchievements: [],
+    legendaryPullCount: 0,
+    combatBonusGold: 0,
+    mysteryBoxes: 0,
     marketRefreshTime: 0
   };
 }
@@ -432,6 +440,79 @@ function toast(msg, color){
   d.textContent = msg;
   c.appendChild(d);
   setTimeout(()=> d.remove(), 2500);
+}
+
+// ==================== WEATHER SYSTEM ====================
+const WEATHER_TYPES = [
+  { id:'clear', name:'Clear Skies', desc:'No effect', color:'#aaa' },
+  { id:'storm', name:'Ion Storm', desc:'-10% speed', color:'#4af' },
+  { id:'void_surge', name:'Void Surge', desc:'+10% corruption dmg', color:'#b026ff' },
+  { id:'lucky_stars', name:'Lucky Stars', desc:'+5 luck', color:'#ffd700' },
+  { id:'harsh_winds', name:'Harsh Winds', desc:'+5% dodge', color:'#8f8' }
+];
+
+function updateWeather(){
+  if(!G) return;
+  if(Date.now() > (G.weatherChangeTime || 0)){
+    const types = WEATHER_TYPES.map(w => w.id);
+    let newW = types[Math.floor(Math.random() * types.length)];
+    if(newW !== G.weather){
+      G.weather = newW;
+      const wInfo = WEATHER_TYPES.find(w => w.id === newW);
+      toast('Weather changed: ' + wInfo.name + ' (' + wInfo.desc + ')', wInfo.color);
+    }
+    G.weatherChangeTime = Date.now() + 600000; // 10 minutes
+  }
+}
+
+function getWeatherInfo(){
+  return WEATHER_TYPES.find(w => w.id === (G.weather || 'clear')) || WEATHER_TYPES[0];
+}
+
+// ==================== FOLLOWER DISPLAY NAME ====================
+function getFollowerDisplayName(f){
+  if(!f) return '???';
+  let prefix = '';
+  if(f.level >= 50) prefix = 'Legendary ';
+  else if(f.level >= 25){
+    const titles = ['Veteran','Scarred','Honored','Hardened','Exalted','Seasoned','Proven'];
+    // Deterministic title based on follower id
+    const idx = Math.abs(Math.floor(f.id * 7)) % titles.length;
+    prefix = titles[idx] + ' ';
+  }
+  return prefix + f.name;
+}
+
+// ==================== MYSTERY BOX ====================
+function awardMysteryBox(){
+  const roll = Math.random();
+  let reward = '';
+  if(roll < 0.35){
+    const gold = 100 + Math.floor(Math.random() * 901);
+    G.gold += gold; G.total_gold_earned += gold;
+    reward = '+' + gold + ' gold';
+  } else if(roll < 0.55){
+    const gems = 1 + Math.floor(Math.random() * 5);
+    G.gems += gems;
+    reward = '+' + gems + ' gems';
+  } else if(roll < 0.72){
+    G.tickets1x = (G.tickets1x||0) + 1;
+    reward = '+1 Summon Ticket';
+  } else if(roll < 0.87){
+    const keyTypes = ['basic','advanced','nightmare'];
+    const kt = keyTypes[Math.floor(Math.random()*keyTypes.length)];
+    G.dungeonKeys[kt] = (G.dungeonKeys[kt]||0) + 1;
+    reward = '+1 ' + kt + ' dungeon key';
+  } else {
+    // Random resource bundle
+    const res = ['ore','scrap','data','bio'];
+    const r = res[Math.floor(Math.random()*res.length)];
+    const amt = 5 + Math.floor(Math.random()*16);
+    G.resources[r] = (G.resources[r]||0) + amt;
+    reward = '+' + amt + ' ' + r;
+  }
+  toast('MYSTERY BOX opened! ' + reward, '#ff2060');
+  return reward;
 }
 
 // ==================== CORE MECHANICS ====================
@@ -660,16 +741,39 @@ function generateGear(missionLevel, isBoss){
     reqLevel = Math.min(99, reqLevel);
   }
 
+  // Critical craft: 2% chance for a special prefix with stat bonus
+  let critPrefix = '';
+  let critPowerBonus = 0;
+  let critDefBonus = 0;
+  if(Math.random() < 0.02){
+    const critTypes = [
+      { prefix:'Perfected', powerMult:1.15, defMult:1.15 },
+      { prefix:'Blessed', powerMult:1.10, defMult:1.20 },
+      { prefix:'Cursed', powerMult:1.25, defMult:0.95 },
+      { prefix:'Ancient', powerMult:1.12, defMult:1.12 },
+      { prefix:'Void-Touched', powerMult:1.18, defMult:1.08 }
+    ];
+    const ct = critTypes[Math.floor(Math.random()*critTypes.length)];
+    critPrefix = ct.prefix + ' ';
+    critPowerBonus = ct.powerMult;
+    critDefBonus = ct.defMult;
+  }
+
+  let finalPower = slot === 'weapon' ? basePower : Math.floor(basePower * 0.3);
+  let finalDef = slot === 'armor' || slot === 'shield' ? basePower : Math.floor(basePower * 0.2);
+  if(critPowerBonus > 0){ finalPower = Math.floor(finalPower * critPowerBonus); finalDef = Math.floor(finalDef * critDefBonus); }
+
   return {
     id: Date.now() + Math.random(),
-    name: name,
+    name: critPrefix + name,
     slot: slot,
     rarity: rarity,
-    power: slot === 'weapon' ? basePower : Math.floor(basePower * 0.3),
-    defense: slot === 'armor' || slot === 'shield' ? basePower : Math.floor(basePower * 0.2),
+    power: finalPower,
+    defense: finalDef,
     level: Math.max(1, Math.floor(missionLevel * mult * 0.5)),
     reqSkill: reqSkill,
-    reqLevel: reqLevel
+    reqLevel: reqLevel,
+    critCraft: critPrefix !== ''
   };
 }
 
@@ -707,14 +811,64 @@ function runCombat(mission, zoneIdx){
   let turn = 0;
   let won = false;
 
+  // Weather effects
+  const weatherId = G.weather || 'clear';
+  let weatherSpeedMod = 1;
+  let weatherDodgeBonus = 0;
+  let weatherLuckBonus = 0;
+  let weatherCorruptMod = 1;
+  if(weatherId === 'storm') weatherSpeedMod = 0.9;
+  if(weatherId === 'harsh_winds') weatherDodgeBonus = 5;
+  if(weatherId === 'lucky_stars') weatherLuckBonus = 5;
+  if(weatherId === 'void_surge') weatherCorruptMod = 1.1;
+
+  // Combo counter
+  let comboCount = 0;
+  let maxCombo = 0;
+
+  // Random event tracking
+  let bonusGoldEvent = false;
+  let enemyEnrageTurns = 0;
+  let enemyConfusedTurn = false;
 
   log.push('--- ' + mission.name + ' ---');
+  const wInfo = getWeatherInfo();
+  if(weatherId !== 'clear') log.push('Weather: ' + wInfo.name + ' (' + wInfo.desc + ')');
   log.push('Your HP: ' + playerHp + ' | Enemy HP: ' + enemyHp);
 
   while(playerHp > 0 && enemyHp > 0 && turn < 50){
     turn++;
+
+    // Random mid-combat events (~10% per turn)
+    if(Math.random() < 0.10){
+      const eventRoll = Math.random();
+      if(eventRoll < 0.25){
+        // Void rift - enemy confused, skips attack
+        enemyConfusedTurn = true;
+        log.push('  >> A VOID RIFT opens! Enemy confused for this turn!');
+      } else if(eventRoll < 0.50){
+        // Health pack
+        const healAmt = Math.floor(playerMaxHp * 0.15);
+        playerHp = Math.min(playerMaxHp, playerHp + healAmt);
+        log.push('  >> You find a health pack! +' + healAmt + ' HP');
+      } else if(eventRoll < 0.75){
+        // Enemy enrage
+        enemyEnrageTurns = 2;
+        log.push('  >> Enemy ENRAGES! +30% ATK for 2 turns!');
+      } else {
+        // Lucky find - bonus gold
+        bonusGoldEvent = true;
+        log.push('  >> Lucky find! Bonus gold at the end of this fight!');
+      }
+    }
+
     // Player attacks
     let dmg = Math.max(1, playerPower - Math.floor(enemyAtk * 0.2) + Math.floor(Math.random()*5));
+    // Combo damage bonus
+    if(comboCount >= 10) dmg = Math.floor(dmg * 1.20);
+    else if(comboCount >= 5) dmg = Math.floor(dmg * 1.10);
+    // Weather: corruption damage bonus
+    if(weatherCorruptMod > 1 && G.skillLevels[2] > 0) dmg = Math.floor(dmg * weatherCorruptMod);
     // Class passives
     if(G.class === 'striker' && enemyHp < enemyMaxHp * 0.5) dmg = Math.floor(dmg * 1.15);
     if(G.class === 'berserker') dmg = Math.floor(dmg * (1 + (1 - playerHp/playerMaxHp) * 0.01 * 100)); // +1% per 1% HP missing
@@ -745,7 +899,7 @@ function runCombat(mission, zoneIdx){
     if(G.skillLevels[2] >= 25) corruptionDoT = Math.floor(dmg * 0.08); // Poison DoT
     // Crit chance (stealth)
     // Luck potion
-    let critRate = getLuck();
+    let critRate = getLuck() + weatherLuckBonus;
     if(G.activeBuff && G.activeBuff.type === 'luck') critRate = Math.floor(critRate * 1.3);
     if(G.skillLevels[3] >= 10) critRate += 3;
     if(G.skillLevels[3] >= 25) critRate += 5;
@@ -779,30 +933,44 @@ function runCombat(mission, zoneIdx){
       log.push('  DOUBLE TAP! +' + dt + ' bonus damage!');
     }
     enemyHp -= dmg;
+    comboCount++; // landed a hit
+    if(comboCount > maxCombo) maxCombo = comboCount;
+    if(comboCount >= 3) log.push('  COMBO x' + comboCount + '!' + (comboCount >= 10 ? ' (+20% dmg)' : comboCount >= 5 ? ' (+10% dmg)' : ''));
     if(enemyHp <= 0){ won = true; break; }
 
     // Enemy attacks
-    let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
-    // Class passives (defense)
-    let dodgeRate = Math.min(35, playerSpeed * 0.5);
-    if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
-    if(G.class === 'ranger') dodgeRate += 8; // Rangers naturally dodgy
-    if(G.skillLevels[3] >= 99) dodgeRate += 10;
-    if(G.class === 'tank' && playerHp > playerMaxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
-    // Paladin: Divine Shield blocks first hit
-    if(G.class === 'paladin' && turn === 1){ eDmg = 0; log.push('Turn 1: DIVINE SHIELD blocks the attack!'); }
-    if(Math.random()*100 < dodgeRate && eDmg > 0){
-      log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
+    // Check if enemy is confused this turn (void rift event)
+    if(enemyConfusedTurn){
+      log.push('Turn ' + turn + ': Enemy is CONFUSED and stumbles around!');
+      enemyConfusedTurn = false;
     } else {
-      playerHp -= eDmg;
-      log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
-    }
-    // HP potion auto-use at low HP
-    if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0){
-      G.potions.hp--;
-      const heal = Math.floor(playerMaxHp * 0.3);
-      playerHp = Math.min(playerMaxHp, playerHp + heal);
-      log.push('  Auto-used HP Potion! Healed ' + heal + ' HP');
+      let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
+      // Enemy enrage buff
+      if(enemyEnrageTurns > 0){ eDmg = Math.floor(eDmg * 1.3); enemyEnrageTurns--; }
+      // Class passives (defense)
+      let dodgeRate = Math.min(35, playerSpeed * 0.5 * weatherSpeedMod);
+      if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
+      if(G.class === 'ranger') dodgeRate += 8; // Rangers naturally dodgy
+      if(G.skillLevels[3] >= 99) dodgeRate += 10;
+      dodgeRate += weatherDodgeBonus; // Weather: harsh winds dodge bonus
+      if(G.class === 'tank' && playerHp > playerMaxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
+      // Paladin: Divine Shield blocks first hit
+      if(G.class === 'paladin' && turn === 1){ eDmg = 0; log.push('Turn 1: DIVINE SHIELD blocks the attack!'); }
+      if(Math.random()*100 < dodgeRate && eDmg > 0){
+        log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
+        // Dodge keeps combo alive
+      } else {
+        playerHp -= eDmg;
+        comboCount = 0; // took damage, reset combo
+        log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
+      }
+      // HP potion auto-use at low HP
+      if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0){
+        G.potions.hp--;
+        const heal = Math.floor(playerMaxHp * 0.3);
+        playerHp = Math.min(playerMaxHp, playerHp + heal);
+        log.push('  Auto-used HP Potion! Healed ' + heal + ' HP');
+      }
     }
   }
 
@@ -825,7 +993,7 @@ function runCombat(mission, zoneIdx){
     rewards.skillXp = mission.skillXp || {};
 
     // Loot drop chance
-    let dropChance = mission.boss ? 50 : 15 + getLuck() * 0.3;
+    let dropChance = mission.boss ? 50 : 15 + (getLuck() + weatherLuckBonus) * 0.3;
     // Scavenging skill boosts drop rate
     if(G.skillLevels[5] >= 10) dropChance += 5;
     if(G.skillLevels[5] >= 25) dropChance += 5;
@@ -847,7 +1015,7 @@ function runCombat(mission, zoneIdx){
     }
     if(rewards.gear){
       G.inventory.push(rewards.gear);
-      log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']');
+      log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']' + (rewards.gear.critCraft ? ' ★CRITICAL CRAFT★' : ''));
     }
     log.push('+' + rewards.gold + ' gold, +' + Math.floor(rewards.xp * xpMult) + ' XP');
     // Tiny ticket chance on any mission win
@@ -855,6 +1023,26 @@ function runCombat(mission, zoneIdx){
       G.tickets1x = (G.tickets1x||0) + 1;
       log.push('+1 Summon Ticket!');
     }
+    // Bonus gold from random event
+    if(bonusGoldEvent){
+      const bonus = Math.floor(rewards.gold * 0.5) + 10;
+      G.gold += bonus; G.total_gold_earned += bonus;
+      rewards.gold += bonus;
+      log.push('Lucky find bonus: +' + bonus + ' gold!');
+    }
+    // Lucky drop: 0.5% chance for Mystery Box on any kill
+    if(Math.random() < 0.005){
+      log.push('A shimmering MYSTERY BOX drops!');
+      const boxReward = awardMysteryBox();
+      log.push('Mystery Box: ' + boxReward);
+    }
+    // Max combo display & tracking
+    if(maxCombo >= 3) log.push('Max Combo: x' + maxCombo);
+    if(!G._maxComboEver || maxCombo > G._maxComboEver) G._maxComboEver = maxCombo;
+    // Weather luck bonus for loot
+    if(weatherLuckBonus > 0) log.push('Lucky Stars granted +' + weatherLuckBonus + ' luck this fight.');
+    // Track win with 1 HP for secret achievement
+    if(playerHp === 1) G._wonWith1Hp = true;
   } else {
     log.push('=== DEFEAT ===');
     log.push('You were overwhelmed...');
@@ -1318,6 +1506,8 @@ function doPull(count, useTicket){
       f = generateFollower();
     }
     if(f.rarity >= 1) hasUncommonPlus = true;
+    // Track legendary+ pulls for secret achievement
+    if(f.rarity >= 4) G.legendaryPullCount = (G.legendaryPullCount||0) + 1;
     G.followers.push(f);
     pulled.push(f);
   }
@@ -1423,9 +1613,12 @@ function trainFollower(id){
     f.level++;
     f.power += (f.rarity + 1);
     f.defense += Math.floor((f.rarity + 1) * 0.7);
-    toast(f.name + ' leveled up to ' + f.level + '!', '#b026ff');
+    // Announce title at milestone levels
+    if(f.level === 25) toast(f.name + ' earned a title: ' + getFollowerDisplayName(f) + '!', '#ffd700');
+    if(f.level === 50) toast(f.name + ' has become LEGENDARY: ' + getFollowerDisplayName(f) + '!', '#ff2060');
+    toast(getFollowerDisplayName(f) + ' leveled up to ' + f.level + '!', '#b026ff');
   } else {
-    toast(f.name + ' gained training XP.', '#0ff');
+    toast(getFollowerDisplayName(f) + ' gained training XP.', '#0ff');
   }
   save();
   showTab('followers_detail', f.id);
@@ -3418,24 +3611,39 @@ const ACHIEVEMENT_DEFS = [
   // Synergies
   {id:'synergy_1',name:'Synergy!',desc:'Activate your first building synergy',check:()=>G.cities.some((c,i)=>getBuildingSynergies(i).length>0)},
   {id:'metropolis',name:'Metropolis',desc:'All buildings Lv.10+ in one city',check:()=>G.cities.some((c,i)=>getBuildingSynergies(i).some(s=>s.bonus==='all'))},
+  // Secret achievements - hidden until unlocked
+  {id:'secret_1hp',name:'Death\'s Door',desc:'Win a fight with exactly 1 HP',check:()=>G._wonWith1Hp===true,secret:true},
+  {id:'secret_3leg',name:'Fortune\'s Favorite',desc:'Pull 3+ legendary followers',check:()=>(G.legendaryPullCount||0)>=3,secret:true},
+  {id:'secret_arena100',name:'Tower Conqueror',desc:'Reach arena floor 100',check:()=>(G.arenaFloor||1)>=100,secret:true},
+  {id:'secret_5mythic',name:'Mythic Collector',desc:'Have 5 mythic followers',check:()=>G.followers.filter(f=>f.rarity>=5).length>=5,secret:true},
+  {id:'secret_combo10',name:'Untouchable',desc:'Reach a 10+ hit combo in combat',check:()=>(G._maxComboEver||0)>=10,secret:true},
 ];
 
 function checkAchievements(){
   ACHIEVEMENT_DEFS.forEach(a => {
     if(!G.achievements.includes(a.id) && a.check()){
       G.achievements.push(a.id);
-      toast('Achievement: ' + a.name + '!', '#ffd700');
-      // Early achievements give gems, late ones give tickets
-      const earlyAchievements = ['first_kill','kill_10','level_5','level_10','gold_500','gold_1k','pull_1','followers_1','followers_5','building_1','boss_1'];
-      const midAchievements = ['kill_50','level_25','gold_5k','pull_10','boss_10','followers_10','building_5','skill_10','dungeon_1','raid_win_1','city_2'];
-      if(earlyAchievements.includes(a.id)){
-        G.gems += 5; // generous early gems
-      } else if(midAchievements.includes(a.id)){
-        G.gems += 3;
+      // Secret achievements get special treatment
+      if(a.secret){
+        toast('SECRET Achievement: ' + a.name + '!', '#ff2060');
+        G.gems += 10;
+        G.tickets1x = (G.tickets1x||0) + 2;
+        if(!G.secretAchievements) G.secretAchievements = [];
+        G.secretAchievements.push(a.id);
       } else {
-        G.gems += 1;
-        // Late achievements give tickets
-        G.tickets1x = (G.tickets1x||0) + 1;
+        toast('Achievement: ' + a.name + '!', '#ffd700');
+        // Early achievements give gems, late ones give tickets
+        const earlyAchievements = ['first_kill','kill_10','level_5','level_10','gold_500','gold_1k','pull_1','followers_1','followers_5','building_1','boss_1'];
+        const midAchievements = ['kill_50','level_25','gold_5k','pull_10','boss_10','followers_10','building_5','skill_10','dungeon_1','raid_win_1','city_2'];
+        if(earlyAchievements.includes(a.id)){
+          G.gems += 5; // generous early gems
+        } else if(midAchievements.includes(a.id)){
+          G.gems += 3;
+        } else {
+          G.gems += 1;
+          // Late achievements give tickets
+          G.tickets1x = (G.tickets1x||0) + 1;
+        }
       }
     }
   });
@@ -3559,6 +3767,8 @@ function renderMissions(c){
   const cls = CLASSES[G.class];
   html += '<br>Class: <span style="color:'+cls.passiveColor+'">' + cls.passive + '</span> - ' + cls.passiveDesc;
   if(G.activeBuff) html += '<br>Active buff: <span style="color:#ffd700">' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns)</span>';
+  const curWeather = getWeatherInfo();
+  html += '<br>Weather: <span style="color:' + curWeather.color + '">' + curWeather.name + '</span> - ' + curWeather.desc;
   html += '</div>';
 
   // Quick potion bar
@@ -3981,7 +4191,7 @@ function renderTown(c){
   garrisoned.forEach(f => {
     const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
     html += '<div class="follower-card">';
-    html += '<span class="' + RARITIES[f.rarity] + '">' + f.name + '</span> Lv.' + f.level;
+    html += '<span class="' + RARITIES[f.rarity] + '">' + getFollowerDisplayName(f) + '</span> Lv.' + f.level;
     html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
     html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
     html += '</div>';
@@ -4015,7 +4225,7 @@ function renderTown(c){
     assigned.forEach(f => {
       const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
       html += '<div class="follower-card">';
-      html += '<span class="' + RARITIES[f.rarity] + '">' + f.name + '</span> Lv.' + f.level;
+      html += '<span class="' + RARITIES[f.rarity] + '">' + getFollowerDisplayName(f) + '</span> Lv.' + f.level;
       html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
       html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
       html += '</div>';
@@ -4100,6 +4310,7 @@ function bulkTrain(cityIdx){
   G.gold -= totalCost;
   let leveled = 0;
   followers.forEach(f => {
+    const oldLevel = f.level;
     f.xp += 30 + f.level * 5;
     const needed = f.level * 50;
     if(f.xp >= needed && f.level < 50){
@@ -4108,6 +4319,9 @@ function bulkTrain(cityIdx){
       f.power += (f.rarity + 1);
       f.defense += Math.floor((f.rarity + 1) * 0.7);
       leveled++;
+      // Title announcements on milestone levels
+      if(oldLevel < 25 && f.level >= 25) toast(f.name + ' earned a title: ' + getFollowerDisplayName(f) + '!', '#ffd700');
+      if(oldLevel < 50 && f.level >= 50) toast(f.name + ' has become LEGENDARY: ' + getFollowerDisplayName(f) + '!', '#ff2060');
     }
   });
   toast('Trained ' + followers.length + ' followers! ' + leveled + ' leveled up!', '#b026ff');
@@ -4125,7 +4339,7 @@ function renderFollowerDetail(c, fId){
   const trainCost = 20 + f.level * 15;
 
   const classInfo = FOLLOWER_CLASS_BONUSES[f.class] || {};
-  let html = '<h2>' + f.name + '</h2>';
+  let html = '<h2>' + getFollowerDisplayName(f) + '</h2>';
   html += '<div class="card">';
   html += '<span class="' + RARITIES[f.rarity] + '">[' + RARITY_NAMES[f.rarity] + ']</span> ' + f.class + '<br>';
   html += '<span style="color:#ffd700">' + '★'.repeat(f.stars||1) + '☆'.repeat(5-(f.stars||1)) + '</span> Stars<br>';
@@ -4365,14 +4579,21 @@ function renderProfile(c){
   html += '</div>';
 
   // Achievements
+  const visibleAchievements = ACHIEVEMENT_DEFS.filter(a => !a.secret || G.achievements.includes(a.id));
+  const secretCount = ACHIEVEMENT_DEFS.filter(a => a.secret).length;
+  const secretUnlocked = ACHIEVEMENT_DEFS.filter(a => a.secret && G.achievements.includes(a.id)).length;
   html += '<h3>Achievements (' + G.achievements.length + '/' + ACHIEVEMENT_DEFS.length + ')</h3>';
   html += '<div class="card">';
-  ACHIEVEMENT_DEFS.forEach(a => {
+  visibleAchievements.forEach(a => {
     const done = G.achievements.includes(a.id);
-    html += '<div style="color:' + (done ? '#ffd700' : '#444') + '">';
-    html += (done ? '* ' : '  ') + a.name + ' - ' + a.desc;
+    const color = done ? (a.secret ? '#ff2060' : '#ffd700') : '#444';
+    html += '<div style="color:' + color + '">';
+    html += (done ? '* ' : '  ') + (a.secret && done ? '[SECRET] ' : '') + a.name + ' - ' + a.desc;
     html += '</div>';
   });
+  if(secretUnlocked < secretCount){
+    html += '<div style="color:#444">  ...and ' + (secretCount - secretUnlocked) + ' hidden achievement(s) to discover</div>';
+  }
   html += '</div>';
 
   // Prestige
@@ -4907,8 +5128,32 @@ function gameLoop(){
           f.happiness = Math.max(0, f.happiness - 1);
         }
       }
+      // Morale events: rebellion when happiness is very low
+      if(f.happiness < 30 && Math.random() < 0.05){
+        toast(getFollowerDisplayName(f) + ' has REBELLED and left your service!', '#f44');
+        G.followers = G.followers.filter(x => x.id !== f.id);
+        // Remove from council if applicable
+        G.clanCouncil = G.clanCouncil.filter(id => id !== f.id);
+      }
+      // Happy followers sometimes find gifts
+      if(f.happiness > 90 && Math.random() < 0.03){
+        if(Math.random() < 0.5){
+          const giftGold = 10 + Math.floor(f.level * (f.rarity+1) * 2);
+          G.gold += giftGold; G.total_gold_earned += giftGold;
+          toast(getFollowerDisplayName(f) + ' found a gift: +' + giftGold + ' gold!', '#ffd700');
+        } else {
+          const res = ['ore','scrap','data','bio'];
+          const r = res[Math.floor(Math.random()*res.length)];
+          const amt = 1 + Math.floor(f.rarity * 2);
+          G.resources[r] = (G.resources[r]||0) + amt;
+          toast(getFollowerDisplayName(f) + ' found a gift: +' + amt + ' ' + r + '!', '#0f0');
+        }
+      }
     });
   }
+
+  // Update weather
+  updateWeather();
 
   // Check events every 5 min
   if(energyTimer % 300 === 0) checkEvent();
@@ -4990,6 +5235,11 @@ function migrateOldSave(){
       f.ability = abilities[Math.min(f.rarity, abilities.length-1)];
     }
   });
+  // Migrate new features
+  if(!G.weather) G.weather = 'clear';
+  if(!G.weatherChangeTime) G.weatherChangeTime = 0;
+  if(!G.secretAchievements) G.secretAchievements = [];
+  if(!G.legendaryPullCount) G.legendaryPullCount = 0;
   // Update defense for all cities
   G.cities.forEach((c, i) => updateCityDefense(i));
 }
