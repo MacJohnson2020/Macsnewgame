@@ -94,19 +94,53 @@ select:focus { border-color:#0ff; outline:none; }
 ::-webkit-scrollbar-thumb:hover { background:#3a3a5a; }
 /* Safe area */
 @supports(padding: max(0px)) { #nav { padding-bottom:max(4px, env(safe-area-inset-bottom)); } }
+/* HUD stat boxes */
+.hud-stat { background:#0c0c20; border:1px solid #1e1e3a; border-radius:6px; padding:4px 8px; text-align:center; min-width:60px; }
+/* Loading/Splash */
+#splash { position:fixed; top:0; left:0; width:100%; height:100%; background:#0a0a1a; z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; animation:fadeIn 0.5s; }
+#splash .title { font-size:28px; font-weight:900; color:#0ff; text-shadow:0 0 20px rgba(0,255,255,0.3); letter-spacing:3px; margin-bottom:8px; }
+#splash .subtitle { font-size:13px; color:#556; margin-bottom:30px; letter-spacing:2px; }
+#splash .loading-bar { width:200px; height:4px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
+#splash .loading-fill { height:100%; background:linear-gradient(90deg,#066,#0ff); width:0%; animation:loadFill 1.5s ease-out forwards; }
+@keyframes loadFill { to { width:100% } }
+/* Character creation */
+.class-card { background:linear-gradient(135deg,#111128,#0e0e20); border:2px solid #1e1e3a; border-radius:10px; padding:14px; margin:8px 0; cursor:pointer; transition:all 0.2s; }
+.class-card:active, .class-card.selected { border-color:#0ff; background:linear-gradient(135deg,#151530,#101025); }
+.class-card .class-name { font-size:16px; font-weight:700; margin-bottom:4px; }
+.class-card .class-desc { font-size:11px; color:#889; }
+.class-card .class-passive { font-size:11px; margin-top:4px; }
+.class-card .class-stats { font-size:10px; color:#556; margin-top:6px; font-family:'Courier New',monospace; }
+/* Element select */
+.element-btn { padding:8px 16px; margin:3px; border-radius:20px; border:2px solid #333; background:none; color:#ccc; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+.element-btn.selected { border-color:#0ff; color:#0ff; background:rgba(0,255,255,0.08); }
+.element-btn:active { transform:scale(0.95); }
+/* Divider */
+.divider { border:none; border-top:1px solid #1a1a3a; margin:12px 0; }
+/* Badge */
+.badge { display:inline-block; background:#f44; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:8px; min-width:16px; text-align:center; vertical-align:top; margin-left:2px; }
+/* Rarity card borders */
+.rarity-border-epic { border-color:#b026ff !important; }
+.rarity-border-legendary { border-color:#ffd700 !important; box-shadow:0 0 8px rgba(255,215,0,0.1); }
+.rarity-border-mythic { border-color:#ff2060 !important; box-shadow:0 0 12px rgba(255,32,96,0.15); animation:mythicPulse 2s infinite; }
+@keyframes mythicPulse { 0%,100%{box-shadow:0 0 8px rgba(255,32,96,0.1)} 50%{box-shadow:0 0 16px rgba(255,32,96,0.25)} }
+/* Hint text */
+.hint { background:rgba(0,255,255,0.05); border-left:3px solid #0ff; padding:8px 12px; margin:8px 0; border-radius:0 6px 6px 0; font-size:12px; color:#8aa; }
+/* Stat row */
+.stat-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #111; }
+.stat-row:last-child { border-bottom:none; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="top-bar">
     <div class="row">
-      <div><span class="stat-label">LVL </span><span class="stat-val" id="hud-level">1</span></div>
-      <div><span class="stat-label">EN </span><span class="energy-val" id="hud-energy">100/100</span></div>
-      <div><span class="stat-label">GOLD </span><span class="gold-val" id="hud-gold">0</span></div>
-      <div><span class="stat-label">GEMS </span><span class="stat-val" style="color:#b026ff" id="hud-gems">10</span></div>
+      <div class="hud-stat"><span class="stat-label">LVL</span><br><span class="stat-val" id="hud-level">1</span></div>
+      <div class="hud-stat"><span class="stat-label">EN</span><br><span class="energy-val" id="hud-energy">100</span></div>
+      <div class="hud-stat"><span class="stat-label">GOLD</span><br><span class="gold-val" id="hud-gold">0</span></div>
+      <div class="hud-stat"><span class="stat-label">GEMS</span><br><span class="stat-val" style="color:#b026ff" id="hud-gems">10</span></div>
     </div>
-    <div class="pbar pbar-cyan"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" id="hud-xp-text">0 / 100 XP</span></div>
-    <div id="hud-title" class="text-sm" style="color:#ffd700;text-align:center"></div>
+    <div class="pbar pbar-cyan" style="margin-top:6px"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" id="hud-xp-text">0 / 100 XP</span></div>
+    <div id="hud-title" style="color:#ffd700;text-align:center;font-size:10px;margin-top:2px;letter-spacing:1px"></div>
   </div>
   <div id="content"></div>
   <div id="nav">
@@ -119,6 +153,7 @@ select:focus { border-color:#0ff; outline:none; }
   </div>
 </div>
 <div id="toast-container"></div>
+<div id="splash"><div class="title">VOID RAIDERS</div><div class="subtitle">LOADING</div><div class="loading-bar"><div class="loading-fill"></div></div></div>
 <script>
 // ==================== GAME DATA ====================
 const CLASSES = {
@@ -5264,8 +5299,26 @@ function showTab(tab, extra){
   updateHUD();
 }
 
+function getHint(){
+  if(!G) return '';
+  if(G.level === 1 && G.missions_completed === 0) return 'Start by running missions in Rust Flats to earn gold and XP!';
+  if(G.level < 5 && G.followers.length === 0) return 'Visit the Summon tab to pull your first followers!';
+  if(G.level >= 5 && !G.cities[0].buildings.generator) return 'Build a Generator in your Town to regen energy faster.';
+  if(G.level >= 10 && G.skillLevels[0] < 5) return 'Train your combat skills in the Skills tab for more power.';
+  if(G.level >= 15 && G.followers.length > 0 && G.followers.every(f=>f.assigned==='idle')) return 'Assign followers to buildings in Town for bonuses!';
+  if(G.level >= 20 && !G.faction) return 'Join a Faction in the More tab for combat and gold bonuses.';
+  if(G.level >= 30 && G.dungeons_cleared === 0) return 'Try a Dungeon! Craft keys in the dungeon section.';
+  if(G.level >= 50 && G.cities.length < 2) return 'You can found a second city in the Town tab!';
+  if(G.level >= 70 && (G.riftsCompleted||0) === 0) return 'Watch for Void Rifts on the Missions page - great rewards!';
+  if(G.level >= 90) return 'Push for level 100 to unlock Prestige and Ascension!';
+  return '';
+}
+
 function renderMissions(c){
   let html = '<h2>Missions</h2>';
+  // Contextual hint
+  const hint = getHint();
+  if(hint) html += '<div class="hint">' + hint + '</div>';
 
   // Combat preview stats
   html += '<div class="card text-sm">';
@@ -7383,27 +7436,46 @@ function renderContracts(c){
 // ==================== CHARACTER CREATION ====================
 function showCharacterCreation(){
   const c = document.getElementById('content');
-  let html = '<div style="text-align:center;padding:20px">';
-  html += '<h2 style="font-size:22px;color:#0ff">VOID RAIDERS</h2>';
-  html += '<div class="text-dim mb">A wasteland awaits...</div>';
-  html += '<div class="card">';
-  html += '<div class="mb"><label>Name:</label><br><input type="text" id="char-name" placeholder="Enter your name" maxlength="20"></div>';
-  html += '<div class="mb"><label>Class:</label><br>';
-  html += '<select id="char-class">';
+  let html = '<div style="text-align:center;padding:20px 10px">';
+  html += '<div style="font-size:32px;font-weight:900;color:#0ff;text-shadow:0 0 30px rgba(0,255,255,0.3);letter-spacing:4px;margin:20px 0 4px">VOID RAIDERS</div>';
+  html += '<div style="color:#445;font-size:12px;letter-spacing:3px;margin-bottom:30px">THE WASTELAND AWAITS</div>';
+
+  // Name
+  html += '<div class="card" style="text-align:left">';
+  html += '<div class="stat-label mb" style="margin-bottom:6px">RAIDER NAME</div>';
+  html += '<input type="text" id="char-name" placeholder="Enter your name..." maxlength="20" style="font-size:16px">';
+  html += '</div>';
+
+  // Class selection
+  html += '<div style="text-align:left;margin-top:16px"><div class="stat-label mb" style="margin-bottom:8px">CHOOSE YOUR CLASS</div></div>';
+  let first = true;
   for(const k in CLASSES){
     const cl = CLASSES[k];
-    html += '<option value="' + k + '">' + cl.name + ' - ' + cl.desc + '</option>';
+    html += '<div class="class-card' + (first?' selected':'') + '" onclick="document.querySelectorAll(\'.class-card\').forEach(c=>c.classList.remove(\'selected\'));this.classList.add(\'selected\');document.getElementById(\'char-class-val\').value=\'' + k + '\'">';
+    html += '<div class="class-name" style="color:' + cl.passiveColor + '">' + cl.name + '</div>';
+    html += '<div class="class-desc">' + cl.desc + '</div>';
+    html += '<div class="class-passive" style="color:' + cl.passiveColor + '">' + cl.passive + ': ' + cl.passiveDesc + '</div>';
+    html += '<div class="class-stats">PWR:' + cl.power + ' DEF:' + cl.defense + ' SPD:' + cl.speed + ' LCK:' + cl.luck + '</div>';
+    html += '</div>';
+    first = false;
   }
-  html += '</select></div>';
-  html += '<div class="mb"><label>Element:</label><br>';
-  html += '<select id="char-element">';
-  html += '<option value="physical">Physical - Raw force</option>';
-  html += '<option value="fire">Fire - Burning damage</option>';
-  html += '<option value="ice">Ice - Freezing strikes</option>';
-  html += '<option value="void">Void - Dark energy</option>';
-  html += '</select></div>';
-  html += '<button class="btn btn-cyan" onclick="startGame()" style="width:100%;font-size:16px;padding:14px">BEGIN</button>';
-  html += '</div></div>';
+  html += '<input type="hidden" id="char-class-val" value="striker">';
+
+  // Element
+  html += '<div style="text-align:left;margin-top:16px"><div class="stat-label mb" style="margin-bottom:8px">CHOOSE YOUR ELEMENT</div></div>';
+  html += '<div style="text-align:center">';
+  html += '<button class="element-btn selected" onclick="document.querySelectorAll(\'.element-btn\').forEach(b=>b.classList.remove(\'selected\'));this.classList.add(\'selected\');document.getElementById(\'char-element-val\').value=\'physical\'" style="color:#ccc">Physical</button>';
+  html += '<button class="element-btn" onclick="document.querySelectorAll(\'.element-btn\').forEach(b=>b.classList.remove(\'selected\'));this.classList.add(\'selected\');document.getElementById(\'char-element-val\').value=\'fire\'" style="color:#f80">Fire</button>';
+  html += '<button class="element-btn" onclick="document.querySelectorAll(\'.element-btn\').forEach(b=>b.classList.remove(\'selected\'));this.classList.add(\'selected\');document.getElementById(\'char-element-val\').value=\'ice\'" style="color:#4af">Ice</button>';
+  html += '<button class="element-btn" onclick="document.querySelectorAll(\'.element-btn\').forEach(b=>b.classList.remove(\'selected\'));this.classList.add(\'selected\');document.getElementById(\'char-element-val\').value=\'void\'" style="color:#b026ff">Void</button>';
+  html += '<input type="hidden" id="char-element-val" value="physical">';
+  html += '</div>';
+
+  // Begin button
+  html += '<div style="margin-top:24px">';
+  html += '<button class="btn btn-cyan" onclick="startGame()" style="width:100%;font-size:18px;padding:16px;border-radius:10px;font-weight:700;letter-spacing:1px">ENTER THE VOID</button>';
+  html += '</div>';
+  html += '</div>';
   c.innerHTML = html;
   document.getElementById('top-bar').style.display = 'none';
   document.getElementById('nav').style.display = 'none';
@@ -7411,8 +7483,8 @@ function showCharacterCreation(){
 
 function startGame(){
   const name = document.getElementById('char-name').value.trim() || 'Raider';
-  const cls = document.getElementById('char-class').value;
-  const elem = document.getElementById('char-element') ? document.getElementById('char-element').value : 'physical';
+  const cls = (document.getElementById('char-class-val') || document.getElementById('char-class'))?.value || 'striker';
+  const elem = (document.getElementById('char-element-val') || document.getElementById('char-element'))?.value || 'physical';
   G = newGame(name, cls);
   G.element = elem;
   // Apply class starting stats
@@ -8142,6 +8214,8 @@ function init(){
   } else {
     showCharacterCreation();
   }
+  // Remove splash
+  setTimeout(()=>{ const sp = document.getElementById('splash'); if(sp) { sp.style.opacity='0'; sp.style.transition='opacity 0.5s'; setTimeout(()=>sp.remove(), 500); } }, 1500);
   // Game loop runs every second
   setInterval(gameLoop, 1000);
 }
