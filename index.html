@@ -1135,11 +1135,11 @@ function doPull(count){
   for(let i = 0; i < count; i++){
     // Pity: every 10th pull guarantees rare+
     let f;
-    if(G.total_gacha_pulls % 200 === 0){
-      f = generateFollower(5); // mythic pity at 200
-    } else if(G.total_gacha_pulls % 50 === 0){
-      f = generateFollower(4); // legendary pity at 50
-    } else if(G.total_gacha_pulls % 10 === 0){
+    if(G.total_gacha_pulls % 2000 === 0){
+      f = generateFollower(5); // mythic pity at 2000
+    } else if(G.total_gacha_pulls % 500 === 0){
+      f = generateFollower(4); // legendary pity at 500
+    } else if(G.total_gacha_pulls % 100 === 0){
       f = generateFollower(Math.max(2, Math.floor(Math.random()*3)+2));
     } else {
       f = generateFollower();
@@ -3203,11 +3203,11 @@ function renderGacha(c){
   html += '<div class="card text-center">';
   html += '<div style="font-size:20px;color:#b026ff;margin:10px">Summon Followers</div>';
   html += '<div class="text-sm text-dim">Rates: Common 56% | Uncommon 30% | Rare 10% | Epic 4% | <span class="legendary">Legendary 0.1%</span> | <span class="mythic">Mythic 0.01%</span></div>';
-  html += '<div class="text-sm text-dim">Pity: Rare+ every 10 | Legendary every 50 | <span class="mythic">Mythic every 200</span></div>';
+  html += '<div class="text-sm text-dim">Pity: Rare+ every 100 | Legendary every 500 | <span class="mythic">Mythic every 2000</span></div>';
   html += '<div class="text-sm mt">Total pulls: ' + G.total_gacha_pulls + '</div>';
-  html += '<div class="text-sm">Next pity (Rare+): in ' + (10 - (G.total_gacha_pulls % 10)) + ' pulls</div>';
-  html += '<div class="text-sm">Next pity (Legendary): in ' + (50 - (G.total_gacha_pulls % 50)) + ' pulls</div>';
-  html += '<div class="text-sm mythic">Next pity (MYTHIC): in ' + (200 - (G.total_gacha_pulls % 200)) + ' pulls</div>';
+  html += '<div class="text-sm">Next pity (Rare+): in ' + (100 - (G.total_gacha_pulls % 100)) + ' pulls</div>';
+  html += '<div class="text-sm">Next pity (Legendary): in ' + (500 - (G.total_gacha_pulls % 500)) + ' pulls</div>';
+  html += '<div class="text-sm mythic">Next pity (MYTHIC): in ' + (2000 - (G.total_gacha_pulls % 2000)) + ' pulls</div>';
   html += '<div class="mt">';
   html += '<button class="btn btn-purple" onclick="doPull(1)">Single Pull (3 Gems)</button> ';
   html += '<button class="btn btn-gold" onclick="doPull(10)">10x Pull (25 Gems)</button>';
