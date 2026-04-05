@@ -297,7 +297,8 @@ function newGame(name, cls){
     worldBossKills: 0,
     // Auto-battle
     autoBattle: null, // {zoneIdx, missionIdx, followerIds:[]}
-    autoBattleEarnings: { gold:0, xp:0, kills:0 }
+    autoBattleEarnings: { gold:0, xp:0, kills:0 },
+    roamingEnemies: []
   };
 }
 
@@ -1388,63 +1389,320 @@ function moveFollowerToCity(fId, cityIdx){
 }
 
 // ==================== RAID EVENTS ====================
+// ==================== ENEMY FACTIONS & RAID ARMIES ====================
+const ENEMY_FACTIONS = [
+  {name:'Rust Bandits',units:['Scavenger','Raider','Brute','Warleader'],color:'#a63'},
+  {name:'Neon Syndicate',units:['Thug','Enforcer','Hacker','Syndicate Boss'],color:'#f0f'},
+  {name:'Void Cult',units:['Acolyte','Corrupted','Priest','Void Herald'],color:'#b026ff'},
+  {name:'Iron Legion',units:['Trooper','Gunner','Mech Walker','Commander'],color:'#888'},
+  {name:'Abyssal Horde',units:['Crawler','Stalker','Behemoth','Abyssal Lord'],color:'#f44'}
+];
+
+function generateRaidArmy(level){
+  const faction = ENEMY_FACTIONS[Math.floor(Math.random() * ENEMY_FACTIONS.length)];
+  const waveCount = 2 + Math.floor(level / 20);
+  const waves = [];
+  for(let w = 0; w < Math.min(waveCount, 5); w++){
+    const isBoss = w === waveCount - 1;
+    const unitIdx = isBoss ? 3 : Math.min(w, 2);
+    const count = isBoss ? 1 : 2 + Math.floor(Math.random() * 3);
+    const unitHp = Math.floor((30 + level * 4) * (isBoss ? 3 : 1) * (1 + w * 0.3));
+    const unitAtk = Math.floor((5 + level * 1.5) * (isBoss ? 2 : 1) * (1 + w * 0.2));
+    waves.push({
+      unitName: faction.units[unitIdx],
+      count: count,
+      hp: unitHp,
+      atk: unitAtk,
+      isBoss: isBoss
+    });
+  }
+  return { faction, waves };
+}
+
 function triggerRaid(cityIdx){
   const city = G.cities[cityIdx];
   const defense = getCityDefense(cityIdx);
-  // Raid strength scales with level and time
-  const raidPower = Math.floor(20 + G.level * 3 + Math.random() * G.level * 2);
+  const army = generateRaidArmy(G.level);
   let log = [];
-  log.push('=== RAID on ' + city.name + '! ===');
-  log.push('City Defense: ' + defense + ' | Raider Strength: ' + raidPower);
 
-  let won = defense >= raidPower;
+  log.push('=== RAID on ' + city.name + '! ===');
+  log.push('Attackers: ' + army.faction.name);
+  log.push('City Defense: ' + defense);
+  log.push('');
+
+  let cityHp = defense * 3 + 50; // City "HP" based on defense
+  const cityMaxHp = cityHp;
+  let wavesRepelled = 0;
+  let totalEnemiesKilled = 0;
+
+  // Garrison and barracks soldiers fight
+  const defenders = G.followers.filter(f =>
+    f.cityIdx === cityIdx && (f.assigned === 'garrison' || f.assigned === 'barracks') && f.happiness > 20
+  );
+  let defenderPower = defense;
+  defenders.forEach(f => { defenderPower += Math.floor(f.level * f.power * (f.rarity + 1) * 0.3); });
+
+  for(let w = 0; w < army.waves.length; w++){
+    const wave = army.waves[w];
+    log.push('--- Wave ' + (w+1) + ': ' + wave.count + 'x ' + wave.unitName + (wave.isBoss ? ' [BOSS]' : '') + ' ---');
+
+    let waveHp = wave.hp * wave.count;
+    const waveAtk = wave.atk * Math.ceil(wave.count * 0.7);
+    log.push('Enemy HP: ' + waveHp + ' | ATK: ' + waveAtk);
+
+    let turn = 0;
+    while(cityHp > 0 && waveHp > 0 && turn < 20){
+      turn++;
+      // Defenders attack
+      let dDmg = Math.floor(defenderPower * (0.7 + Math.random() * 0.6));
+      waveHp -= dDmg;
+      log.push('T' + turn + ': Defenders deal ' + dDmg + ' damage');
+
+      if(waveHp <= 0){
+        log.push('Wave ' + (w+1) + ' repelled!');
+        break;
+      }
+
+      // Enemies attack city
+      let eDmg = Math.floor(waveAtk * (0.6 + Math.random() * 0.5));
+      // Vault guards reduce damage
+      const vaultGuards = G.followers.filter(f => f.cityIdx === cityIdx && f.assigned === 'vault' && f.happiness > 20);
+      if(vaultGuards.length > 0) eDmg = Math.floor(eDmg * 0.85);
+      cityHp -= eDmg;
+      log.push('T' + turn + ': Enemies deal ' + eDmg + ' to city (HP: ' + Math.max(0, cityHp) + '/' + cityMaxHp + ')');
+    }
+
+    if(waveHp <= 0){
+      wavesRepelled++;
+      totalEnemiesKilled += wave.count;
+      G.total_kills += wave.count;
+    }
+    if(cityHp <= 0) break;
+  }
+
+  const won = cityHp > 0;
+  log.push('');
+
   if(won){
-    log.push('Your defenses held! Raiders repelled!');
+    log.push('=== CITY DEFENDED! ===');
     city.raidWins++;
     G.total_raids_won++;
-    // Bonus loot for defending
-    const goldReward = Math.floor(30 + G.level * 5 + defense * 0.5);
+    const goldReward = Math.floor(40 + G.level * 6 + totalEnemiesKilled * 5);
     G.gold += goldReward;
     G.total_gold_earned += goldReward;
-    log.push('+' + goldReward + ' gold from raider spoils!');
-    if(Math.random() < 0.15){
+    log.push('+' + goldReward + ' gold from spoils (' + totalEnemiesKilled + ' enemies slain)');
+    // Defenders gain XP
+    defenders.forEach(f => {
+      f.xp += 10 + totalEnemiesKilled * 2;
+      const needed = f.level * 50;
+      if(f.xp >= needed && f.level < 50){
+        f.xp -= needed; f.level++; f.power += (f.rarity+1); f.defense += Math.floor((f.rarity+1)*0.7);
+        log.push(f.name + ' leveled up to ' + f.level + '!');
+      }
+    });
+    if(Math.random() < 0.2){
       G.gems += 1;
       log.push('+1 gem found in the wreckage!');
     }
+    // Gear drop from boss wave
+    if(wavesRepelled === army.waves.length && Math.random() < 0.3){
+      const gear = generateGear(G.level, true);
+      G.inventory.push(gear);
+      log.push('LOOT: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + '] from the ' + army.faction.name + '!');
+    }
   } else {
-    log.push('Defenses breached! Raiders pillaged your city!');
+    log.push('=== CITY BREACHED! ===');
     city.raidLosses++;
-    // Lose some gold
-    const goldLost = Math.floor(Math.min(G.gold * 0.1, 50 + G.level * 3));
+    log.push(wavesRepelled + '/' + army.waves.length + ' waves repelled before falling.');
+    const goldLost = Math.floor(Math.min(G.gold * 0.1, 60 + G.level * 4));
     G.gold = Math.max(0, G.gold - goldLost);
-    log.push('-' + goldLost + ' gold stolen!');
-    // Building damage chance
+    log.push('-' + goldLost + ' gold plundered!');
+    // Building damage
     const bKeys = Object.keys(city.buildings).filter(k => city.buildings[k] > 0);
-    if(bKeys.length > 0 && Math.random() < 0.3){
+    if(bKeys.length > 0 && Math.random() < 0.35){
       const dmgKey = bKeys[Math.floor(Math.random() * bKeys.length)];
       city.buildings[dmgKey] = Math.max(0, city.buildings[dmgKey] - 1);
       const bName = BUILDINGS.find(b => b.id === dmgKey)?.name || dmgKey;
       log.push(bName + ' damaged! (-1 level)');
     }
+    // Follower injuries
+    defenders.forEach(f => {
+      if(Math.random() < 0.3){
+        f.happiness = Math.max(0, f.happiness - 15);
+        log.push(f.name + ' was wounded! (-15 happiness)');
+      }
+    });
   }
+
   city.lastRaid = Date.now();
   checkAchievements();
   save();
-  return { won, log };
+  return { won, log, faction: army.faction };
 }
 
 function showRaidResult(result){
-  let html = '<h2>Raid ' + (result.won ? 'Defended!' : 'Breached!') + '</h2>';
-  html += '<div class="log">';
+  let html = '<h2 style="color:' + result.faction.color + '">Raid: ' + result.faction.name + '</h2>';
+  html += '<h3>' + (result.won ? 'City Defended!' : 'City Breached!') + '</h3>';
+  html += '<div class="log" style="max-height:300px">';
   result.log.forEach(line => {
     let cls = '';
-    if(line.includes('held') || line.includes('+')) cls = 'heal';
-    else if(line.includes('breached') || line.includes('-') || line.includes('damaged')) cls = 'dmg-player';
+    if(line.includes('Defenders deal')) cls = 'dmg-enemy';
+    else if(line.includes('Enemies deal') || line.includes('wounded')) cls = 'dmg-player';
+    else if(line.includes('DEFENDED') || line.includes('repelled') || line.includes('+') || line.includes('LOOT')) cls = 'heal';
+    else if(line.includes('BREACHED') || line.includes('plundered') || line.includes('damaged')) cls = 'dmg-player';
+    else if(line.includes('leveled up')) cls = 'epic';
     html += '<div class="log-line ' + cls + '">' + line + '</div>';
   });
   html += '</div>';
   html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'town\')">Continue</button></div>';
   document.getElementById('content').innerHTML = html;
+}
+
+// ==================== ROAMING ENEMIES ====================
+const ROAMER_TYPES = [
+  {name:'Lost Scavenger',hpMult:0.5,atkMult:0.4,goldMult:0.8,minLv:1},
+  {name:'Rogue Drifter',hpMult:0.7,atkMult:0.6,goldMult:1,minLv:3},
+  {name:'Void Stalker',hpMult:1,atkMult:0.8,goldMult:1.2,minLv:10},
+  {name:'Corrupted Scout',hpMult:1.2,atkMult:1,goldMult:1.5,minLv:20},
+  {name:'Iron Marauder',hpMult:1.5,atkMult:1.3,goldMult:2,minLv:35},
+  {name:'Abyssal Wraith',hpMult:2,atkMult:1.5,goldMult:2.5,minLv:50},
+  {name:'Nexus Phantom',hpMult:2.5,atkMult:2,goldMult:3,minLv:70},
+  {name:'Void Reaver',hpMult:3,atkMult:2.5,goldMult:4,minLv:85}
+];
+
+function spawnRoamingEnemies(){
+  if(!G.roamingEnemies) G.roamingEnemies = [];
+  // Remove expired
+  G.roamingEnemies = G.roamingEnemies.filter(e => Date.now() - e.spawnTime < 300000); // 5 min lifespan
+  // Spawn new ones up to max
+  const maxRoamers = 3 + Math.floor(G.level / 15);
+  while(G.roamingEnemies.length < maxRoamers){
+    // Pick a type based on level
+    const available = ROAMER_TYPES.filter(r => G.level >= r.minLv);
+    const type = available[Math.floor(Math.random() * available.length)];
+    const hp = Math.floor((40 + G.level * 5) * type.hpMult);
+    const atk = Math.floor((5 + G.level * 2) * type.atkMult);
+    const gold = Math.floor((15 + G.level * 3) * type.goldMult);
+    const xp = Math.floor((10 + G.level * 2) * type.goldMult);
+    // Pick a random zone they're roaming near
+    const unlockedZones = ZONES.filter(z => G.level >= z.minLv);
+    const zone = unlockedZones[Math.floor(Math.random() * unlockedZones.length)];
+    G.roamingEnemies.push({
+      id: Date.now() + Math.random(),
+      name: type.name,
+      hp: hp, maxHp: hp,
+      atk: atk,
+      gold: gold, xp: xp,
+      zone: zone.name,
+      spawnTime: Date.now(),
+      // Some roamers target cities
+      targetCity: Math.random() < 0.3 ? Math.floor(Math.random() * G.cities.length) : -1
+    });
+  }
+}
+
+function fightRoamer(roamerId){
+  const idx = G.roamingEnemies.findIndex(e => e.id === roamerId);
+  if(idx === -1){ toast('Enemy fled!','#f44'); showTab('missions'); return; }
+  const enemy = G.roamingEnemies[idx];
+
+  if(G.energy < 5){ toast('Need 5 energy','#f44'); return; }
+  G.energy -= 5;
+
+  const power = getCombatPower();
+  const def = getCombatDefense();
+  const maxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  let playerHp = maxHp;
+  let enemyHp = enemy.hp;
+  let log = [];
+
+  log.push('--- Roaming: ' + enemy.name + ' ---');
+  log.push('Your HP: ' + playerHp + ' | Enemy HP: ' + enemyHp);
+
+  let turn = 0;
+  while(playerHp > 0 && enemyHp > 0 && turn < 30){
+    turn++;
+    let dmg = Math.max(1, power - Math.floor(enemy.atk * 0.15) + Math.floor(Math.random()*5));
+    if(G.class === 'striker' && enemyHp < enemy.maxHp * 0.5) dmg = Math.floor(dmg * 1.15);
+    if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg * 2); log.push('T'+turn+': CRIT '+dmg+'!'); }
+    else { log.push('T'+turn+': Hit '+dmg); }
+    enemyHp -= dmg;
+    if(enemyHp <= 0) break;
+
+    let eDmg = Math.max(1, enemy.atk - Math.floor(def * 0.3) + Math.floor(Math.random()*3));
+    if(G.class === 'tank' && playerHp > maxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
+    let dodgeRate = Math.min(30, getCombatSpeed() * 0.5);
+    if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
+    if(Math.random()*100 < dodgeRate){
+      log.push('T'+turn+': DODGE!');
+    } else {
+      playerHp -= eDmg;
+      log.push('T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')');
+    }
+    if(playerHp <= 0 && G.potions.hp > 0){
+      G.potions.hp--;
+      playerHp = Math.floor(maxHp * 0.3);
+      log.push('  Used HP Potion! HP: ' + playerHp);
+    }
+  }
+
+  if(enemyHp <= 0){
+    log.push('=== ' + enemy.name + ' SLAIN! ===');
+    G.total_kills++;
+    G.missions_completed++;
+    G.gold += enemy.gold;
+    G.total_gold_earned += enemy.gold;
+    addXp(enemy.xp);
+    log.push('+' + enemy.gold + 'g +' + enemy.xp + 'xp');
+    // Loot chance
+    if(Math.random() < 0.2){
+      const gear = generateGear(G.level, false);
+      G.inventory.push(gear);
+      log.push('LOOT: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']');
+    }
+    // Remove roamer
+    G.roamingEnemies.splice(idx, 1);
+    updateBountyProgress('kill', 1);
+  } else {
+    log.push('=== DEFEATED ===');
+    log.push('The ' + enemy.name + ' escapes...');
+    // Enemy keeps remaining HP
+    enemy.hp = enemyHp;
+  }
+
+  checkAchievements();
+  save();
+  // Show result
+  let html = '<h2>' + (enemyHp <= 0 ? 'Victory!' : 'Defeat') + '</h2>';
+  html += '<div class="log">';
+  log.forEach(line => {
+    let cls = '';
+    if(line.includes('CRIT') || line.includes('Hit ')) cls = 'dmg-enemy';
+    else if(line.includes('Took ')) cls = 'dmg-player';
+    else if(line.includes('DODGE') || line.includes('SLAIN') || line.includes('LOOT')) cls = 'heal';
+    html += '<div class="log-line ' + cls + '">' + line + '</div>';
+  });
+  html += '</div>';
+  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// Roaming enemies that target cities deal passive damage
+function processRoamerCityAttacks(){
+  if(!G.roamingEnemies) return;
+  G.roamingEnemies.forEach(e => {
+    if(e.targetCity >= 0 && e.targetCity < G.cities.length){
+      const city = G.cities[e.targetCity];
+      const defense = getCityDefense(e.targetCity);
+      // Enemy chips at city if defense is low
+      if(e.atk > defense * 0.5){
+        const dmg = Math.floor(e.atk * 0.1);
+        // Steal small gold
+        const stolen = Math.min(G.gold, Math.floor(3 + G.level * 0.5));
+        G.gold = Math.max(0, G.gold - stolen);
+      }
+    }
+  });
 }
 
 // ==================== DAILY LOGIN ====================
@@ -1948,6 +2206,28 @@ function renderMissions(c){
     html += 'Zone: ' + G.autoBattle.zoneName + ' | Mission: ' + G.autoBattle.missionName + '<br>';
     html += 'Earned: ' + G.autoBattleEarnings.gold + 'g | ' + G.autoBattleEarnings.kills + ' kills | ' + (G.autoBattleEarnings.items||0) + ' items<br>';
     html += '<button class="btn btn-red" onclick="stopAutoBattle()">Stop Auto-Battle</button>';
+    html += '</div>';
+  }
+
+  // Roaming Enemies
+  spawnRoamingEnemies();
+  if(G.roamingEnemies && G.roamingEnemies.length > 0){
+    html += '<div class="card" style="border-color:#f80">';
+    html += '<h3 style="color:#f80">Roaming Enemies (' + G.roamingEnemies.length + ')</h3>';
+    html += '<div class="text-sm text-dim">Enemies wandering the wasteland. Some target your cities! (5 EN to fight)</div>';
+    G.roamingEnemies.forEach(e => {
+      const hpPct = Math.floor((e.hp / e.maxHp) * 100);
+      const targeting = e.targetCity >= 0 ? ' <span style="color:#f44">[Attacking ' + G.cities[e.targetCity].name + '!]</span>' : '';
+      const timeLeft = Math.floor((300000 - (Date.now() - e.spawnTime)) / 1000);
+      html += '<div class="card" style="border-color:#f80">';
+      html += '<b style="color:#f80">' + e.name + '</b>' + targeting + '<br>';
+      html += '<div class="pbar" style="border-color:#f80"><div class="pbar-fill" style="width:'+hpPct+'%;background:#f80"></div>';
+      html += '<span class="pbar-text">HP: ' + e.hp + '/' + e.maxHp + '</span></div>';
+      html += '<span class="text-sm">ATK:' + e.atk + ' | Near: ' + e.zone + ' | Flees in: ' + timeLeft + 's</span><br>';
+      html += '<span class="text-sm">Reward: ' + e.gold + 'g +' + e.xp + 'xp</span> ';
+      html += '<button class="btn btn-red" onclick="fightRoamer(' + e.id + ')">Fight!</button>';
+      html += '</div>';
+    });
     html += '</div>';
   }
 
@@ -2734,10 +3014,16 @@ function gameLoop(){
     });
   }
 
-  // Raid events (random, ~every 10 min per city)
+  // Spawn roaming enemies every 30 seconds
+  if(energyTimer % 30 === 0) spawnRoamingEnemies();
+
+  // Roaming enemies attack cities every 60 seconds
+  if(energyTimer % 60 === 0) processRoamerCityAttacks();
+
+  // Raid events (random, ~every 8 min per city)
   G.cities.forEach((city, ci) => {
     const timeSinceRaid = Date.now() - (city.lastRaid || 0);
-    if(timeSinceRaid > 600000 && Math.random() < 0.005){ // ~every 10 min, 0.5% per tick
+    if(timeSinceRaid > 480000 && Math.random() < 0.008){
       const result = triggerRaid(ci);
       showRaidResult(result);
     }
@@ -2766,6 +3052,10 @@ function migrateOldSave(){
   }
   if(G.total_raids_won === undefined) G.total_raids_won = 0;
   if(G.dungeons_cleared === undefined) G.dungeons_cleared = 0;
+  if(!G.roamingEnemies) G.roamingEnemies = [];
+  if(!G.potions) G.potions = { hp:0, power:0, defense:0, luck:0, xp:0 };
+  if(G.worldBossKills === undefined) G.worldBossKills = 0;
+  if(G.loginStreak === undefined) G.loginStreak = 0;
   // Assign followers to city 0 if they don't have a city, migrate old roles
   G.followers.forEach(f => {
     if(f.cityIdx === undefined) f.cityIdx = 0;
