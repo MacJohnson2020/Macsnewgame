@@ -375,7 +375,25 @@ function newGame(name, cls){
     mapPosition: 0,
     // Ascension
     ascension: 0,
-    worldTier: 1
+    worldTier: 1,
+    // Dungeon keys
+    dungeonKeys: { basic:0, advanced:0, nightmare:0 },
+    // Hall of fame
+    records: { highestHit:0, fastestDungeon:999, longestStreak:0, totalDmgDealt:0 },
+    // Challenges
+    challenges: [],
+    challengeMonth: '',
+    challengesClaimed: 0,
+    // Relics
+    relics: [],
+    equippedRelics: [],
+    // Bestiary
+    bestiary: {},
+    // Nightmare clears
+    nightmareClears: 0,
+    // Black market
+    marketStock: [],
+    marketRefreshTime: 0
   };
 }
 
@@ -421,6 +439,7 @@ function getMaxEnergy(){
   base += vaultLv * 5;
   if(hasSynergy('energy')) base += 10;
   base += getResearchBonus('maxEnergy');
+  base += getRelicBonus('maxEnergy');
   return base;
 }
 
@@ -467,7 +486,10 @@ function getCombatPower(){
   p += cls.power * G.level;
   // Set bonus, research, clan, world tier
   p = Math.floor(p * getSetPowerMult());
-  p = Math.floor(p * (1 + getResearchBonus('combatPower') + getClanBonus('power')));
+  p = Math.floor(p * (1 + getResearchBonus('combatPower') + getClanBonus('power') + getRelicBonus('power')));
+  // Follower gear power for combat followers
+  const activeFollowerGear = G.followers.filter(f => f.assigned === 'combat').reduce((s,f) => s + (f._gearPower||0), 0);
+  p += activeFollowerGear;
   // Combat skill bonuses
   p += Math.floor(G.skillLevels[0] * 1.5); // Melee: raw power
   p += Math.floor(G.skillLevels[1] * 1.0); // Ranged: steady power
@@ -512,6 +534,8 @@ function getLuck(){
   l += Math.floor(G.skillLevels[5] * 0.5);
   // Stealth boosts crit/luck
   l += Math.floor(G.skillLevels[3] * 0.5);
+  l += getRelicBonus('luck') + getClanBonus('luck');
+  l += getRelicBonus('speed'); // speed relic adds to luck calc too
   return Math.floor(l);
 }
 
@@ -564,6 +588,7 @@ function addXp(amount){
     G.level++;
     G.statPoints += 3;
     toast('LEVEL UP! You are now level ' + G.level, '#0ff');
+    updateChallengeProgress('levels', 1);
     // Level milestone gems (front-loaded)
     if(G.level <= 10) G.gems += 3; // 3 gems per level early
     else if(G.level <= 25) G.gems += 2;
@@ -777,6 +802,8 @@ function runCombat(mission, zoneIdx){
     log.push('=== VICTORY! ===');
     G.total_kills++;
     G.missions_completed++;
+    updateChallengeProgress('kills', 1);
+    recordBestiaryKill(mission.name, mission.gold, mission.xp);
     if(mission.boss){
       G.bosses_killed++; updateBountyProgress('boss', 1);
       if(Math.random() < 0.04){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
@@ -868,11 +895,19 @@ const DUNGEONS = [
   {name:'VOID HEART GAUNTLET',minLv:95,waves:10,energy:180,baseHp:4000,baseAtk:200,goldMult:15,xpMult:15,desc:'10 waves, mythic chance'}
 ];
 
-function runDungeon(dungeonIdx){
+function runDungeon(dungeonIdx, nightmare){
   const dg = DUNGEONS[dungeonIdx];
   if(G.level < dg.minLv){ toast('Need level ' + dg.minLv,'#f44'); return; }
-  if(G.energy < dg.energy){ toast('Need ' + dg.energy + ' energy','#f44'); return; }
-  G.energy -= dg.energy;
+  if(nightmare && !isNightmareUnlocked(dungeonIdx)){ toast('Clear normal first!','#f44'); return; }
+  // Key check
+  const keyType = getKeyTypeForDungeon(dungeonIdx);
+  if(!G.dungeonKeys) G.dungeonKeys = {};
+  if((G.dungeonKeys[keyType]||0) <= 0){ toast('Need a '+KEY_TYPES[keyType].name+'!','#f44'); return; }
+  const energyCost = nightmare ? Math.floor(dg.energy * 1.5) : dg.energy;
+  if(G.energy < energyCost){ toast('Need ' + energyCost + ' energy','#f44'); return; }
+  G.dungeonKeys[keyType]--;
+  G.energy -= energyCost;
+  const nmMult = nightmare ? NIGHTMARE_MULT : {hp:1,atk:1,goldMult:1,xpMult:1};
 
   const playerPower = getCombatPower();
   const playerDef = getCombatDefense();
@@ -892,8 +927,9 @@ function runDungeon(dungeonIdx){
   for(let wave = 1; wave <= dg.waves; wave++){
     const isFinalWave = wave === dg.waves;
     const waveScale = 1 + (wave - 1) * 0.3;
-    let enemyHp = Math.floor(dg.baseHp * waveScale * (isFinalWave ? 2.5 : 1));
-    let enemyAtk = Math.floor(dg.baseAtk * waveScale * (isFinalWave ? 1.8 : 1));
+    let enemyHp = Math.floor(dg.baseHp * waveScale * (isFinalWave ? 2.5 : 1) * nmMult.hp);
+    let enemyAtk = Math.floor(dg.baseAtk * waveScale * (isFinalWave ? 1.8 : 1) * nmMult.atk);
+    const enemyName = (nightmare?'NM ':'') + dg.name + ' W' + wave;
     const huntingBossBonus = (isFinalWave && G.skillLevels[7] >= 99) ? 1.25 : (isFinalWave && G.skillLevels[7] >= 75) ? 1.15 : 1;
     let wavePower = Math.floor(playerPower * huntingBossBonus);
 
@@ -956,13 +992,23 @@ function runDungeon(dungeonIdx){
   }
 
   if(wavesCleared === dg.waves){
-    log.push('=== DUNGEON COMPLETE! ===');
+    log.push('=== ' + (nightmare?'NIGHTMARE ':'') + 'DUNGEON COMPLETE! ===');
     G.bosses_killed++;
     G.dungeons_cleared++;
+    if(nightmare) G.nightmareClears = (G.nightmareClears||0) + 1;
     updateBountyProgress('dungeon', wavesCleared);
-    // Bonus completion reward
-    totalGold = Math.floor(totalGold * 1.5);
-    totalXp = Math.floor(totalXp * 1.5);
+    if(nightmare) updateChallengeProgress('nightmare', 1);
+    updateChallengeProgress('dungeons', 1);
+    // Bonus completion reward (nightmare = extra)
+    const completionMult = nightmare ? 2.5 : 1.5;
+    totalGold = Math.floor(totalGold * completionMult * nmMult.goldMult);
+    totalXp = Math.floor(totalXp * completionMult * nmMult.xpMult);
+    // Relic drop chance (dungeons and nightmare)
+    const relicChance = nightmare ? 0.15 : 0.03;
+    if(Math.random() < relicChance){
+      const relic = dropRelic();
+      if(relic) log.push('RELIC FOUND: ' + relic.name + ' - ' + relic.desc + '!');
+    }
     // Gem reward for dungeon clear
     const gemReward = Math.floor(dg.waves * 0.5);
     G.gems += gemReward;
@@ -1425,6 +1471,7 @@ function trainSkill(idx){
   const xpGain = 15 + G.skillLevels[idx] * 2;
   addSkillXp(idx, xpGain);
   updateBountyProgress('train', 1);
+  updateChallengeProgress('trains', 1);
   if(idx === 12) updateBountyProgress('hack', 1);
   if(idx === 4) updateBountyProgress('mine', 1);
   if(idx === 5) updateBountyProgress('scavenge', 1);
@@ -1489,8 +1536,8 @@ function upgradeBuilding(bId){
   G.maxEnergy = getMaxEnergy();
   const b = BUILDINGS.find(x => x.id === bId);
   toast(b.name + ' in ' + city.name + ' upgraded to Lv.' + city.buildings[bId] + '!', '#0ff');
-  // Update city defense
   updateCityDefense(G.currentCity);
+  updateChallengeProgress('builds', 1);
   checkAchievements();
   save();
   showTab('town');
@@ -1686,6 +1733,7 @@ function triggerRaid(cityIdx){
     log.push('=== CITY DEFENDED! ===');
     city.raidWins++;
     G.total_raids_won++;
+    updateChallengeProgress('raids', 1);
     const goldReward = Math.floor(40 + G.level * 6 + totalEnemiesKilled * 5);
     G.gold += goldReward;
     G.total_gold_earned += goldReward;
@@ -1862,6 +1910,9 @@ function fightRoamer(roamerId){
     G.total_gold_earned += enemy.gold;
     addXp(enemy.xp);
     log.push('+' + enemy.gold + 'g +' + enemy.xp + 'xp');
+    updateChallengeProgress('kills', 1);
+    updateChallengeProgress('roamers', 1);
+    recordBestiaryKill(enemy.name, enemy.gold, enemy.xp);
     // Loot chance
     if(Math.random() < 0.2){
       const gear = generateGear(G.level, false);
@@ -2344,6 +2395,332 @@ function getWorldTierLootBonus(){
   return 1 + (tier - 1) * 0.15; // loot +15% per tier
 }
 
+// ==================== FOLLOWER EQUIPMENT ====================
+function equipToFollower(fId, invIdx){
+  const f = G.followers.find(x=>x.id===fId);
+  const item = G.inventory[invIdx];
+  if(!f||!item) return;
+  if(!f.gear) f.gear = {};
+  const slot = item.slot === 'weapon' ? 'weapon' : 'armor'; // followers use weapon or armor
+  // Unequip old
+  if(f.gear[slot]){ G.inventory.push(f.gear[slot]); }
+  f.gear[slot] = item;
+  G.inventory.splice(invIdx, 1);
+  // Recalc follower stats
+  let bonusPow = 0, bonusDef = 0;
+  if(f.gear.weapon) bonusPow += f.gear.weapon.power;
+  if(f.gear.armor) bonusDef += f.gear.armor.defense;
+  f._gearPower = bonusPow;
+  f._gearDef = bonusDef;
+  toast(f.name + ' equipped ' + item.name, '#0ff');
+  save();
+}
+
+function unequipFromFollower(fId, slot){
+  const f = G.followers.find(x=>x.id===fId);
+  if(!f || !f.gear || !f.gear[slot]) return;
+  G.inventory.push(f.gear[slot]);
+  f.gear[slot] = null;
+  f._gearPower = f.gear.weapon ? f.gear.weapon.power : 0;
+  f._gearDef = f.gear.armor ? f.gear.armor.defense : 0;
+  save();
+}
+
+function getFollowerTotalPower(f){
+  let p = f.power + (f._gearPower || 0);
+  // Class bonus
+  const classInfo = FOLLOWER_CLASS_BONUSES[f.class];
+  if(classInfo && classInfo.combatBonus) p = Math.floor(p * (1 + classInfo.combatBonus));
+  // Bond bonus
+  if(f.bonds){
+    const bondPartners = Object.values(f.bonds).filter(v => v >= 3);
+    p += bondPartners.length * 3; // +3 power per bond lv3+
+  }
+  return p;
+}
+
+// ==================== DUNGEON KEYS ====================
+const KEY_TYPES = {
+  basic: {name:'Basic Key',craftCost:100,craftSkill:8,craftLv:15,dropZones:[0,1,2,3]},
+  advanced: {name:'Advanced Key',craftCost:500,craftSkill:8,craftLv:40,dropZones:[4,5,6]},
+  nightmare: {name:'Nightmare Key',craftCost:2000,craftSkill:8,craftLv:70,dropZones:[7,8,9]}
+};
+
+function craftKey(type){
+  const k = KEY_TYPES[type];
+  if(!k) return;
+  if(G.skillLevels[k.craftSkill] < k.craftLv){ toast('Need Crafting Lv.'+k.craftLv,'#f44'); return; }
+  if(G.gold < k.craftCost){ toast('Need '+k.craftCost+' gold','#f44'); return; }
+  G.gold -= k.craftCost;
+  if(!G.dungeonKeys) G.dungeonKeys = {};
+  G.dungeonKeys[type] = (G.dungeonKeys[type]||0) + 1;
+  addSkillXp(8, 15);
+  toast('Crafted '+k.name+'! (x'+G.dungeonKeys[type]+')', '#0ff');
+  save();
+}
+
+function getKeyTypeForDungeon(dgIdx){
+  if(dgIdx <= 2) return 'basic';
+  if(dgIdx <= 5) return 'advanced';
+  return 'nightmare';
+}
+
+// ==================== HALL OF FAME ====================
+function updateRecord(key, value){
+  if(!G.records) G.records = {};
+  if(key === 'fastestDungeon'){
+    if(value < (G.records[key]||999)) G.records[key] = value;
+  } else {
+    if(value > (G.records[key]||0)) G.records[key] = value;
+  }
+}
+
+// ==================== SEASONAL CHALLENGES ====================
+const CHALLENGE_TEMPLATES = [
+  {desc:'Kill 50 enemies',type:'kills',target:50,gold:200,gems:3},
+  {desc:'Kill 100 enemies',type:'kills',target:100,gold:500,gems:5},
+  {desc:'Kill 10 bosses',type:'bosses',target:10,gold:400,t1x:1},
+  {desc:'Complete 5 dungeons',type:'dungeons',target:5,gold:600,t1x:2},
+  {desc:'Win 5 raid defenses',type:'raids',target:5,gold:500,gems:3},
+  {desc:'Earn 5000 gold',type:'gold',target:5000,gold:300,gems:2},
+  {desc:'Train skills 30 times',type:'trains',target:30,gold:200,gems:2},
+  {desc:'Level up 5 times',type:'levels',target:5,gold:400,t1x:1},
+  {desc:'Upgrade 3 buildings',type:'builds',target:3,gold:300,gems:2},
+  {desc:'Kill 3 roaming enemies',type:'roamers',target:3,gold:250,gems:2},
+  {desc:'Hit world boss 10 times',type:'wbhits',target:10,gold:500,t1x:1},
+  {desc:'Complete 3 expeditions',type:'expeditions',target:3,gold:400,gems:3},
+  {desc:'Explore 5 map tiles',type:'explore',target:5,gold:300,gems:2},
+  {desc:'Brew 5 potions',type:'brews',target:5,gold:200,gems:1},
+  {desc:'Pull 10 summons',type:'pulls',target:10,gold:300,t1x:1},
+  {desc:'Fuse 1 follower',type:'fuses',target:1,gold:500,gems:3},
+  {desc:'Clear a nightmare dungeon',type:'nightmare',target:1,gold:1000,t10x:1},
+  {desc:'Kill 500 enemies',type:'kills',target:500,gold:2000,t10x:1},
+  {desc:'Collect 5 relics',type:'relics',target:5,gold:1500,t1x:3},
+  {desc:'Max a follower to 5 stars',type:'maxstar',target:1,gold:2000,t10x:1}
+];
+
+function generateChallenges(){
+  const month = new Date().toISOString().substring(0,7);
+  if(G.challengeMonth === month && G.challenges && G.challenges.length > 0) return;
+  G.challengeMonth = month;
+  G.challengesClaimed = 0;
+  // Pick 10 random challenges
+  const shuffled = [...CHALLENGE_TEMPLATES].sort(()=>Math.random()-0.5);
+  G.challenges = shuffled.slice(0,10).map(c => ({...c, progress:0, completed:false, claimed:false}));
+  save();
+}
+
+function updateChallengeProgress(type, amount){
+  if(!G.challenges) return;
+  G.challenges.forEach(ch => {
+    if(ch.completed || ch.claimed) return;
+    if(ch.type === type){
+      ch.progress = Math.min(ch.target, ch.progress + amount);
+      if(ch.progress >= ch.target) ch.completed = true;
+    }
+  });
+}
+
+function claimChallenge(idx){
+  const ch = G.challenges[idx];
+  if(!ch || !ch.completed || ch.claimed) return;
+  ch.claimed = true;
+  G.challengesClaimed++;
+  G.gold += ch.gold || 0;
+  G.total_gold_earned += ch.gold || 0;
+  if(ch.gems) G.gems += ch.gems;
+  if(ch.t1x) G.tickets1x = (G.tickets1x||0) + ch.t1x;
+  if(ch.t10x) G.tickets10x = (G.tickets10x||0) + ch.t10x;
+  toast('Challenge complete! ' + (ch.gold?'+'+ch.gold+'g ':'') + (ch.gems?'+'+ch.gems+' gems ':'') + (ch.t1x?'+'+ch.t1x+'x ticket ':'') + (ch.t10x?'+10x ticket!':''), '#ffd700');
+  checkAchievements(); save();
+}
+
+// ==================== FOLLOWER BONDS ====================
+function updateBond(f1Id, f2Id, amount){
+  const f1 = G.followers.find(x=>x.id===f1Id);
+  const f2 = G.followers.find(x=>x.id===f2Id);
+  if(!f1||!f2) return;
+  if(!f1.bonds) f1.bonds = {};
+  if(!f2.bonds) f2.bonds = {};
+  f1.bonds[f2Id] = Math.min(10, (f1.bonds[f2Id]||0) + amount);
+  f2.bonds[f1Id] = Math.min(10, (f2.bonds[f1Id]||0) + amount);
+}
+
+const BOND_COMBOS = {
+  'Fighter+Medic': {name:'Frontline Duo',desc:'+10% power & +5% heal'},
+  'Assassin+Scout': {name:'Shadow Ops',desc:'+15% crit rate'},
+  'Guardian+Fighter': {name:'Shield Wall',desc:'+12% defense'},
+  'Hacker+Crafter': {name:'Tech Forge',desc:'+10% crafting quality'},
+  'Medic+Guardian': {name:'Last Stand',desc:'+8% HP & defense'}
+};
+
+function getBondCombo(f1, f2){
+  const key1 = f1.class + '+' + f2.class;
+  const key2 = f2.class + '+' + f1.class;
+  return BOND_COMBOS[key1] || BOND_COMBOS[key2] || null;
+}
+
+// ==================== BLACK MARKET ====================
+function refreshMarket(){
+  const stock = [];
+  // Random followers for sale
+  for(let i = 0; i < 3; i++){
+    const rarity = Math.random() < 0.05 ? 4 : Math.random() < 0.15 ? 3 : Math.random() < 0.4 ? 2 : Math.random() < 0.7 ? 1 : 0;
+    const cls = FOLLOWER_CLASSES[Math.floor(Math.random()*FOLLOWER_CLASSES.length)];
+    const name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
+    const cost = Math.floor(200 * Math.pow(3, rarity));
+    const shardCost = Math.floor(10 * (rarity+1));
+    stock.push({type:'follower',name,cls,rarity,cost,shardCost,bought:false});
+  }
+  // Random gear for sale
+  for(let i = 0; i < 2; i++){
+    const gear = generateGear(G.level, Math.random() < 0.3);
+    const cost = Math.floor(gear.level * (gear.rarity+1) * 20);
+    stock.push({type:'gear',gear,cost,bought:false});
+  }
+  // Keys
+  stock.push({type:'key',keyType:'basic',cost:80,bought:false});
+  if(G.level >= 30) stock.push({type:'key',keyType:'advanced',cost:400,bought:false});
+  if(G.level >= 60) stock.push({type:'key',keyType:'nightmare',cost:1500,bought:false});
+  // Ticket (expensive)
+  if(Math.random() < 0.3) stock.push({type:'ticket1x',cost:800,bought:false});
+  if(Math.random() < 0.1) stock.push({type:'ticket10x',cost:5000,bought:false});
+
+  G.marketStock = stock;
+  G.marketRefreshTime = Date.now();
+  save();
+}
+
+function buyMarketItem(idx){
+  const item = G.marketStock[idx];
+  if(!item || item.bought) return;
+  if(G.gold < item.cost){ toast('Need '+item.cost+' gold','#f44'); return; }
+  G.gold -= item.cost;
+  item.bought = true;
+  if(item.type === 'follower'){
+    const f = generateFollower(item.rarity);
+    f.name = item.name;
+    f.class = item.cls;
+    const abilities = FOLLOWER_ABILITIES[item.cls] || FOLLOWER_ABILITIES['Fighter'];
+    f.ability = abilities[Math.min(item.rarity, abilities.length-1)];
+    G.followers.push(f);
+    toast('Bought ' + f.name + ' [' + RARITY_NAMES[f.rarity] + ' ' + f.class + ']', '#ffd700');
+  } else if(item.type === 'gear'){
+    G.inventory.push(item.gear);
+    toast('Bought ' + item.gear.name, '#0ff');
+  } else if(item.type === 'key'){
+    G.dungeonKeys[item.keyType] = (G.dungeonKeys[item.keyType]||0) + 1;
+    toast('Bought ' + KEY_TYPES[item.keyType].name, '#0ff');
+  } else if(item.type === 'ticket1x'){
+    G.tickets1x = (G.tickets1x||0) + 1;
+    toast('Bought Summon Ticket!', '#0ff');
+  } else if(item.type === 'ticket10x'){
+    G.tickets10x = (G.tickets10x||0) + 1;
+    toast('Bought 10x Summon Ticket!', '#ffd700');
+  }
+  save();
+}
+
+// ==================== RELIC SYSTEM ====================
+const RELIC_POOL = [
+  {id:'r_power',name:'Shard of Fury',desc:'+3% all damage',effect:{power:0.03}},
+  {id:'r_defense',name:'Iron Heart',desc:'+3% defense',effect:{defense:0.03}},
+  {id:'r_gold',name:'Midas Fragment',desc:'+3 gold/min',effect:{goldMin:3}},
+  {id:'r_xp',name:'Tome of Insight',desc:'+5% XP',effect:{xp:0.05}},
+  {id:'r_luck',name:'Lucky Charm',desc:'+5 luck',effect:{luck:5}},
+  {id:'r_energy',name:'Void Battery',desc:'+8 max energy',effect:{maxEnergy:8}},
+  {id:'r_crit',name:'Assassin\'s Edge',desc:'+3% crit rate',effect:{crit:3}},
+  {id:'r_drop',name:'Scavenger\'s Eye',desc:'+3% loot drop rate',effect:{lootRate:0.03}},
+  {id:'r_speed',name:'Quicksilver',desc:'+5 speed',effect:{speed:5}},
+  {id:'r_heal',name:'Life Crystal',desc:'Heal 2% HP per turn in combat',effect:{regen:0.02}},
+  {id:'r_ticket',name:'Fate Token',desc:'+1% ticket drop rate from all sources',effect:{ticketRate:0.01}},
+  {id:'r_follower',name:'Commander\'s Seal',desc:'+10% follower power',effect:{followerPow:0.1}},
+  {id:'r_building',name:'Architect\'s Compass',desc:'-5% building costs',effect:{buildCost:-0.05}},
+  {id:'r_shards',name:'Prism Core',desc:'+50% shard gain from dupes',effect:{shardMult:0.5}},
+  {id:'r_stars',name:'Star Fragment',desc:'-15% star upgrade cost',effect:{starCost:-0.15}}
+];
+
+function dropRelic(){
+  // Pick random relic not already owned
+  const owned = G.relics.map(r => r.id);
+  const available = RELIC_POOL.filter(r => !owned.includes(r.id));
+  if(available.length === 0) return null;
+  const relic = available[Math.floor(Math.random() * available.length)];
+  G.relics.push({...relic});
+  return relic;
+}
+
+function equipRelic(relicIdx){
+  if(G.equippedRelics.length >= 3){ toast('Max 3 relics equipped!','#f44'); return; }
+  const relic = G.relics[relicIdx];
+  if(!relic) return;
+  if(G.equippedRelics.includes(relic.id)){ toast('Already equipped!','#f44'); return; }
+  G.equippedRelics.push(relic.id);
+  toast('Equipped ' + relic.name, '#ffd700');
+  save();
+}
+
+function unequipRelic(relicId){
+  G.equippedRelics = G.equippedRelics.filter(id => id !== relicId);
+  save();
+}
+
+function getRelicBonus(effectKey){
+  let total = 0;
+  G.equippedRelics.forEach(id => {
+    const r = G.relics.find(x => x.id === id);
+    if(r && r.effect[effectKey]) total += r.effect[effectKey];
+  });
+  return total;
+}
+
+// ==================== BESTIARY ====================
+function recordBestiaryKill(enemyName, gold, xp){
+  if(!G.bestiary) G.bestiary = {};
+  if(!G.bestiary[enemyName]){
+    G.bestiary[enemyName] = {kills:0, firstKill:Date.now()};
+    toast('New codex entry: ' + enemyName, '#0ff');
+  }
+  G.bestiary[enemyName].kills++;
+  // Bonus damage after 50 kills of same type
+  return G.bestiary[enemyName].kills;
+}
+
+function getBestiaryBonus(enemyName){
+  if(!G.bestiary || !G.bestiary[enemyName]) return 1;
+  const kills = G.bestiary[enemyName].kills;
+  if(kills >= 100) return 1.15; // +15% dmg
+  if(kills >= 50) return 1.1;  // +10% dmg
+  if(kills >= 25) return 1.05; // +5% dmg
+  return 1;
+}
+
+// ==================== NIGHTMARE DUNGEONS ====================
+const NIGHTMARE_MULT = {hp:2.5, atk:2, goldMult:2.5, xpMult:2.5};
+// Nightmare mechanics:
+// - Enemies heal 5% per turn
+// - Boss has 2 phases (heals to 50% when first killed)
+// - Guaranteed epic+ loot
+// - Much higher ticket chances
+
+function isNightmareUnlocked(dgIdx){
+  // Need to have cleared normal version
+  return G.dungeons_cleared > dgIdx;
+}
+
+// ==================== IDLE DASHBOARD ====================
+function getIdleSummary(){
+  const goldMin = getGoldPerMin();
+  const energyRate = getEnergyRegenRate();
+  const autoBattleActive = !!G.autoBattle;
+  const expeditionsActive = (G.expeditions||[]).length;
+  const nextRaid = 'varies';
+  const followerHappiness = G.followers.length > 0 ?
+    Math.floor(G.followers.reduce((s,f)=>s+f.happiness,0)/G.followers.length) : 0;
+  const passiveXpMin = G.followers.filter(f=>f.assigned==='lab').reduce((s,f)=>s+Math.floor(f.level*0.5),0);
+  return { goldMin, energyRate, autoBattleActive, expeditionsActive, followerHappiness, passiveXpMin };
+}
+
 // ==================== DAILY LOGIN ====================
 const DAILY_REWARDS = [
   {day:1,gold:50,gems:3,t1x:0,desc:'50 gold + 3 gems'},
@@ -2486,6 +2863,9 @@ function attackWorldBoss(){
 
   G.worldBossHp -= dmg;
   G.worldBossDmgDealt = (G.worldBossDmgDealt || 0) + dmg;
+  updateChallengeProgress('wbhits', 1);
+  updateRecord('highestHit', dmg);
+  updateRecord('totalDmgDealt', G.worldBossDmgDealt);
 
   let msg = 'Hit ' + boss.name + ' for ' + dmg + '! (HP: ' + Math.max(0, G.worldBossHp) + '/' + boss.maxHp + ')';
 
@@ -2507,6 +2887,11 @@ function attackWorldBoss(){
     const gear = generateGear(G.level + 10, true);
     G.inventory.push(gear);
     toast('Boss dropped: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']', '#ffd700');
+    // Relic chance from world boss
+    if(Math.random() < 0.1){
+      const relic = dropRelic();
+      if(relic) toast('RELIC: ' + relic.name + '!', '#ff2060');
+    }
     // Rare ticket drop from world boss
     if(Math.random() < 0.08){
       G.tickets1x = (G.tickets1x||0) + 1;
@@ -2613,6 +2998,12 @@ function processAutoBattle(){
     });
   }
 
+  // Build bonds between combat followers
+  for(let i = 0; i < combatFollowers.length; i++){
+    for(let j = i+1; j < combatFollowers.length; j++){
+      if(Math.random() < 0.1) updateBond(combatFollowers[i].id, combatFollowers[j].id, 1);
+    }
+  }
   // Happiness drain from fighting
   combatFollowers.forEach(f => {
     if(Math.random() < 0.05) f.happiness = Math.max(0, f.happiness - 1);
@@ -2839,6 +3230,12 @@ function showTab(tab, extra){
     case 'expeditions': renderExpeditions(c); break;
     case 'recipes': renderRecipes(c); break;
     case 'fusion': renderFusion(c); break;
+    case 'market': renderMarket(c); break;
+    case 'challenges': renderChallenges(c); break;
+    case 'relics': renderRelics(c); break;
+    case 'bestiary': renderBestiary(c); break;
+    case 'halloffame': renderHallOfFame(c); break;
+    case 'dashboard': renderDashboard(c); break;
     case 'followers_detail': renderFollowerDetail(c, extra); break;
     case 'inventory': renderInventory(c); break;
     default: renderMissions(c);
@@ -2936,15 +3333,28 @@ function renderMissions(c){
 
   // Dungeons
   html += '<h3 style="color:#f44;margin-top:12px">Dungeons (Multi-Wave)</h3>';
+  // Key inventory
+  html += '<div class="text-sm mb">Keys: Basic:' + (G.dungeonKeys?.basic||0) + ' Adv:' + (G.dungeonKeys?.advanced||0) + ' NM:' + (G.dungeonKeys?.nightmare||0);
+  html += ' <button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="craftKey(\'basic\')">Craft Basic(100g)</button>';
+  if(G.skillLevels[8]>=40) html += ' <button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="craftKey(\'advanced\')">Adv(500g)</button>';
+  if(G.skillLevels[8]>=70) html += ' <button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="craftKey(\'nightmare\')">NM(2000g)</button>';
+  html += '</div>';
   DUNGEONS.forEach((dg, di) => {
     if(G.level < dg.minLv){
       html += '<div class="card text-dim">??? ' + dg.name + ' (Lv.' + dg.minLv + ')</div>';
       return;
     }
+    const keyType = getKeyTypeForDungeon(di);
+    const hasKey = (G.dungeonKeys?.[keyType]||0) > 0;
     html += '<div class="card">';
-    html += '<button class="btn btn-red" onclick="runDungeon(' + di + ')">';
-    html += dg.name + ' [' + dg.waves + ' waves] (EN:' + dg.energy + ')';
+    html += '<button class="btn btn-red" onclick="runDungeon(' + di + ',false)" ' + (hasKey?'':'disabled') + '>';
+    html += dg.name + ' [' + dg.waves + 'W] (EN:' + dg.energy + ', 1 ' + keyType + ' key)';
     html += '</button>';
+    // Nightmare mode
+    if(isNightmareUnlocked(di)){
+      const nmHasKey = (G.dungeonKeys?.nightmare||0) > 0;
+      html += ' <button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="runDungeon(' + di + ',true)" ' + (nmHasKey?'':'disabled') + '>NM</button>';
+    }
     html += ' <span class="text-sm text-dim">' + dg.desc + '</span>';
     html += '</div>';
   });
@@ -3398,6 +3808,46 @@ function renderFollowerDetail(c, fId){
   }
   html += '<br>';
 
+  // Follower Equipment
+  html += '<h3>Equipment</h3>';
+  if(!f.gear) f.gear = {};
+  ['weapon','armor'].forEach(slot => {
+    html += '<div class="card">';
+    html += '<b>' + slot + ':</b> ';
+    if(f.gear[slot]){
+      html += '<span class="' + RARITIES[f.gear[slot].rarity] + '">' + f.gear[slot].name + '</span> PWR:' + f.gear[slot].power + ' DEF:' + f.gear[slot].defense;
+      html += ' <button class="btn btn-red" style="padding:2px 6px;min-height:24px" onclick="unequipFromFollower(' + f.id + ',\'' + slot + '\');showTab(\'followers_detail\',' + f.id + ')">Unequip</button>';
+    } else {
+      html += '<span class="text-dim">Empty</span>';
+    }
+    html += '</div>';
+  });
+  // Show equippable items from inventory
+  const equippableWeapons = G.inventory.filter(item => item.slot === 'weapon').slice(0, 5);
+  const equippableArmor = G.inventory.filter(item => item.slot === 'armor').slice(0, 5);
+  if(equippableWeapons.length > 0 || equippableArmor.length > 0){
+    html += '<div class="text-sm text-dim">Equip from inventory:</div>';
+    [...equippableWeapons, ...equippableArmor].forEach(item => {
+      const idx = G.inventory.indexOf(item);
+      html += '<button class="btn ' + RARITIES[item.rarity] + '" style="padding:4px 8px;min-height:30px;border-color:currentColor" onclick="equipToFollower(' + f.id + ',' + idx + ');showTab(\'followers_detail\',' + f.id + ')">' + item.name + ' [' + item.slot + ']</button> ';
+    });
+  }
+
+  // Bonds
+  html += '<h3>Bonds</h3>';
+  const bondPartners = G.followers.filter(x => x.id !== f.id && f.bonds && f.bonds[x.id] && f.bonds[x.id] > 0);
+  if(bondPartners.length > 0){
+    bondPartners.forEach(p => {
+      const bondLv = f.bonds[p.id];
+      const combo = getBondCombo(f, p);
+      html += '<div class="text-sm">' + p.name + ' - Bond Lv.' + bondLv + '/10';
+      if(combo && bondLv >= 3) html += ' <span style="color:#ffd700">[' + combo.name + ': ' + combo.desc + ']</span>';
+      html += '</div>';
+    });
+  } else {
+    html += '<div class="text-sm text-dim">No bonds yet. Fight alongside other followers to build bonds.</div>';
+  }
+
   html += '<h3>Assign Role</h3>';
   const ci = f.cityIdx || 0;
   // General roles
@@ -3632,6 +4082,12 @@ function renderMore(c){
   html += '<button class="btn btn-cyan" onclick="showTab(\'recipes\')">Crafting Recipes</button> ';
   html += '<button class="btn btn-cyan" onclick="showTab(\'fusion\')">Follower Fusion</button> ';
   html += '<button class="btn btn-cyan" onclick="showTab(\'clan\')">Clan</button> ';
+  html += '<button class="btn btn-gold" onclick="showTab(\'market\')">Black Market</button> ';
+  html += '<button class="btn btn-gold" onclick="showTab(\'challenges\')">Challenges</button> ';
+  html += '<button class="btn btn-purple" onclick="showTab(\'relics\')">Relics</button> ';
+  html += '<button class="btn btn-purple" onclick="showTab(\'bestiary\')">Bestiary</button> ';
+  html += '<button class="btn" onclick="showTab(\'halloffame\')">Hall of Fame</button> ';
+  html += '<button class="btn btn-green" onclick="showTab(\'dashboard\')">Idle Dashboard</button> ';
   // Ascension
   if(hasResearch('ascend') && G.level >= 100){
     html += '<div class="card mt" style="border-color:#ff2060"><button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button></div>';
@@ -3813,6 +4269,182 @@ function renderClan(c){
   c.innerHTML = html;
 }
 
+// ==================== MARKET / CHALLENGES / RELICS / BESTIARY / HALL / DASHBOARD ====================
+function renderMarket(c){
+  let html = '<h2>Black Market</h2>';
+  html += '<div class="text-sm text-dim mb">Refreshes daily. Buy what you need — no gacha RNG.</div>';
+  if(!G.marketStock || G.marketStock.length === 0) refreshMarket();
+  if(Date.now() - (G.marketRefreshTime||0) > 86400000){ refreshMarket(); }
+  const timeLeft = Math.floor((86400000 - (Date.now() - G.marketRefreshTime)) / 60000);
+  html += '<div class="text-sm mb">Refreshes in: ' + Math.floor(timeLeft/60) + 'h ' + (timeLeft%60) + 'm | <button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="refreshMarket();showTab(\'market\')">Force Refresh</button></div>';
+  G.marketStock.forEach((item, i) => {
+    html += '<div class="card" style="border-color:' + (item.bought?'#333':'#ffd700') + '">';
+    if(item.type === 'follower'){
+      html += '<span class="' + RARITIES[item.rarity] + '">' + item.name + '</span> [' + RARITY_NAMES[item.rarity] + ' ' + item.cls + ']';
+    } else if(item.type === 'gear'){
+      html += '<span class="' + RARITIES[item.gear.rarity] + '">' + item.gear.name + '</span> [' + item.gear.slot + '] PWR:' + item.gear.power + ' DEF:' + item.gear.defense;
+    } else if(item.type === 'key'){
+      html += KEY_TYPES[item.keyType].name;
+    } else if(item.type === 'ticket1x'){
+      html += '<span style="color:#0ff">Summon Ticket (1x)</span>';
+    } else if(item.type === 'ticket10x'){
+      html += '<span style="color:#ffd700">10x Summon Ticket</span>';
+    }
+    html += ' | <b>' + item.cost + 'g</b> ';
+    if(item.bought){ html += '<span class="text-dim">SOLD</span>'; }
+    else { html += '<button class="btn btn-gold" onclick="buyMarketItem('+i+');showTab(\'market\')">Buy</button>'; }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderChallenges(c){
+  generateChallenges();
+  let html = '<h2>Monthly Challenges</h2>';
+  html += '<div class="text-sm text-dim mb">Month: ' + G.challengeMonth + ' | Completed: ' + (G.challengesClaimed||0) + '/' + G.challenges.length + '</div>';
+  G.challenges.forEach((ch, i) => {
+    const pct = Math.floor((ch.progress/ch.target)*100);
+    html += '<div class="card" style="border-color:' + (ch.claimed?'#333':ch.completed?'#ffd700':'#444') + '">';
+    html += '<b>' + ch.desc + '</b> ';
+    if(ch.claimed){ html += '<span class="text-dim">CLAIMED</span>'; }
+    else if(ch.completed){ html += '<button class="btn btn-gold" onclick="claimChallenge('+i+');showTab(\'challenges\')">CLAIM</button>'; }
+    else { html += '<span class="text-sm">' + ch.progress + '/' + ch.target + '</span>'; }
+    html += '<div class="pbar pbar-gold"><div class="pbar-fill" style="width:'+pct+'%"></div></div>';
+    html += '<span class="text-sm text-dim">Reward: ' + (ch.gold?ch.gold+'g ':'') + (ch.gems?ch.gems+' gems ':'') + (ch.t1x?ch.t1x+'x ticket ':'') + (ch.t10x?'10x ticket!':'') + '</span>';
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderRelics(c){
+  let html = '<h2>Relics (' + (G.relics||[]).length + '/' + RELIC_POOL.length + ')</h2>';
+  html += '<div class="text-sm text-dim mb">Equip up to 3 relics for permanent passive bonuses. Found in dungeons, nightmare mode, and world boss.</div>';
+  // Equipped
+  html += '<h3>Equipped (' + (G.equippedRelics||[]).length + '/3)</h3>';
+  if(G.equippedRelics && G.equippedRelics.length > 0){
+    G.equippedRelics.forEach(id => {
+      const r = (G.relics||[]).find(x => x.id === id);
+      if(!r) return;
+      html += '<div class="card" style="border-color:#ff2060"><b style="color:#ff2060">' + r.name + '</b> - ' + r.desc;
+      html += ' <button class="btn btn-red" style="padding:2px 6px;min-height:24px" onclick="unequipRelic(\''+r.id+'\');showTab(\'relics\')">Unequip</button></div>';
+    });
+  }
+  // Collection
+  html += '<h3>Collection</h3>';
+  if(!G.relics || G.relics.length === 0){
+    html += '<div class="text-dim">No relics found yet. Clear dungeons and fight world bosses!</div>';
+  }
+  (G.relics||[]).forEach((r, i) => {
+    const equipped = (G.equippedRelics||[]).includes(r.id);
+    html += '<div class="card">';
+    html += '<b>' + r.name + '</b> - ' + r.desc;
+    if(equipped){ html += ' <span style="color:#0f0">[EQUIPPED]</span>'; }
+    else { html += ' <button class="btn btn-purple" style="padding:2px 6px;min-height:24px" onclick="equipRelic('+i+');showTab(\'relics\')">Equip</button>'; }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderBestiary(c){
+  let html = '<h2>Bestiary</h2>';
+  const entries = Object.keys(G.bestiary || {});
+  html += '<div class="text-sm text-dim mb">Enemies catalogued: ' + entries.length + ' | Kill 25/50/100 for damage bonuses.</div>';
+  if(entries.length === 0){
+    html += '<div class="text-dim">No entries yet. Go fight something!</div>';
+  }
+  entries.sort((a,b) => G.bestiary[b].kills - G.bestiary[a].kills);
+  entries.forEach(name => {
+    const entry = G.bestiary[name];
+    const bonus = getBestiaryBonus(name);
+    const bonusStr = bonus > 1 ? ' <span style="color:#0f0">+' + Math.floor((bonus-1)*100) + '% dmg</span>' : '';
+    html += '<div class="card">';
+    html += '<b>' + name + '</b> - Kills: ' + entry.kills + bonusStr;
+    const next = entry.kills < 25 ? (25-entry.kills)+' to +5%' : entry.kills < 50 ? (50-entry.kills)+' to +10%' : entry.kills < 100 ? (100-entry.kills)+' to +15%' : 'MAX';
+    html += ' <span class="text-sm text-dim">[Next: ' + next + ']</span>';
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderHallOfFame(c){
+  let html = '<h2>Hall of Fame</h2>';
+  html += '<div class="text-sm text-dim mb">Your personal records.</div>';
+  html += '<div class="card">';
+  html += 'Highest Single Hit: <span style="color:#ffd700">' + (G.records?.highestHit||0) + '</span><br>';
+  html += 'Total Damage Dealt: <span style="color:#0ff">' + (G.records?.totalDmgDealt||0) + '</span><br>';
+  html += 'Login Streak Record: <span style="color:#0f0">' + Math.max(G.records?.longestStreak||0, G.loginStreak||0) + ' days</span><br>';
+  html += 'Missions Completed: ' + G.missions_completed + '<br>';
+  html += 'Bosses Killed: ' + G.bosses_killed + '<br>';
+  html += 'Total Kills: ' + G.total_kills + '<br>';
+  html += 'Total Gold Earned: ' + G.total_gold_earned + '<br>';
+  html += 'Dungeons Cleared: ' + G.dungeons_cleared + '<br>';
+  html += 'Nightmare Clears: ' + (G.nightmareClears||0) + '<br>';
+  html += 'World Bosses Killed: ' + (G.worldBossKills||0) + '<br>';
+  html += 'Raids Won: ' + (G.total_raids_won||0) + '<br>';
+  html += 'Gacha Pulls: ' + G.total_gacha_pulls + '<br>';
+  html += 'Followers Owned: ' + G.followers.length + '<br>';
+  html += 'Relics Found: ' + (G.relics||[]).length + '/' + RELIC_POOL.length + '<br>';
+  html += 'Bestiary Entries: ' + Object.keys(G.bestiary||{}).length + '<br>';
+  html += 'Prestige: ' + G.prestige + ' | Ascension: ' + (G.ascension||0) + '<br>';
+  html += 'World Tier: ' + (G.worldTier||1) + '<br>';
+  html += '</div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderDashboard(c){
+  const summary = getIdleSummary();
+  let html = '<h2>Idle Dashboard</h2>';
+  html += '<div class="text-sm text-dim mb">Everything ticking in the background.</div>';
+  html += '<div class="card">';
+  html += '<b>Passive Income</b><br>';
+  html += 'Gold/min: <span style="color:#ffd700">' + summary.goldMin + '</span><br>';
+  html += 'Energy regen: 1 per <span style="color:#0f0">' + summary.energyRate + 's</span><br>';
+  html += 'Passive XP/min: <span style="color:#0ff">' + summary.passiveXpMin + '</span> (Lab workers)<br>';
+  html += '</div>';
+  html += '<div class="card">';
+  html += '<b>Active Systems</b><br>';
+  html += 'Auto-battle: <span style="color:' + (summary.autoBattleActive?'#0f0':'#f44') + '">' + (summary.autoBattleActive?'RUNNING':'OFF') + '</span>';
+  if(summary.autoBattleActive) html += ' (' + G.autoBattleEarnings.kills + ' kills, ' + G.autoBattleEarnings.gold + 'g)';
+  html += '<br>';
+  html += 'Expeditions: <span style="color:#0ff">' + summary.expeditionsActive + '/3</span><br>';
+  (G.expeditions||[]).forEach(exp => {
+    const type = EXPEDITION_TYPES[exp.type];
+    const timeLeft = Math.max(0, Math.floor((exp.endTime - Date.now())/1000));
+    const ready = timeLeft <= 0;
+    html += '  ' + type.name + ': ' + (ready ? '<span style="color:#ffd700">READY</span>' : Math.floor(timeLeft/60) + 'm left') + '<br>';
+  });
+  html += '</div>';
+  html += '<div class="card">';
+  html += '<b>City Status</b><br>';
+  G.cities.forEach((city, i) => {
+    html += city.name + ': Def ' + getCityDefense(i) + ' | Pop ' + getCityPopulation(i) + '/' + getCityMaxPop(i) + '<br>';
+  });
+  html += '</div>';
+  html += '<div class="card">';
+  html += '<b>Followers</b><br>';
+  html += 'Total: ' + G.followers.length + ' | Avg Happiness: <span style="color:' + (summary.followerHappiness > 60 ? '#0f0' : '#f44') + '">' + summary.followerHappiness + '</span><br>';
+  const combatCount = G.followers.filter(f=>f.assigned==='combat').length;
+  const garrisonCount = G.followers.filter(f=>f.assigned==='garrison').length;
+  const idleCount = G.followers.filter(f=>f.assigned==='idle').length;
+  html += 'Combat: ' + combatCount + ' | Garrison: ' + garrisonCount + ' | Idle: ' + idleCount + '<br>';
+  html += '</div>';
+  // Active event
+  if(G.activeEvent && Date.now() < G.eventEndTime){
+    const timeLeft = Math.floor((G.eventEndTime - Date.now()) / 60000);
+    html += '<div class="card" style="border-color:#ffd700"><b style="color:#ffd700">EVENT: ' + G.activeEvent.name + '</b> - ' + timeLeft + ' min left</div>';
+  }
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+// ==================== FOLLOWER EQUIPMENT UI ====================
+// Added to follower detail - show in renderFollowerDetail
+
 // ==================== CHARACTER CREATION ====================
 function showCharacterCreation(){
   const c = document.getElementById('content');
@@ -3992,7 +4624,15 @@ function migrateOldSave(){
   if(!G.tickets10x) G.tickets10x = 0;
   if(!G.shards) G.shards = 0;
   if(!G.wishList) G.wishList = [];
+  if(!G.dungeonKeys) G.dungeonKeys = {basic:0,advanced:0,nightmare:0};
+  if(!G.records) G.records = {};
+  if(!G.relics) G.relics = [];
+  if(!G.equippedRelics) G.equippedRelics = [];
+  if(!G.bestiary) G.bestiary = {};
+  if(!G.challenges) G.challenges = [];
+  if(!G.marketStock) G.marketStock = [];
   G.followers.forEach(f => {
+    if(!f.gear) f.gear = {};
     if(f.cityIdx === undefined) f.cityIdx = 0;
     if(f.assigned === 'patrol') f.assigned = 'garrison';
     if(f.assigned === 'mining') f.assigned = 'foundry';
@@ -4012,6 +4652,9 @@ function init(){
     migrateOldSave();
     calcOfflineProgress();
     checkDailyLogin();
+    generateChallenges();
+    // Init market if needed
+    if(!G.marketStock || G.marketStock.length === 0 || Date.now() - (G.marketRefreshTime||0) > 86400000) refreshMarket();
     // Init world boss if needed
     if(!G.worldBossHp || G.worldBossHp <= 0){ G.worldBossHp = getWorldBoss().maxHp; }
     document.getElementById('top-bar').style.display = '';
