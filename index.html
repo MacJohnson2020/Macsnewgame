@@ -89,7 +89,7 @@ select { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; fon
     <button onclick="showTab('gear')" id="tab-gear">Gear</button>
     <button onclick="showTab('town')" id="tab-town">Town</button>
     <button onclick="showTab('gacha')" id="tab-gacha">Summon</button>
-    <button onclick="showTab('profile')" id="tab-profile">Profile</button>
+    <button onclick="showTab('more')" id="tab-more">More</button>
   </div>
 </div>
 <div id="toast-container"></div>
@@ -298,7 +298,24 @@ function newGame(name, cls){
     // Auto-battle
     autoBattle: null, // {zoneIdx, missionIdx, followerIds:[]}
     autoBattleEarnings: { gold:0, xp:0, kills:0 },
-    roamingEnemies: []
+    roamingEnemies: [],
+    // Expeditions
+    expeditions: [],
+    // Research
+    research: {},
+    // Events
+    activeEvent: null,
+    eventEndTime: 0,
+    // Clan
+    clanName: '',
+    clanCouncil: [],
+    clanPerks: {},
+    // Exploration
+    exploredTiles: [],
+    mapPosition: 0,
+    // Ascension
+    ascension: 0,
+    worldTier: 1
   };
 }
 
@@ -342,7 +359,8 @@ function getMaxEnergy(){
   let base = 100;
   const vaultLv = getAllBuildingLevel('vault');
   base += vaultLv * 5;
-  if(hasSynergy('energy')) base += 10; // Power Grid synergy
+  if(hasSynergy('energy')) base += 10;
+  base += getResearchBonus('maxEnergy');
   return base;
 }
 
@@ -357,10 +375,11 @@ function getXpBoost(){
   let boost = 1 + (G.prestige_bonus / 100);
   const labLv = getAllBuildingLevel('lab');
   boost += labLv * 0.05;
-  // Research specialty bonus
   G.cities.forEach(c => {
     if(c.specialty === 'research') boost += SPECIALTIES.research.bonus.xp;
   });
+  boost += getResearchBonus('combatXp') + getClanBonus('xp');
+  boost += getEventBonus('xp');
   return boost;
 }
 
@@ -386,6 +405,9 @@ function getCombatPower(){
   }
   const cls = CLASSES[G.class];
   p += cls.power * G.level;
+  // Set bonus, research, clan, world tier
+  p = Math.floor(p * getSetPowerMult());
+  p = Math.floor(p * (1 + getResearchBonus('combatPower') + getClanBonus('power')));
   // Combat skill bonuses
   p += Math.floor(G.skillLevels[0] * 1.5); // Melee: raw power
   p += Math.floor(G.skillLevels[1] * 1.0); // Ranged: steady power
@@ -1331,6 +1353,7 @@ function getCityMaxPop(cityIdx){
   let maxPop = 5;
   maxPop += (city.buildings.barracks || 0) * 1;
   maxPop += (city.buildings.tavern || 0) * 2;
+  maxPop += getResearchBonus('maxPop');
   return maxPop;
 }
 
@@ -1703,6 +1726,419 @@ function processRoamerCityAttacks(){
       }
     }
   });
+}
+
+// ==================== EQUIPMENT SET BONUSES ====================
+function getSetBonus(){
+  const equipped = GEAR_SLOTS.map(s => G.gear[s]).filter(g => g !== null);
+  if(equipped.length < 2) return [];
+  const bonuses = [];
+  // Count by rarity
+  const rarityCounts = {};
+  equipped.forEach(g => { rarityCounts[g.rarity] = (rarityCounts[g.rarity]||0) + 1; });
+  for(const r in rarityCounts){
+    const count = rarityCounts[r];
+    const ri = parseInt(r);
+    if(count >= 2) bonuses.push({name:RARITY_NAMES[ri]+' Duo',desc:'+5% power',power:0.05,count:2,rarity:ri});
+    if(count >= 3) bonuses.push({name:RARITY_NAMES[ri]+' Trio',desc:'+8% defense',defense:0.08,count:3,rarity:ri});
+    if(count >= 4) bonuses.push({name:RARITY_NAMES[ri]+' Full Set',desc:'+12% all stats',all:0.12,count:4,rarity:ri});
+  }
+  return bonuses;
+}
+
+function getSetPowerMult(){
+  let mult = 1;
+  getSetBonus().forEach(b => { if(b.power) mult += b.power; if(b.all) mult += b.all; });
+  return mult;
+}
+function getSetDefMult(){
+  let mult = 1;
+  getSetBonus().forEach(b => { if(b.defense) mult += b.defense; if(b.all) mult += b.all; });
+  return mult;
+}
+
+// ==================== EXPEDITIONS ====================
+const EXPEDITION_TYPES = [
+  {name:'Quick Scout',duration:1800,energy:10,goldMin:30,goldMax:80,xpMin:20,xpMax:50,gearChance:0.1,gemChance:0.05,desc:'30 min'},
+  {name:'Resource Run',duration:7200,energy:25,goldMin:150,goldMax:400,xpMin:100,xpMax:250,gearChance:0.25,gemChance:0.1,desc:'2 hours'},
+  {name:'Deep Recon',duration:28800,energy:50,goldMin:500,goldMax:1500,xpMin:400,xpMax:800,gearChance:0.5,gemChance:0.2,desc:'8 hours'},
+  {name:'Void Expedition',duration:86400,energy:80,goldMin:2000,goldMax:5000,xpMin:1000,xpMax:3000,gearChance:0.8,gemChance:0.4,desc:'24 hours'}
+];
+
+function startExpedition(typeIdx, followerIds){
+  const type = EXPEDITION_TYPES[typeIdx];
+  if(G.expeditions.length >= 3){ toast('Max 3 expeditions!','#f44'); return; }
+  if(G.energy < type.energy){ toast('Need '+type.energy+' energy','#f44'); return; }
+  const followers = followerIds.map(id => G.followers.find(f=>f.id===id)).filter(f=>f);
+  if(followers.length === 0){ toast('Select followers!','#f44'); return; }
+  G.energy -= type.energy;
+  G.expeditions.push({
+    type: typeIdx,
+    followerIds: followerIds,
+    startTime: Date.now(),
+    endTime: Date.now() + type.duration * 1000,
+    collected: false
+  });
+  followers.forEach(f => { f.assigned = 'expedition'; });
+  toast('Expedition started: ' + type.name, '#0ff');
+  save();
+}
+
+function collectExpedition(idx){
+  const exp = G.expeditions[idx];
+  if(!exp || exp.collected) return;
+  if(Date.now() < exp.endTime){ toast('Not ready yet!','#f44'); return; }
+  const type = EXPEDITION_TYPES[exp.type];
+  const followers = exp.followerIds.map(id => G.followers.find(f=>f.id===id)).filter(f=>f);
+  const powerMult = 1 + followers.reduce((s,f) => s + f.level * (f.rarity+1) * 0.01, 0);
+
+  const gold = Math.floor((type.goldMin + Math.random() * (type.goldMax - type.goldMin)) * powerMult);
+  const xp = Math.floor((type.xpMin + Math.random() * (type.xpMax - type.xpMin)) * powerMult);
+  G.gold += gold; G.total_gold_earned += gold; addXp(xp);
+  let msg = 'Expedition complete! +' + gold + 'g +' + xp + 'xp';
+  if(Math.random() < type.gearChance){
+    const gear = generateGear(G.level, Math.random() < 0.3);
+    G.inventory.push(gear);
+    msg += ' + ' + gear.name;
+  }
+  if(Math.random() < type.gemChance){
+    const gems = 1 + Math.floor(Math.random() * 3);
+    G.gems += gems; msg += ' +' + gems + ' gems';
+  }
+  // Follower XP
+  followers.forEach(f => { f.assigned = 'idle'; f.xp += 20 + type.duration / 100; });
+  G.expeditions.splice(idx, 1);
+  toast(msg, '#ffd700');
+  checkAchievements(); save();
+}
+
+// ==================== CRAFTING RECIPES ====================
+const RECIPES = [
+  {name:'Void Blade',slot:'weapon',rarity:3,reqs:{0:30,8:40,4:25},cost:500,desc:'Melee 30 + Craft 40 + Mining 25'},
+  {name:'Nexus Rifle',slot:'weapon',rarity:3,reqs:{1:30,8:40,9:25},cost:500,desc:'Ranged 30 + Craft 40 + Eng 25'},
+  {name:'Corruption Staff',slot:'weapon',rarity:3,reqs:{2:30,8:40,10:25},cost:500,desc:'Corrupt 30 + Craft 40 + Alch 25'},
+  {name:'Shadow Dagger',slot:'weapon',rarity:3,reqs:{3:30,8:40,12:25},cost:500,desc:'Stealth 30 + Craft 40 + Hack 25'},
+  {name:'Titan Plate',slot:'armor',rarity:4,reqs:{14:40,8:60,4:40},cost:1500,desc:'Surv 40 + Craft 60 + Mining 40'},
+  {name:'Void Ward Mk2',slot:'shield',rarity:4,reqs:{14:40,8:60,11:35},cost:1500,desc:'Surv 40 + Craft 60 + Ench 35'},
+  {name:'Neural Overdriver',slot:'implant',rarity:4,reqs:{12:50,8:50,9:40},cost:2000,desc:'Hack 50 + Craft 50 + Eng 40'},
+  {name:'GODSLAYER Mk2',slot:'weapon',rarity:5,reqs:{0:70,1:70,8:80,11:60},cost:8000,desc:'Melee 70 + Ranged 70 + Craft 80 + Ench 60'},
+  {name:'ETERNAL PLATE',slot:'armor',rarity:5,reqs:{14:80,8:80,4:60,9:60},cost:8000,desc:'Surv 80 + Craft 80 + Mine 60 + Eng 60'},
+  {name:'OMNISCIENT Mk2',slot:'implant',rarity:5,reqs:{12:80,8:80,10:60,2:60},cost:10000,desc:'Hack 80 + Craft 80 + Alch 60 + Corrupt 60'}
+];
+
+function craftRecipe(idx){
+  const r = RECIPES[idx];
+  for(const sk in r.reqs){
+    if(G.skillLevels[parseInt(sk)] < r.reqs[sk]){
+      toast('Need ' + SKILL_NAMES[parseInt(sk)] + ' Lv.' + r.reqs[sk], '#f44'); return;
+    }
+  }
+  if(G.gold < r.cost){ toast('Need ' + r.cost + ' gold', '#f44'); return; }
+  G.gold -= r.cost;
+  const mult = RARITY_MULT[r.rarity];
+  const basePower = Math.floor((3 + G.level * 1.5) * mult);
+  const gear = {
+    id: Date.now()+Math.random(), name: r.name, slot: r.slot, rarity: r.rarity,
+    power: r.slot==='weapon' ? basePower : Math.floor(basePower*0.3),
+    defense: (r.slot==='armor'||r.slot==='shield') ? basePower : Math.floor(basePower*0.2),
+    level: Math.max(1, Math.floor(G.level * mult * 0.5)),
+    reqSkill:-1, reqLevel:0
+  };
+  G.inventory.push(gear);
+  addSkillXp(8, 30 + r.rarity * 15);
+  toast('Crafted ' + r.name + ' [' + RARITY_NAMES[r.rarity] + ']!', '#ffd700');
+  save();
+}
+
+// ==================== EVENT SYSTEM ====================
+const EVENTS = [
+  {name:'Double XP Weekend',desc:'+50% XP from all sources',bonus:{xp:0.5},duration:3600*4},
+  {name:'Gold Rush',desc:'+50% gold from missions',bonus:{gold:0.5},duration:3600*4},
+  {name:'Lucky Stars',desc:'+25% luck for better drops',bonus:{luck:0.25},duration:3600*3},
+  {name:'Void Surge',desc:'Enemies are 20% stronger but drop better loot',bonus:{difficulty:0.2,loot:0.15},duration:3600*3},
+  {name:'Builder\'s Blessing',desc:'-25% building costs',bonus:{buildCost:-0.25},duration:3600*4},
+  {name:'Harvest Moon',desc:'+50% skill training XP',bonus:{skillxp:0.5},duration:3600*3}
+];
+
+function checkEvent(){
+  if(G.activeEvent && Date.now() < G.eventEndTime) return;
+  // 5% chance per check to start new event (checked every ~5 min)
+  if(Math.random() < 0.05 || !G.activeEvent){
+    const ev = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+    G.activeEvent = ev;
+    G.eventEndTime = Date.now() + ev.duration * 1000;
+    if(G.activeEvent) toast('EVENT: ' + ev.name + '! ' + ev.desc, '#ffd700');
+  }
+}
+
+function getEventBonus(type){
+  if(!G.activeEvent || Date.now() > G.eventEndTime) return 0;
+  return G.activeEvent.bonus[type] || 0;
+}
+
+// ==================== TECH TREE (Research) ====================
+const TECH_TREE = [
+  {id:'energy1',name:'Capacitors',desc:'+15 max energy',cost:200,req:{},effect:{maxEnergy:15}},
+  {id:'energy2',name:'Fusion Cell',desc:'+25 max energy',cost:800,req:{energy1:1},effect:{maxEnergy:25}},
+  {id:'combat1',name:'Targeting',desc:'+5% combat power',cost:300,req:{},effect:{combatPower:0.05}},
+  {id:'combat2',name:'Overdrive',desc:'+8% combat power',cost:1200,req:{combat1:1},effect:{combatPower:0.08}},
+  {id:'loot1',name:'Scavenger Drones',desc:'+5% loot drop rate',cost:400,req:{},effect:{lootRate:0.05}},
+  {id:'loot2',name:'Quantum Scanner',desc:'+8% loot drop rate',cost:1500,req:{loot1:1},effect:{lootRate:0.08}},
+  {id:'gold1',name:'Trade Routes',desc:'+3 gold/min',cost:250,req:{},effect:{goldPerMin:3}},
+  {id:'gold2',name:'Market Hub',desc:'+6 gold/min',cost:1000,req:{gold1:1},effect:{goldPerMin:6}},
+  {id:'follower1',name:'Recruitment',desc:'+3 max population per city',cost:500,req:{},effect:{maxPop:3}},
+  {id:'follower2',name:'Barracks Upgrade',desc:'+5 max population per city',cost:2000,req:{follower1:1},effect:{maxPop:5}},
+  {id:'skill1',name:'Neural Tutor',desc:'+10% skill XP',cost:600,req:{},effect:{skillXp:0.1}},
+  {id:'xp1',name:'Experience Matrix',desc:'+10% combat XP',cost:600,req:{},effect:{combatXp:0.1}},
+  {id:'defense1',name:'Fortification',desc:'+20% city defense',cost:400,req:{},effect:{cityDef:0.2}},
+  {id:'ascend',name:'Void Mastery',desc:'Unlock Ascension system',cost:5000,req:{combat2:1,loot2:1,gold2:1},effect:{ascension:true}}
+];
+
+function researchTech(techId){
+  const tech = TECH_TREE.find(t => t.id === techId);
+  if(!tech) return;
+  if(G.research[techId]){ toast('Already researched!','#f44'); return; }
+  // Check prerequisites
+  for(const req in tech.req){
+    if(!G.research[req]){ toast('Need: ' + TECH_TREE.find(t=>t.id===req).name,'#f44'); return; }
+  }
+  // Need Lab level 3+
+  if(getAllBuildingLevel('lab') < 3){ toast('Need Lab Lv.3+','#f44'); return; }
+  if(G.gold < tech.cost){ toast('Need ' + tech.cost + ' gold','#f44'); return; }
+  G.gold -= tech.cost;
+  G.research[techId] = 1;
+  toast('Researched: ' + tech.name + '!', '#0ff');
+  checkAchievements(); save();
+}
+
+function hasResearch(techId){ return G.research && G.research[techId]; }
+function getResearchBonus(effectKey){
+  let total = 0;
+  TECH_TREE.forEach(t => {
+    if(G.research[t.id] && t.effect[effectKey]) total += t.effect[effectKey];
+  });
+  return total;
+}
+
+// ==================== FOLLOWER FUSION ====================
+function fuseFollowers(id1, id2, id3){
+  const f1 = G.followers.find(f=>f.id===id1);
+  const f2 = G.followers.find(f=>f.id===id2);
+  const f3 = G.followers.find(f=>f.id===id3);
+  if(!f1||!f2||!f3){ toast('Invalid followers','#f44'); return; }
+  if(f1.rarity !== f2.rarity || f2.rarity !== f3.rarity){ toast('Must be same rarity!','#f44'); return; }
+  if(f1.rarity >= 5){ toast('Cannot fuse Mythic!','#f44'); return; }
+  const newRarity = f1.rarity + 1;
+  // Remove the 3
+  G.followers = G.followers.filter(f => f.id !== id1 && f.id !== id2 && f.id !== id3);
+  // Create new higher rarity
+  const newF = generateFollower(newRarity);
+  // Bonus: inherits some levels from source
+  newF.level = Math.max(newF.level, Math.floor((f1.level + f2.level + f3.level) / 4));
+  newF.power += Math.floor((f1.power + f2.power + f3.power) * 0.15);
+  G.followers.push(newF);
+  toast('FUSION! ' + newF.name + ' [' + RARITY_NAMES[newRarity] + '] created!', '#ffd700');
+  checkAchievements(); save();
+}
+
+// ==================== MAP / EXPLORATION ====================
+const MAP_TILES = [];
+function generateMap(){
+  if(MAP_TILES.length > 0) return;
+  const tileTypes = ['empty','enemy','cache','resource','ruins','boss','shrine','trap'];
+  for(let i = 0; i < 50; i++){
+    const roll = Math.random();
+    let type = 'empty';
+    if(roll < 0.25) type = 'enemy';
+    else if(roll < 0.40) type = 'cache';
+    else if(roll < 0.50) type = 'resource';
+    else if(roll < 0.58) type = 'ruins';
+    else if(roll < 0.62) type = 'shrine';
+    else if(roll < 0.67) type = 'trap';
+    else if(i > 0 && i % 10 === 0) type = 'boss';
+    MAP_TILES.push({
+      id: i, type: type,
+      name: type === 'enemy' ? ROAMER_TYPES[Math.min(Math.floor(i/7), ROAMER_TYPES.length-1)].name :
+            type === 'boss' ? 'Map Guardian Lv.' + (i*2) :
+            type === 'cache' ? 'Supply Cache' :
+            type === 'resource' ? 'Resource Node' :
+            type === 'ruins' ? 'Ancient Ruins' :
+            type === 'shrine' ? 'Power Shrine' :
+            type === 'trap' ? 'Trap!' : 'Empty Wasteland'
+    });
+  }
+}
+
+function exploreTile(tileIdx){
+  generateMap();
+  if(tileIdx > (G.mapPosition||0) + 1){ toast('Explore tiles in order!','#f44'); return; }
+  if(G.exploredTiles && G.exploredTiles.includes(tileIdx)){ toast('Already explored!','#f44'); return; }
+  if(G.energy < 8){ toast('Need 8 energy','#f44'); return; }
+  G.energy -= 8;
+
+  const tile = MAP_TILES[tileIdx];
+  if(!G.exploredTiles) G.exploredTiles = [];
+  G.exploredTiles.push(tileIdx);
+  G.mapPosition = Math.max(G.mapPosition||0, tileIdx);
+
+  let msg = '';
+  switch(tile.type){
+    case 'empty': msg = 'Nothing here but dust.'; break;
+    case 'cache':
+      const cGold = 30 + G.level * 5 + tileIdx * 10;
+      G.gold += cGold; G.total_gold_earned += cGold;
+      msg = 'Found a supply cache! +' + cGold + ' gold';
+      if(Math.random() < 0.3){ G.gems += 1; msg += ' +1 gem'; }
+      break;
+    case 'resource':
+      const skIdx = [4,5,6,7][Math.floor(Math.random()*4)]; // gathering skills
+      addSkillXp(skIdx, 30 + tileIdx * 5);
+      msg = 'Resource node! +' + SKILL_NAMES[skIdx] + ' XP';
+      break;
+    case 'ruins':
+      const rGold = 50 + tileIdx * 15;
+      G.gold += rGold; addXp(20 + tileIdx * 5);
+      msg = 'Ancient ruins! +' + rGold + 'g +XP';
+      if(Math.random() < 0.4){
+        const gear = generateGear(G.level, false);
+        G.inventory.push(gear);
+        msg += ' + ' + gear.name;
+      }
+      break;
+    case 'shrine':
+      G.energy = Math.min(getMaxEnergy(), G.energy + 20);
+      const statBoost = ['power','defense','speed','luck'][Math.floor(Math.random()*4)];
+      G.stats[statBoost] += 1;
+      msg = 'Power Shrine! +20 energy, +1 ' + statBoost;
+      break;
+    case 'trap':
+      const trapDmg = 20 + tileIdx * 3;
+      G.energy = Math.max(0, G.energy - 10);
+      msg = 'Trap! Lost 10 energy. Be careful...';
+      break;
+    case 'enemy':
+      const eGold = 20 + tileIdx * 8;
+      const eXp = 15 + tileIdx * 5;
+      G.gold += eGold; addXp(eXp); G.total_kills++;
+      msg = 'Defeated ' + tile.name + '! +' + eGold + 'g +' + eXp + 'xp';
+      break;
+    case 'boss':
+      const bGold = 100 + tileIdx * 20;
+      const bXp = 80 + tileIdx * 15;
+      G.gold += bGold; addXp(bXp); G.bosses_killed++; G.total_kills++;
+      msg = 'Map Guardian defeated! +' + bGold + 'g +' + bXp + 'xp';
+      if(Math.random() < 0.6){
+        const gear = generateGear(G.level + 5, true);
+        G.inventory.push(gear);
+        msg += ' + ' + gear.name + '!';
+      }
+      G.gems += 2; msg += ' +2 gems';
+      break;
+  }
+  toast(msg, '#0ff');
+  checkAchievements(); save();
+}
+
+// ==================== CLAN SYSTEM ====================
+function createClan(name){
+  if(G.clanName){ toast('Already have a clan!','#f44'); return; }
+  if(G.gold < 500){ toast('Need 500 gold','#f44'); return; }
+  G.gold -= 500;
+  G.clanName = name;
+  G.clanCouncil = [];
+  G.clanPerks = {};
+  toast('Clan "' + name + '" founded!', '#0ff');
+  save();
+}
+
+function addToCouncil(fId){
+  if(G.clanCouncil.length >= 5){ toast('Council full (5 max)','#f44'); return; }
+  if(G.clanCouncil.includes(fId)){ toast('Already on council','#f44'); return; }
+  G.clanCouncil.push(fId);
+  const f = G.followers.find(x=>x.id===fId);
+  toast((f?f.name:'Follower') + ' joins the council!', '#0ff');
+  save();
+}
+
+function removeFromCouncil(fId){
+  G.clanCouncil = G.clanCouncil.filter(id => id !== fId);
+  save();
+}
+
+function getClanPower(){
+  let power = 0;
+  G.clanCouncil.forEach(id => {
+    const f = G.followers.find(x=>x.id===id);
+    if(f) power += f.level * f.power * (f.rarity + 1);
+  });
+  return power;
+}
+
+const CLAN_PERKS = [
+  {id:'clan_power',name:'War Council',desc:'+5% combat power',cost:300,effect:{power:0.05}},
+  {id:'clan_gold',name:'Trade Network',desc:'+5 gold/min',cost:400,effect:{gold:5}},
+  {id:'clan_xp',name:'Wisdom Circle',desc:'+5% XP',cost:500,effect:{xp:0.05}},
+  {id:'clan_luck',name:'Fortune\'s Favor',desc:'+8 luck',cost:600,effect:{luck:8}},
+  {id:'clan_defense',name:'Shield Wall',desc:'+15% city defense',cost:500,effect:{defense:0.15}}
+];
+
+function buyClanPerk(perkId){
+  if(!G.clanName){ toast('Need a clan first!','#f44'); return; }
+  const perk = CLAN_PERKS.find(p=>p.id===perkId);
+  if(G.clanPerks[perkId]){ toast('Already unlocked!','#f44'); return; }
+  if(G.gold < perk.cost){ toast('Need '+perk.cost+' gold','#f44'); return; }
+  G.gold -= perk.cost;
+  G.clanPerks[perkId] = 1;
+  toast('Clan perk unlocked: ' + perk.name, '#ffd700');
+  save();
+}
+
+function getClanBonus(type){
+  let total = 0;
+  CLAN_PERKS.forEach(p => {
+    if(G.clanPerks[p.id] && p.effect[type]) total += p.effect[type];
+  });
+  return total;
+}
+
+// ==================== ASCENSION / WORLD TIERS ====================
+function doAscension(){
+  if(!hasResearch('ascend')){ toast('Need Void Mastery research!','#f44'); return; }
+  if(G.level < 100){ toast('Need level 100!','#f44'); return; }
+  const newAscension = (G.ascension||0) + 1;
+  const newTier = newAscension + 1;
+  // Prestige but keep more
+  const name = G.name, cls = G.class;
+  const gems = G.gems + 30;
+  const achievements = G.achievements;
+  const totalPulls = G.total_gacha_pulls;
+  const research = G.research;
+  const clanName = G.clanName;
+  const clanPerks = G.clanPerks;
+  const oldPrestige = G.prestige;
+
+  G = newGame(name, cls);
+  G.ascension = newAscension;
+  G.worldTier = newTier;
+  G.prestige = oldPrestige;
+  G.prestige_bonus = oldPrestige * 10;
+  G.gems = gems;
+  G.achievements = achievements;
+  G.total_gacha_pulls = totalPulls;
+  G.research = research;
+  G.clanName = clanName;
+  G.clanPerks = clanPerks;
+  toast('ASCENSION ' + newAscension + '! World Tier ' + newTier + '! Enemies stronger, loot better!', '#ff2060');
+  save();
+}
+
+function getWorldTierMult(){
+  const tier = G.worldTier || 1;
+  return 1 + (tier - 1) * 0.25; // enemies +25% per tier
+}
+function getWorldTierLootBonus(){
+  const tier = G.worldTier || 1;
+  return 1 + (tier - 1) * 0.15; // loot +15% per tier
 }
 
 // ==================== DAILY LOGIN ====================
@@ -2167,6 +2603,13 @@ function showTab(tab, extra){
     case 'town': renderTown(c); break;
     case 'gacha': renderGacha(c); break;
     case 'profile': renderProfile(c); break;
+    case 'more': renderMore(c); break;
+    case 'research': renderResearch(c); break;
+    case 'explore': renderExplore(c); break;
+    case 'clan': renderClan(c); break;
+    case 'expeditions': renderExpeditions(c); break;
+    case 'recipes': renderRecipes(c); break;
+    case 'fusion': renderFusion(c); break;
     case 'followers_detail': renderFollowerDetail(c, extra); break;
     case 'inventory': renderInventory(c); break;
     default: renderMissions(c);
@@ -2894,6 +3337,215 @@ function allocStat(stat){
   showTab('profile');
 }
 
+// ==================== MORE MENU ====================
+function renderMore(c){
+  let html = '<h2>More</h2>';
+  // Active event
+  if(G.activeEvent && Date.now() < G.eventEndTime){
+    const timeLeft = Math.floor((G.eventEndTime - Date.now()) / 60000);
+    html += '<div class="card" style="border-color:#ffd700"><b style="color:#ffd700">EVENT: ' + G.activeEvent.name + '</b><br>';
+    html += G.activeEvent.desc + '<br>Ends in: ' + timeLeft + ' min</div>';
+  }
+  // Set bonuses
+  const sets = getSetBonus();
+  if(sets.length > 0){
+    html += '<div class="card"><b>Set Bonuses Active:</b><br>';
+    sets.forEach(s => { html += '<span style="color:#ffd700">' + s.name + ': ' + s.desc + '</span><br>'; });
+    html += '</div>';
+  }
+  // World tier
+  html += '<div class="card">World Tier: ' + (G.worldTier||1) + ' | Ascension: ' + (G.ascension||0);
+  html += '<br><span class="text-sm text-dim">Enemies +' + Math.floor(((G.worldTier||1)-1)*25) + '% | Loot +' + Math.floor(((G.worldTier||1)-1)*15) + '%</span></div>';
+  // Sub-pages
+  html += '<h3>Systems</h3>';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'profile\')">Profile & Potions</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'research\')">Research Lab</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'explore\')">Explore Map</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'expeditions\')">Expeditions</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'recipes\')">Crafting Recipes</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'fusion\')">Follower Fusion</button> ';
+  html += '<button class="btn btn-cyan" onclick="showTab(\'clan\')">Clan</button> ';
+  // Ascension
+  if(hasResearch('ascend') && G.level >= 100){
+    html += '<div class="card mt" style="border-color:#ff2060"><button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button></div>';
+  }
+  c.innerHTML = html;
+}
+
+function renderResearch(c){
+  let html = '<h2>Research Lab</h2>';
+  html += '<div class="text-sm text-dim mb">Requires Lab Lv.3+. Current: Lv.' + getAllBuildingLevel('lab') + '</div>';
+  TECH_TREE.forEach(t => {
+    const done = G.research[t.id];
+    const canResearch = !done && getAllBuildingLevel('lab') >= 3 && Object.keys(t.req).every(r => G.research[r]);
+    html += '<div class="card" style="border-color:' + (done?'#0f0':canResearch?'#0ff':'#333') + '">';
+    html += '<b>' + t.name + '</b> - ' + t.desc + '<br>';
+    // Show prereqs
+    if(Object.keys(t.req).length > 0){
+      html += '<span class="text-sm text-dim">Requires: ' + Object.keys(t.req).map(r => TECH_TREE.find(x=>x.id===r).name).join(', ') + '</span><br>';
+    }
+    if(done){ html += '<span style="color:#0f0">RESEARCHED</span>'; }
+    else if(canResearch){ html += '<button class="btn btn-cyan" onclick="researchTech(\''+t.id+'\');showTab(\'research\')">Research ('+t.cost+'g)</button>'; }
+    else { html += '<span class="text-dim">Locked</span>'; }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderExplore(c){
+  generateMap();
+  let html = '<h2>Exploration Map</h2>';
+  html += '<div class="text-sm text-dim mb">Explore the wasteland tile by tile. Costs 8 energy per tile.</div>';
+  html += '<div class="text-sm">Position: ' + (G.mapPosition||0) + '/50 tiles explored</div>';
+  // Show map as tiles
+  html += '<div class="card" style="font-family:monospace;font-size:11px;line-height:1.6">';
+  const start = Math.max(0, (G.mapPosition||0) - 3);
+  const end = Math.min(MAP_TILES.length, (G.mapPosition||0) + 8);
+  for(let i = start; i < end; i++){
+    const tile = MAP_TILES[i];
+    const explored = G.exploredTiles && G.exploredTiles.includes(i);
+    const canExplore = i <= (G.mapPosition||0) + 1 && !explored;
+    const icon = explored ? (tile.type==='enemy'?'X':tile.type==='boss'?'B':tile.type==='cache'?'$':tile.type==='resource'?'R':tile.type==='ruins'?'A':tile.type==='shrine'?'S':tile.type==='trap'?'!':'.') : '?';
+    const color = explored ? '#666' : canExplore ? '#0ff' : '#333';
+    html += '<span style="color:'+color+'">[' + (i < 10 ? '0' : '') + i + ':' + icon + ']</span> ';
+    if(canExplore){
+      html += '<button class="btn btn-cyan" style="padding:2px 8px;min-height:24px;font-size:10px" onclick="exploreTile('+i+');showTab(\'explore\')">Explore</button>';
+    } else if(explored){
+      html += '<span class="text-dim">' + tile.name + '</span>';
+    }
+    html += '<br>';
+  }
+  html += '</div>';
+  html += '<div class="text-sm text-dim">Legend: X=Enemy B=Boss $=Cache R=Resource A=Ruins S=Shrine !=Trap .=Empty ?=Unknown</div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderExpeditions(c){
+  let html = '<h2>Expeditions</h2>';
+  html += '<div class="text-sm text-dim mb">Send followers on timed missions. Max 3 active.</div>';
+  // Active expeditions
+  if(G.expeditions && G.expeditions.length > 0){
+    html += '<h3>Active (' + G.expeditions.length + '/3)</h3>';
+    G.expeditions.forEach((exp, i) => {
+      const type = EXPEDITION_TYPES[exp.type];
+      const timeLeft = Math.max(0, Math.floor((exp.endTime - Date.now()) / 1000));
+      const ready = timeLeft <= 0;
+      const fNames = exp.followerIds.map(id => { const f = G.followers.find(x=>x.id===id); return f ? f.name : '?'; }).join(', ');
+      html += '<div class="card" style="border-color:'+(ready?'#ffd700':'#333')+'">';
+      html += '<b>' + type.name + '</b> - ' + fNames + '<br>';
+      if(ready){ html += '<button class="btn btn-gold" onclick="collectExpedition('+i+');showTab(\'expeditions\')">COLLECT!</button>'; }
+      else { html += 'Time left: ' + Math.floor(timeLeft/60) + 'm ' + (timeLeft%60) + 's'; }
+      html += '</div>';
+    });
+  }
+  // Start new
+  if(!G.expeditions || G.expeditions.length < 3){
+    html += '<h3>Start Expedition</h3>';
+    const idleFollowers = G.followers.filter(f => f.assigned === 'idle' || f.assigned === 'combat');
+    if(idleFollowers.length === 0){
+      html += '<div class="text-dim">No idle followers available.</div>';
+    } else {
+      EXPEDITION_TYPES.forEach((type, ti) => {
+        html += '<div class="card">';
+        html += '<b>' + type.name + '</b> (' + type.desc + ') - EN:' + type.energy + '<br>';
+        html += '<span class="text-sm">Gold: ' + type.goldMin + '-' + type.goldMax + ' | XP: ' + type.xpMin + '-' + type.xpMax + ' | Gear: ' + Math.floor(type.gearChance*100) + '%</span><br>';
+        // Quick send first idle follower
+        const first = idleFollowers[0];
+        html += '<button class="btn btn-cyan" onclick="startExpedition('+ti+',['+first.id+']);showTab(\'expeditions\')">Send ' + first.name + '</button>';
+        if(idleFollowers.length > 1){
+          const ids = idleFollowers.slice(0,3).map(f=>f.id);
+          html += ' <button class="btn btn-green" onclick="startExpedition('+ti+','+JSON.stringify(ids)+');showTab(\'expeditions\')">Send '+Math.min(3,idleFollowers.length)+' followers</button>';
+        }
+        html += '</div>';
+      });
+    }
+  }
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderRecipes(c){
+  let html = '<h2>Crafting Recipes</h2>';
+  html += '<div class="text-sm text-dim mb">Multi-skill recipes for powerful gear.</div>';
+  RECIPES.forEach((r, i) => {
+    const canCraft = Object.keys(r.reqs).every(sk => G.skillLevels[parseInt(sk)] >= r.reqs[sk]);
+    html += '<div class="card" style="border-color:' + (canCraft?'#ffd700':'#333') + '">';
+    html += '<span class="' + RARITIES[r.rarity] + '">' + r.name + '</span> [' + r.slot + ']<br>';
+    html += '<span class="text-sm">Requires: ' + r.desc + '</span><br>';
+    html += '<span class="text-sm">Cost: ' + r.cost + 'g</span> ';
+    if(canCraft){ html += '<button class="btn btn-gold" onclick="craftRecipe('+i+');showTab(\'recipes\')">Craft!</button>'; }
+    else { html += '<span class="text-dim">Skills too low</span>'; }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderFusion(c){
+  let html = '<h2>Follower Fusion</h2>';
+  html += '<div class="text-sm text-dim mb">Combine 3 same-rarity followers into 1 of the next rarity.</div>';
+  // Group followers by rarity
+  for(let r = 0; r < 5; r++){
+    const pool = G.followers.filter(f => f.rarity === r);
+    if(pool.length < 3) continue;
+    html += '<div class="card">';
+    html += '<b class="' + RARITIES[r] + '">' + RARITY_NAMES[r] + '</b> (' + pool.length + ' available) → <span class="' + RARITIES[r+1] + '">' + RARITY_NAMES[r+1] + '</span><br>';
+    // Fuse first 3
+    const ids = pool.slice(0,3);
+    html += '<span class="text-sm">' + ids.map(f=>f.name).join(' + ') + '</span> ';
+    html += '<button class="btn btn-gold" onclick="fuseFollowers('+ids[0].id+','+ids[1].id+','+ids[2].id+');showTab(\'fusion\')">FUSE!</button>';
+    html += '</div>';
+  }
+  const noFusable = [0,1,2,3,4].every(r => G.followers.filter(f=>f.rarity===r).length < 3);
+  if(noFusable) html += '<div class="text-dim">Need 3 followers of the same rarity to fuse.</div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderClan(c){
+  let html = '<h2>Clan</h2>';
+  if(!G.clanName){
+    html += '<div class="card">';
+    html += '<div class="text-sm text-dim mb">Found a clan to unlock perks and organize your followers.</div>';
+    html += '<button class="btn btn-cyan" onclick="var n=prompt(\'Name your clan:\');if(n)createClan(n);showTab(\'clan\')">Found Clan (500g)</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="card"><b style="color:#0ff">' + G.clanName + '</b><br>';
+    html += 'Clan Power: ' + getClanPower() + '</div>';
+    // Council
+    html += '<h3>Council (' + G.clanCouncil.length + '/5)</h3>';
+    G.clanCouncil.forEach(id => {
+      const f = G.followers.find(x=>x.id===id);
+      if(!f) return;
+      html += '<div class="follower-card"><span class="' + RARITIES[f.rarity] + '">' + f.name + '</span> Lv.' + f.level;
+      html += ' <button class="btn btn-red" style="padding:2px 6px;min-height:24px" onclick="removeFromCouncil('+f.id+');showTab(\'clan\')">Remove</button></div>';
+    });
+    if(G.clanCouncil.length < 5){
+      const available = G.followers.filter(f => !G.clanCouncil.includes(f.id)).sort((a,b) => (b.rarity*100+b.level) - (a.rarity*100+a.level));
+      if(available.length > 0){
+        html += '<div class="text-sm mt">Add to council:</div>';
+        available.slice(0,5).forEach(f => {
+          html += '<button class="btn" style="padding:4px 8px;min-height:30px" onclick="addToCouncil('+f.id+');showTab(\'clan\')">' + f.name + ' [' + RARITY_NAMES[f.rarity] + ' Lv.' + f.level + ']</button> ';
+        });
+      }
+    }
+    // Perks
+    html += '<h3>Clan Perks</h3>';
+    CLAN_PERKS.forEach(p => {
+      const owned = G.clanPerks[p.id];
+      html += '<div class="card" style="border-color:'+(owned?'#0f0':'#333')+'">';
+      html += '<b>' + p.name + '</b> - ' + p.desc + '<br>';
+      if(owned){ html += '<span style="color:#0f0">UNLOCKED</span>'; }
+      else { html += '<button class="btn btn-cyan" onclick="buyClanPerk(\''+p.id+'\');showTab(\'clan\')">Unlock ('+p.cost+'g)</button>'; }
+      html += '</div>';
+    });
+  }
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
 // ==================== CHARACTER CREATION ====================
 function showCharacterCreation(){
   const c = document.getElementById('content');
@@ -3010,6 +3662,18 @@ function gameLoop(){
         if(Math.random() >= decayReduction){
           f.happiness = Math.max(0, f.happiness - 1);
         }
+      }
+    });
+  }
+
+  // Check events every 5 min
+  if(energyTimer % 300 === 0) checkEvent();
+
+  // Check expeditions (notify when done)
+  if(G.expeditions && energyTimer % 10 === 0){
+    G.expeditions.forEach((exp, i) => {
+      if(!exp.collected && Date.now() >= exp.endTime){
+        toast('Expedition ready to collect!', '#ffd700');
       }
     });
   }
