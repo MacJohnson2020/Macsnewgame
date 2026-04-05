@@ -376,6 +376,8 @@ function newGame(name, cls){
     // Ascension
     ascension: 0,
     worldTier: 1,
+    arenaFloor: 1,
+    resources: {ore:0,scrap:0,data:0,bio:0},
     // Dungeon keys
     dungeonKeys: { basic:0, advanced:0, nightmare:0 },
     // Hall of fame
@@ -576,6 +578,14 @@ function getGoldPerMin(){
   if(G.skillLevels[4] >= 99) base += 5;
   // Scavenger Lord 99: passive gold income
   if(G.skillLevels[5] >= 99) base += 8;
+  // Trade routes
+  base += getTradeRouteIncome();
+  // Research & prestige bonuses
+  base += getResearchBonus('goldPerMin');
+  base += Math.floor(getPrestigeBonus('goldMin'));
+  // Relic & clan bonuses
+  base += getRelicBonus('goldMin');
+  base += getClanBonus('gold');
   return base;
 }
 
@@ -1479,6 +1489,13 @@ function trainSkill(idx){
   // Resource rewards
   const goldGain = Math.floor(2 + G.skillLevels[idx] * 0.5);
   G.gold += goldGain;
+  // Generate resources by skill type
+  if(idx === 4) addResource('ore', 1 + Math.floor(G.skillLevels[4] * 0.1)); // Mining -> ore
+  if(idx === 5) addResource('scrap', 1 + Math.floor(G.skillLevels[5] * 0.1)); // Scavenging -> scrap
+  if(idx === 12) addResource('data', 1 + Math.floor(G.skillLevels[12] * 0.1)); // Hacking -> data
+  if(idx === 6) addResource('bio', 1 + Math.floor(G.skillLevels[6] * 0.1)); // Harvesting -> bio
+  // Key drop chance from skill training
+  if(Math.random() < 0.005){ const k = G.level>=60?'nightmare':G.level>=30?'advanced':'basic'; G.dungeonKeys[k]=(G.dungeonKeys[k]||0)+1; toast('+1 '+KEY_TYPES[k].name+' from training!','#0ff'); }
 
   // Skill-specific bonuses
   // Hacking: gem chance
@@ -2721,6 +2738,295 @@ function getIdleSummary(){
   return { goldMin, energyRate, autoBattleActive, expeditionsActive, followerHappiness, passiveXpMin };
 }
 
+// ==================== PRESTIGE PERKS ====================
+const PRESTIGE_PERKS = [
+  {id:'pp_xp',name:'Veteran Wisdom',desc:'+5% XP per prestige',effect:'xp',perLevel:0.05},
+  {id:'pp_gold',name:'Golden Touch',desc:'+3 gold/min per prestige',effect:'goldMin',perLevel:3},
+  {id:'pp_energy',name:'Void Reserves',desc:'+10 max energy per prestige',effect:'maxEnergy',perLevel:10},
+  {id:'pp_startgems',name:'Gem Cache',desc:'+5 starting gems per prestige',effect:'startGems',perLevel:5},
+  {id:'pp_follower',name:'Leadership Legacy',desc:'+5% follower power per prestige',effect:'followerPow',perLevel:0.05},
+  {id:'pp_luck',name:'Fortune Favors',desc:'+3 luck per prestige',effect:'luck',perLevel:3},
+  {id:'pp_ticket',name:'Fate\'s Hand',desc:'+1 ticket per prestige',effect:'startTickets',perLevel:1},
+  {id:'pp_defense',name:'Iron Legacy',desc:'+10% city defense per prestige',effect:'cityDef',perLevel:0.1}
+];
+
+function getPrestigeBonus(effectKey){
+  let total = 0;
+  PRESTIGE_PERKS.forEach(p => {
+    if(p.effect === effectKey) total += p.perLevel * G.prestige;
+  });
+  return total;
+}
+
+// ==================== BOSS SCHEDULE ====================
+const DAILY_BOSSES = [
+  {name:'Rust Colossus',hp:20000,atk:80,gold:400,xp:300,desc:'Slow but devastating'},
+  {name:'Neon Phantom',hp:15000,atk:120,gold:350,xp:350,desc:'Fast and evasive'},
+  {name:'Void Hydra',hp:30000,atk:60,gold:500,xp:400,desc:'Regenerates HP each turn'},
+  {name:'Iron Titan',hp:25000,atk:100,gold:450,xp:350,desc:'Armored. Reduce damage taken'},
+  {name:'Corrupted Wyrm',hp:35000,atk:90,gold:600,xp:500,desc:'Poisons you each turn'},
+  {name:'Nexus Sentinel',hp:40000,atk:110,gold:700,xp:600,desc:'Adapts to your attacks'},
+  {name:'Abyssal Emperor',hp:50000,atk:130,gold:1000,xp:800,desc:'The ultimate daily challenge'}
+];
+const WEEKLY_BOSS = {name:'THE VOID GOD',hp:200000,atk:200,gold:5000,xp:3000,desc:'Weekly mega boss. Bring everything.'};
+
+function getDailyBoss(){ return DAILY_BOSSES[Math.floor(Date.now()/(86400000)) % DAILY_BOSSES.length]; }
+function getWeeklyBoss(){ return WEEKLY_BOSS; }
+
+function fightScheduledBoss(type){
+  const boss = type === 'weekly' ? getWeeklyBoss() : getDailyBoss();
+  const tierMult = getWorldTierMult();
+  if(G.energy < 20){ toast('Need 20 energy','#f44'); return; }
+  G.energy -= 20;
+
+  const power = getCombatPower();
+  const def = getCombatDefense();
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  let playerHp = playerMaxHp;
+  let enemyHp = Math.floor(boss.hp * tierMult);
+  const enemyMaxHp = enemyHp;
+  let log = [];
+  log.push('=== ' + boss.name + (type==='weekly'?' [WEEKLY]':' [DAILY]') + ' ===');
+  log.push('HP: ' + enemyHp + ' | ATK: ' + Math.floor(boss.atk * tierMult));
+
+  let turn = 0;
+  while(playerHp > 0 && enemyHp > 0 && turn < 60){
+    turn++;
+    let dmg = Math.max(1, power - Math.floor(boss.atk * 0.1 * tierMult) + Math.floor(Math.random()*8));
+    // Bestiary bonus
+    dmg = Math.floor(dmg * getBestiaryBonus(boss.name));
+    // Class passives
+    if(G.class === 'striker' && enemyHp < enemyMaxHp * 0.5) dmg = Math.floor(dmg * 1.15);
+    if(G.class === 'berserker') dmg = Math.floor(dmg * (1 + (1 - playerHp/playerMaxHp)));
+    if(G.class === 'ranger' && turn === 1) dmg *= 2;
+    if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg * 2); log.push('T'+turn+': CRIT '+dmg+'!'); }
+    else { log.push('T'+turn+': Hit '+dmg); }
+    if(G.class === 'necromancer') playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg*0.08));
+    // Relic heal
+    if(getRelicBonus('regen') > 0) playerHp = Math.min(playerMaxHp, playerHp + Math.floor(playerMaxHp * getRelicBonus('regen')));
+    // Boss special: Hydra regen
+    if(boss.name === 'Void Hydra') enemyHp = Math.min(enemyMaxHp, enemyHp + Math.floor(enemyMaxHp * 0.02));
+    enemyHp -= dmg;
+    if(enemyHp <= 0) break;
+
+    let eDmg = Math.max(1, Math.floor(boss.atk * tierMult) - Math.floor(def * 0.2) + Math.floor(Math.random()*5));
+    // Iron Titan: extra armor
+    if(boss.name === 'Iron Titan') eDmg = Math.floor(eDmg * 0.7);
+    if(G.class === 'paladin' && turn === 1) eDmg = 0;
+    if(G.class === 'tank' && playerHp > playerMaxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
+    // Corrupted Wyrm poison
+    if(boss.name === 'Corrupted Wyrm') playerHp -= Math.floor(playerMaxHp * 0.03);
+    let dodgeRate = Math.min(30, getCombatSpeed() * 0.5);
+    if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
+    if(eDmg > 0 && Math.random()*100 < dodgeRate){ log.push('T'+turn+': DODGE!'); }
+    else if(eDmg > 0){ playerHp -= eDmg; log.push('T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')'); }
+    if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0){
+      G.potions.hp--; playerHp = Math.min(playerMaxHp, playerHp + Math.floor(playerMaxHp*0.3));
+      log.push('  Auto-potion! +HP');
+    }
+  }
+
+  if(enemyHp <= 0){
+    log.push('=== ' + boss.name + ' DEFEATED! ===');
+    const goldR = Math.floor(boss.gold * tierMult);
+    const xpR = Math.floor(boss.xp * tierMult);
+    G.gold += goldR; G.total_gold_earned += goldR; addXp(xpR);
+    G.total_kills++; G.bosses_killed++;
+    log.push('+' + goldR + 'g +' + xpR + 'xp');
+    recordBestiaryKill(boss.name, goldR, xpR);
+    updateChallengeProgress('kills', 1);
+    updateChallengeProgress('bosses', 1);
+    updateRecord('highestHit', dmg);
+    // Gear drop
+    const gear = generateGear(G.level + 5, true);
+    G.inventory.push(gear);
+    log.push('LOOT: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']');
+    // Ticket
+    const tChance = type === 'weekly' ? 0.2 : 0.08;
+    if(Math.random() < tChance){ G.tickets1x=(G.tickets1x||0)+1; log.push('+1 Summon Ticket!'); }
+    if(type === 'weekly' && Math.random() < 0.1){ G.tickets10x=(G.tickets10x||0)+1; log.push('+10x Ticket!!'); }
+    // Relic chance
+    if(Math.random() < (type==='weekly' ? 0.15 : 0.05)){
+      const relic = dropRelic();
+      if(relic) log.push('RELIC: ' + relic.name + '!');
+    }
+    // Key drop
+    if(Math.random() < 0.3){
+      const kType = G.level >= 60 ? 'nightmare' : G.level >= 30 ? 'advanced' : 'basic';
+      G.dungeonKeys[kType] = (G.dungeonKeys[kType]||0) + 1;
+      log.push('+1 ' + KEY_TYPES[kType].name);
+    }
+  } else {
+    log.push('=== DEFEAT (dealt ' + (enemyMaxHp - enemyHp) + ' damage) ===');
+  }
+  checkAchievements(); save();
+  // Show result
+  let html = '<h2>' + (enemyHp<=0?'Victory!':'Defeat') + '</h2>';
+  html += '<div class="log" style="max-height:300px">';
+  log.forEach(line => {
+    let cls = ''; if(line.includes('CRIT')||line.includes('Hit '))cls='dmg-enemy';
+    else if(line.includes('Took '))cls='dmg-player'; else if(line.includes('DODGE')||line.includes('DEFEATED')||line.includes('LOOT')||line.includes('RELIC'))cls='heal';
+    html += '<div class="log-line '+cls+'">'+line+'</div>';
+  });
+  html += '</div><div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== NAMED GEAR SETS ====================
+const GEAR_SETS = [
+  {name:'Void Walker',slots:{weapon:'Void Edge',armor:'Void Plate',shield:'Void Ward',implant:'Void Eye'},
+   bonus2:'+8% power',bonus3:'+10% defense',bonus4:'+15% all stats, +5% crit',rarity:2},
+  {name:'Nexus Commander',slots:{weapon:'Nexus Cannon',armor:'Nexus Shell',shield:'Nexus Aegis',implant:'Nexus Core'},
+   bonus2:'+10% power',bonus3:'+12% defense',bonus4:'+18% all stats, +3 gold/min',rarity:3},
+  {name:'Abyssal Lord',slots:{weapon:'Abyssal Reaper',armor:'Abyssal Shroud',shield:'Abyssal Wall',implant:'Abyssal Mind'},
+   bonus2:'+12% power',bonus3:'+15% defense',bonus4:'+20% all, life steal 3%',rarity:4},
+  {name:'GODSLAYER',slots:{weapon:'GODSLAYER',armor:'VOIDBORN MANTLE',shield:'ETERNAL AEGIS',implant:'OMNISCIENT EYE'},
+   bonus2:'+15% power',bonus3:'+18% defense',bonus4:'+25% all, +10% ticket drop',rarity:5}
+];
+
+function getNamedSetBonuses(){
+  const bonuses = [];
+  GEAR_SETS.forEach(set => {
+    let count = 0;
+    for(const slot in set.slots){
+      if(G.gear[slot] && G.gear[slot].name === set.slots[slot]) count++;
+    }
+    if(count >= 2) bonuses.push({name:set.name,pieces:count,bonus:count>=4?set.bonus4:count>=3?set.bonus3:set.bonus2});
+  });
+  return bonuses;
+}
+
+// ==================== ARENA TOWER ====================
+function getArenaFloorEnemy(floor){
+  const hp = Math.floor(100 * Math.pow(1.12, floor));
+  const atk = Math.floor(10 * Math.pow(1.1, floor));
+  const names = ['Arena Grunt','Arena Warrior','Arena Champion','Arena Elite','Arena Boss','Arena Legend','Arena Titan','Arena God'];
+  const name = names[Math.min(Math.floor(floor/10), names.length-1)];
+  return { name, hp, atk, gold: 10 + floor * 5, xp: 10 + floor * 4 };
+}
+
+function fightArenaFloor(){
+  if(!G.arenaFloor) G.arenaFloor = 1;
+  if(G.energy < 8){ toast('Need 8 energy','#f44'); return; }
+  G.energy -= 8;
+  const floor = G.arenaFloor;
+  const enemy = getArenaFloorEnemy(floor);
+  const power = getCombatPower();
+  const def = getCombatDefense();
+  let playerHp = 50 + G.level * 10 + G.stats.defense * 3;
+  const playerMaxHp = playerHp;
+  let enemyHp = enemy.hp;
+  let log = [];
+  log.push('=== Arena Floor ' + floor + ': ' + enemy.name + ' ===');
+
+  let turn = 0;
+  while(playerHp > 0 && enemyHp > 0 && turn < 40){
+    turn++;
+    let dmg = Math.max(1, power - Math.floor(enemy.atk * 0.15) + Math.floor(Math.random()*5));
+    dmg = Math.floor(dmg * getBestiaryBonus(enemy.name));
+    if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg * 2); log.push('T'+turn+': CRIT '+dmg); }
+    else log.push('T'+turn+': Hit '+dmg);
+    enemyHp -= dmg;
+    if(enemyHp <= 0) break;
+    let eDmg = Math.max(1, enemy.atk - Math.floor(def * 0.3) + Math.floor(Math.random()*3));
+    if(Math.random()*100 < Math.min(30, getCombatSpeed()*0.5)){ log.push('T'+turn+': DODGE'); }
+    else { playerHp -= eDmg; log.push('T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')'); }
+  }
+
+  if(enemyHp <= 0){
+    log.push('=== Floor ' + floor + ' cleared! ===');
+    G.arenaFloor++;
+    G.gold += enemy.gold; G.total_gold_earned += enemy.gold; addXp(enemy.xp);
+    G.total_kills++;
+    recordBestiaryKill(enemy.name, enemy.gold, enemy.xp);
+    log.push('+' + enemy.gold + 'g +' + enemy.xp + 'xp');
+    // Milestone rewards every 10 floors
+    if(floor % 10 === 0){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      log.push('+1 Summon Ticket! (Floor ' + floor + ' milestone)');
+      if(floor % 50 === 0){ G.tickets10x = (G.tickets10x||0) + 1; log.push('+10x Ticket!! (Floor ' + floor + ')'); }
+      const relic = dropRelic();
+      if(relic) log.push('RELIC: ' + relic.name + '!');
+    }
+    // Key drops
+    if(Math.random() < 0.08){ const k = G.level>=60?'nightmare':G.level>=30?'advanced':'basic'; G.dungeonKeys[k]=(G.dungeonKeys[k]||0)+1; log.push('+1 '+KEY_TYPES[k].name); }
+  } else {
+    log.push('=== Defeated on floor ' + floor + ' ===');
+  }
+  updateRecord('highestHit', Math.max(...log.filter(l=>l.includes('CRIT')||l.includes('Hit ')).map(l=>parseInt(l.match(/\d+$/)||[0]))));
+  checkAchievements(); save();
+  let html = '<h2>Arena Floor '+floor+': '+(enemyHp<=0?'Cleared!':'Defeat')+'</h2>';
+  html += '<div class="log" style="max-height:250px">';
+  log.forEach(l => { let c=''; if(l.includes('CRIT')||l.includes('Hit '))c='dmg-enemy'; else if(l.includes('Took'))c='dmg-player'; else if(l.includes('cleared')||l.includes('LOOT')||l.includes('Ticket')||l.includes('RELIC'))c='heal'; html+='<div class="log-line '+c+'">'+l+'</div>'; });
+  html += '</div><div class="mt"><button class="btn btn-cyan" onclick="fightArenaFloor()">Next Floor</button> <button class="btn" onclick="showTab(\'missions\')">Leave</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== RESOURCES ====================
+const RESOURCE_TYPES = ['ore','scrap','data','bio'];
+function getResources(){
+  if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
+  return G.resources;
+}
+function addResource(type, amount){
+  if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
+  G.resources[type] = (G.resources[type]||0) + amount;
+}
+// Skill training generates resources
+// Mining -> ore, Scavenging -> scrap, Hacking -> data, Harvesting -> bio
+
+// ==================== ACHIEVEMENT TIERS ====================
+function getAchievementTier(id){
+  // Based on how many achievements you have
+  const count = G.achievements.length;
+  if(count >= 60) return {tier:'gold',color:'#ffd700',mult:3};
+  if(count >= 30) return {tier:'silver',color:'#ccc',mult:2};
+  if(count >= 10) return {tier:'bronze',color:'#cd7f32',mult:1.5};
+  return {tier:'none',color:'#666',mult:1};
+}
+
+// ==================== TRADE ROUTES ====================
+function getTradeRouteIncome(){
+  if(G.cities.length < 2) return 0;
+  let income = 0;
+  // Each pair of cities generates trade income based on their combined building levels
+  for(let i = 0; i < G.cities.length; i++){
+    for(let j = i+1; j < G.cities.length; j++){
+      const c1 = G.cities[i], c2 = G.cities[j];
+      const c1Total = Object.values(c1.buildings).reduce((s,v)=>s+v,0);
+      const c2Total = Object.values(c2.buildings).reduce((s,v)=>s+v,0);
+      income += Math.floor((c1Total + c2Total) * 0.3);
+      // Trade specialty doubles route income
+      if(c1.specialty === 'trade' || c2.specialty === 'trade') income = Math.floor(income * 1.5);
+    }
+  }
+  return income;
+}
+
+// ==================== SKILL COMBOS ====================
+const SKILL_COMBOS = [
+  {skills:[0,3],lvs:[25,25],name:'Blade Dance',desc:'+8% melee crit',bonus:{meleeCrit:8}},
+  {skills:[1,7],lvs:[25,25],name:'Tracker Shot',desc:'+10% ranged dmg to beasts',bonus:{rangedDmg:0.1}},
+  {skills:[2,10],lvs:[30,30],name:'Toxic Corruption',desc:'DoT +50% stronger',bonus:{dotMult:1.5}},
+  {skills:[4,8],lvs:[30,30],name:'Master Forger',desc:'+1 gear stat on craft',bonus:{craftBonus:1}},
+  {skills:[5,7],lvs:[25,25],name:'Treasure Hunter',desc:'+5% loot drop rate',bonus:{lootDrop:0.05}},
+  {skills:[9,8],lvs:[40,40],name:'Industrial',desc:'-10% all building costs',bonus:{buildCost:-0.1}},
+  {skills:[12,3],lvs:[30,30],name:'Ghost Hack',desc:'+5% dodge & gem find',bonus:{dodge:5,gemFind:0.05}},
+  {skills:[13,14],lvs:[35,35],name:'Iron Commander',desc:'+15% follower def',bonus:{followerDef:0.15}},
+  {skills:[10,6],lvs:[40,40],name:'Herbalist',desc:'Potions 25% more effective',bonus:{potionPow:0.25}},
+  {skills:[0,1,2,3],lvs:[50,50,50,50],name:'Combat Master',desc:'+10% all combat stats',bonus:{allCombat:0.1}}
+];
+
+function getActiveSkillCombos(){
+  return SKILL_COMBOS.filter(combo => {
+    return combo.skills.every((sk,i) => G.skillLevels[sk] >= combo.lvs[i]);
+  });
+}
+
+function hasSkillCombo(name){
+  return getActiveSkillCombos().some(c => c.name === name);
+}
+
 // ==================== DAILY LOGIN ====================
 const DAILY_REWARDS = [
   {day:1,gold:50,gems:3,t1x:0,desc:'50 gold + 3 gems'},
@@ -3275,6 +3581,45 @@ function renderMissions(c){
     html += 'Zone: ' + G.autoBattle.zoneName + ' | Mission: ' + G.autoBattle.missionName + '<br>';
     html += 'Earned: ' + G.autoBattleEarnings.gold + 'g | ' + G.autoBattleEarnings.kills + ' kills | ' + (G.autoBattleEarnings.items||0) + ' items<br>';
     html += '<button class="btn btn-red" onclick="stopAutoBattle()">Stop Auto-Battle</button>';
+    html += '</div>';
+  }
+
+  // Arena Tower
+  html += '<div class="card" style="border-color:#af0">';
+  html += '<h3 style="color:#af0">Arena Tower - Floor ' + (G.arenaFloor||1) + '</h3>';
+  const arenaEnemy = getArenaFloorEnemy(G.arenaFloor||1);
+  html += '<div class="text-sm">Next: ' + arenaEnemy.name + ' (HP:' + arenaEnemy.hp + ' ATK:' + arenaEnemy.atk + ')</div>';
+  html += '<div class="text-sm text-dim">Milestone rewards every 10 floors. Tickets at 10/20/30... 10x at 50/100...</div>';
+  html += '<button class="btn btn-green" onclick="fightArenaFloor()">Fight Floor ' + (G.arenaFloor||1) + ' (8 EN)</button>';
+  html += '</div>';
+
+  // Daily & Weekly Boss
+  const dBoss = getDailyBoss();
+  const wBoss = getWeeklyBoss();
+  html += '<div class="card" style="border-color:#f80">';
+  html += '<h3 style="color:#f80">Daily Boss: ' + dBoss.name + '</h3>';
+  html += '<div class="text-sm">' + dBoss.desc + ' | HP:' + dBoss.hp + ' ATK:' + dBoss.atk + '</div>';
+  html += '<button class="btn btn-red" onclick="fightScheduledBoss(\'daily\')">Fight (20 EN)</button>';
+  html += '</div>';
+  html += '<div class="card" style="border-color:#ff2060">';
+  html += '<h3 style="color:#ff2060">Weekly Boss: ' + wBoss.name + '</h3>';
+  html += '<div class="text-sm">' + wBoss.desc + ' | HP:' + wBoss.hp + ' ATK:' + wBoss.atk + '</div>';
+  html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="fightScheduledBoss(\'weekly\')">Fight (20 EN)</button>';
+  html += '</div>';
+
+  // Skill combos display
+  const activeCombos = getActiveSkillCombos();
+  if(activeCombos.length > 0){
+    html += '<div class="card"><b>Skill Combos Active:</b><br>';
+    activeCombos.forEach(c => { html += '<span style="color:#ffd700">' + c.name + ': ' + c.desc + '</span><br>'; });
+    html += '</div>';
+  }
+
+  // Named set bonuses
+  const namedSets = getNamedSetBonuses();
+  if(namedSets.length > 0){
+    html += '<div class="card"><b>Gear Set Bonuses:</b><br>';
+    namedSets.forEach(s => { html += '<span style="color:#ffd700">' + s.name + ' (' + s.pieces + 'pc): ' + s.bonus + '</span><br>'; });
     html += '</div>';
   }
 
@@ -4631,6 +4976,8 @@ function migrateOldSave(){
   if(!G.bestiary) G.bestiary = {};
   if(!G.challenges) G.challenges = [];
   if(!G.marketStock) G.marketStock = [];
+  if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
+  if(!G.arenaFloor) G.arenaFloor = 1;
   G.followers.forEach(f => {
     if(!f.gear) f.gear = {};
     if(f.cityIdx === undefined) f.cityIdx = 0;
