@@ -97,11 +97,21 @@ select { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; fon
 // ==================== GAME DATA ====================
 const CLASSES = {
   striker: { name:'Striker', desc:'High damage, fast attacks', power:3, defense:1, speed:3, luck:1,
-    passive:'Adrenaline Rush', passiveDesc:'+15% dmg for 3 turns after killing an enemy', passiveColor:'#f44' },
+    passive:'Adrenaline Rush', passiveDesc:'+15% dmg when enemy below 50% HP', passiveColor:'#f44' },
   tank: { name:'Tank', desc:'Tanky, slow but strong', power:2, defense:4, speed:1, luck:1,
-    passive:'Fortified', passiveDesc:'Take 20% less dmg when above 70% HP', passiveColor:'#4af' },
+    passive:'Fortified', passiveDesc:'20% less dmg when above 70% HP', passiveColor:'#4af' },
   phantom: { name:'Phantom', desc:'Evasive, lucky, crits', power:2, defense:1, speed:2, luck:3,
-    passive:'Ghost Step', passiveDesc:'25% dodge on first 2 turns of combat', passiveColor:'#b026ff' }
+    passive:'Ghost Step', passiveDesc:'25% dodge on first 2 turns', passiveColor:'#b026ff' },
+  berserker: { name:'Berserker', desc:'Gets stronger as HP drops', power:4, defense:1, speed:2, luck:1,
+    passive:'Blood Rage', passiveDesc:'+1% dmg per 1% HP missing', passiveColor:'#f80' },
+  engineer: { name:'Engineer', desc:'Boosts buildings and followers', power:1, defense:3, speed:1, luck:3,
+    passive:'Overclock', passiveDesc:'+15% follower power, -10% building costs', passiveColor:'#0f0' },
+  necromancer: { name:'Necromancer', desc:'Corruption specialist, life steal', power:3, defense:1, speed:1, luck:3,
+    passive:'Soul Siphon', passiveDesc:'Heal 8% of damage dealt', passiveColor:'#a0f' },
+  ranger: { name:'Ranger', desc:'Fast ranged attacker, high dodge', power:2, defense:1, speed:4, luck:1,
+    passive:'Quick Draw', passiveDesc:'Attack twice on first turn', passiveColor:'#af0' },
+  paladin: { name:'Paladin', desc:'Balanced holy warrior', power:2, defense:3, speed:1, luck:2,
+    passive:'Divine Shield', passiveDesc:'Block first hit completely', passiveColor:'#ff0' }
 };
 
 // Skills: 0-3 Combat, 4-7 Gathering, 8-11 Production, 12-14 Utility
@@ -221,8 +231,54 @@ const RARITIES = ['common','uncommon','rare','epic','legendary','mythic'];
 const RARITY_MULT = [1, 1.5, 2.2, 3.5, 5, 8];
 const RARITY_NAMES = ['Common','Uncommon','Rare','Epic','Legendary','Mythic'];
 
-const FOLLOWER_NAMES = ['Kira','Rex','Nova','Bolt','Shade','Ember','Frost','Nyx','Axel','Vex','Luna','Drift','Scar','Echo','Blitz','Rune','Cipher','Jinx','Havoc','Onyx','Zara','Pike','Ash','Wraith','Pulse'];
-const FOLLOWER_CLASSES = ['Fighter','Miner','Crafter','Hacker','Scout'];
+const FOLLOWER_NAMES = ['Kira','Rex','Nova','Bolt','Shade','Ember','Frost','Nyx','Axel','Vex','Luna','Drift','Scar','Echo','Blitz','Rune','Cipher','Jinx','Havoc','Onyx','Zara','Pike','Ash','Wraith','Pulse','Viper','Storm','Cinder','Glitch','Haze','Torque','Flux','Aegis','Riven','Sable'];
+const FOLLOWER_CLASSES = ['Fighter','Miner','Crafter','Hacker','Scout','Medic','Guardian','Assassin'];
+const FOLLOWER_CLASS_BONUSES = {
+  Fighter: {bestBuilding:'barracks',bonus:0.5,desc:'+50% in Barracks',combatBonus:0.1},
+  Miner: {bestBuilding:'foundry',bonus:0.5,desc:'+50% in Foundry',combatBonus:0},
+  Crafter: {bestBuilding:'workshop',bonus:0.5,desc:'+50% in Workshop',combatBonus:0},
+  Hacker: {bestBuilding:'lab',bonus:0.5,desc:'+50% in Lab',combatBonus:0.05},
+  Scout: {bestBuilding:'shrine',bonus:0.4,desc:'+40% in Shrine',combatBonus:0.08},
+  Medic: {bestBuilding:'tavern',bonus:0.5,desc:'+50% in Tavern',combatBonus:0,healBonus:0.05},
+  Guardian: {bestBuilding:'vault',bonus:0.5,desc:'+50% in Vault/Garrison',combatBonus:0,defBonus:0.15},
+  Assassin: {bestBuilding:'barracks',bonus:0.3,desc:'+30% in Barracks',combatBonus:0.2}
+};
+const FOLLOWER_ABILITIES = {
+  Fighter: ['Power Strike','War Cry','Shield Bash','Berserker Rage','Titan Blow','Godly Slash'],
+  Miner: ['Ore Sense','Deep Dig','Gemfinder','Rich Vein','Crystal Strike','Mythic Vein'],
+  Crafter: ['Quick Hands','Efficient','Masterwork','Dual Craft','Perfect Form','Legendary Craft'],
+  Hacker: ['Data Siphon','Firewall','Exploit','System Crash','Neural Hack','God Mode'],
+  Scout: ['Eagle Eye','Quick Step','Tracker','Sixth Sense','Ghost Walk','Omniscience'],
+  Medic: ['First Aid','Heal Wave','Revitalize','Mass Heal','Guardian Angel','Miracle'],
+  Guardian: ['Shield Up','Taunt','Fortify','Iron Wall','Unbreakable','Divine Guard'],
+  Assassin: ['Backstab','Poison','Vanish','Death Mark','Shadow Kill','Void Strike']
+};
+// Stars: commons start at 1, each rarity starts +1 higher. Max 5 stars.
+function getStartingStars(rarity){ return Math.min(5, 1 + Math.floor(rarity / 2)); }
+// Star bonuses: each star = +15% power/def
+function getStarMult(stars){ return 1 + (stars - 1) * 0.15; }
+// Cost to activate next star
+function getStarUpgradeCost(currentStars, rarity){
+  return Math.floor(100 * Math.pow(3, currentStars) * (rarity + 1));
+}
+function getStarUpgradeShards(currentStars){
+  return 5 * currentStars;
+}
+
+// ==================== SUMMON TICKETS & BANNERS ====================
+const BANNERS = [
+  {name:'Standard',desc:'Normal rates',featured:null,boost:0},
+  {name:'Fighter Focus',desc:'Fighters 2x rate',featured:'Fighter',boost:2},
+  {name:'Assassin Focus',desc:'Assassins 2x rate',featured:'Assassin',boost:2},
+  {name:'Guardian Focus',desc:'Guardians 2x rate',featured:'Guardian',boost:2},
+  {name:'Medic Focus',desc:'Medics 2x rate',featured:'Medic',boost:2}
+];
+
+function getCurrentBanner(){
+  // Rotates every 4 hours
+  const idx = Math.floor(Date.now() / (4 * 3600 * 1000)) % BANNERS.length;
+  return BANNERS[idx];
+}
 
 // ==================== GAME STATE ====================
 let G = null; // game state
@@ -275,6 +331,10 @@ function newGame(name, cls){
     total_kills: 0,
     total_gold_earned: 0,
     total_gacha_pulls: 0,
+    tickets1x: 0,
+    tickets10x: 0,
+    shards: 0,
+    wishList: [], // up to 3 follower class names
     prestige: 0,
     prestige_bonus: 0, // percent
     lastSave: Date.now(),
@@ -613,8 +673,11 @@ function runCombat(mission, zoneIdx){
     turn++;
     // Player attacks
     let dmg = Math.max(1, playerPower - Math.floor(enemyAtk * 0.2) + Math.floor(Math.random()*5));
-    // Class passive: Striker Adrenaline Rush (+15% when enemy below 50%)
+    // Class passives
     if(G.class === 'striker' && enemyHp < enemyMaxHp * 0.5) dmg = Math.floor(dmg * 1.15);
+    if(G.class === 'berserker') dmg = Math.floor(dmg * (1 + (1 - playerHp/playerMaxHp) * 0.01 * 100)); // +1% per 1% HP missing
+    if(G.class === 'necromancer'){ playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg * 0.08)); } // Soul Siphon
+    if(G.class === 'ranger' && turn === 1) dmg = Math.floor(dmg * 2); // Quick Draw: double first turn
     // XP potion buff
     // (handled at XP reward, not here)
     // Combat skill modifiers
@@ -678,13 +741,15 @@ function runCombat(mission, zoneIdx){
 
     // Enemy attacks
     let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
-    // Class passive: Phantom Ghost Step (25% dodge first 2 turns)
+    // Class passives (defense)
     let dodgeRate = Math.min(35, playerSpeed * 0.5);
     if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
+    if(G.class === 'ranger') dodgeRate += 8; // Rangers naturally dodgy
     if(G.skillLevels[3] >= 99) dodgeRate += 10;
-    // Class passive: Tank Fortified (20% less dmg above 70% HP)
     if(G.class === 'tank' && playerHp > playerMaxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
-    if(Math.random()*100 < dodgeRate){
+    // Paladin: Divine Shield blocks first hit
+    if(G.class === 'paladin' && turn === 1){ eDmg = 0; log.push('Turn 1: DIVINE SHIELD blocks the attack!'); }
+    if(Math.random()*100 < dodgeRate && eDmg > 0){
       log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
     } else {
       playerHp -= eDmg;
@@ -705,7 +770,10 @@ function runCombat(mission, zoneIdx){
     log.push('=== VICTORY! ===');
     G.total_kills++;
     G.missions_completed++;
-    if(mission.boss){ G.bosses_killed++; updateBountyProgress('boss', 1); }
+    if(mission.boss){
+      G.bosses_killed++; updateBountyProgress('boss', 1);
+      if(Math.random() < 0.04){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
+    }
     updateBountyProgress('kill', 1);
 
     rewards.gold = Math.floor(mission.gold * (1 + Math.random()*0.3));
@@ -887,6 +955,15 @@ function runDungeon(dungeonIdx){
     const gemReward = Math.floor(dg.waves * 0.5);
     G.gems += gemReward;
     log.push('Completion bonus! +' + gemReward + ' gems!');
+    // Ticket drop from dungeon
+    if(Math.random() < 0.06){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      log.push('+1 Summon Ticket!');
+    }
+    if(dg.waves >= 8 && Math.random() < 0.03){
+      G.tickets10x = (G.tickets10x||0) + 1;
+      log.push('+1 10x Summon Ticket!!');
+    }
   } else {
     log.push('Cleared ' + wavesCleared + '/' + dg.waves + ' waves.');
   }
@@ -1102,8 +1179,23 @@ function generateFollower(guaranteed_rarity){
   }
 
   const name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
-  const cls = FOLLOWER_CLASSES[Math.floor(Math.random()*FOLLOWER_CLASSES.length)];
+  // Banner and wish list affect class selection
+  let cls;
+  const banner = getCurrentBanner();
+  const wishClasses = G.wishList || [];
+  if(banner.featured && Math.random() < 0.3){
+    cls = banner.featured; // 30% chance to get featured class on banner
+  } else if(wishClasses.length > 0 && Math.random() < 0.15){
+    cls = wishClasses[Math.floor(Math.random() * wishClasses.length)]; // 15% wish list
+  } else {
+    cls = FOLLOWER_CLASSES[Math.floor(Math.random()*FOLLOWER_CLASSES.length)];
+  }
   const basePower = (rarity + 1) * 3 + Math.floor(Math.random()*5);
+  const stars = getStartingStars(rarity);
+  const starMult = getStarMult(stars);
+  // Get ability based on class + rarity
+  const abilities = FOLLOWER_ABILITIES[cls] || FOLLOWER_ABILITIES['Fighter'];
+  const abilityIdx = Math.min(rarity, abilities.length - 1);
 
   G.followerIdCounter++;
   return {
@@ -1113,51 +1205,117 @@ function generateFollower(guaranteed_rarity){
     rarity: rarity,
     level: 1,
     xp: 0,
-    power: basePower,
-    defense: Math.floor(basePower * 0.7),
+    power: Math.floor(basePower * starMult),
+    defense: Math.floor(basePower * 0.7 * starMult),
     happiness: 80,
     loyalty: 50,
-    assigned: 'idle', // idle, combat, foundry, mining, crafting, patrol
+    stars: stars,
+    maxStars: 5,
+    ability: abilities[abilityIdx],
+    assigned: 'idle',
     cityIdx: G.currentCity
   };
 }
 
-function doPull(count){
-  const cost = count === 1 ? 3 : 25; // 3 gems single, 25 gems for 10
-  if(G.gems < cost){
-    toast('Not enough gems! Need ' + cost, '#f44');
-    return;
+function doPull(count, useTicket){
+  if(useTicket){
+    if(count === 1 && (G.tickets1x||0) <= 0){ toast('No 1x tickets!','#f44'); return; }
+    if(count === 10 && (G.tickets10x||0) <= 0){ toast('No 10x tickets!','#f44'); return; }
+    if(count === 1) G.tickets1x--;
+    else G.tickets10x--;
+  } else {
+    const cost = count === 1 ? 3 : 25;
+    if(G.gems < cost){ toast('Not enough gems! Need ' + cost, '#f44'); return; }
+    G.gems -= cost;
   }
-  G.gems -= cost;
   G.total_gacha_pulls += count;
 
   let pulled = [];
+  let hasUncommonPlus = false;
   for(let i = 0; i < count; i++){
-    // Pity: every 10th pull guarantees rare+
     let f;
     if(G.total_gacha_pulls % 2000 === 0){
-      f = generateFollower(5); // mythic pity at 2000
+      f = generateFollower(5);
     } else if(G.total_gacha_pulls % 500 === 0){
-      f = generateFollower(4); // legendary pity at 500
+      f = generateFollower(4);
     } else if(G.total_gacha_pulls % 100 === 0){
       f = generateFollower(Math.max(2, Math.floor(Math.random()*3)+2));
     } else {
       f = generateFollower();
     }
+    if(f.rarity >= 1) hasUncommonPlus = true;
     G.followers.push(f);
     pulled.push(f);
   }
+  // 10-pull guarantee: if no uncommon+, upgrade last to uncommon
+  if(count >= 10 && !hasUncommonPlus){
+    const last = pulled[pulled.length-1];
+    last.rarity = 1;
+    last.stars = getStartingStars(1);
+    last.power = Math.floor(last.power * 1.5);
+    last.defense = Math.floor(last.defense * 1.5);
+  }
+  // Dupe shard check: if you pull same name+class as existing, get shards instead of dupe
+  pulled.forEach(f => {
+    const dupe = G.followers.find(x => x.id !== f.id && x.name === f.name && x.class === f.class);
+    if(dupe){
+      const shardGain = (f.rarity + 1) * 3;
+      G.shards = (G.shards||0) + shardGain;
+      f._dupeShards = shardGain; // mark for display
+    }
+  });
   save();
   showPullResults(pulled);
 }
 
+function useTicket1x(){ doPull(1, true); }
+function useTicket10x(){ doPull(10, true); }
+
+function upgradeFollowerStar(fId){
+  const f = G.followers.find(x => x.id === fId);
+  if(!f) return;
+  if(f.stars >= 5){ toast('Max stars!','#f44'); return; }
+  const goldCost = getStarUpgradeCost(f.stars, f.rarity);
+  const shardCost = getStarUpgradeShards(f.stars);
+  if(G.gold < goldCost){ toast('Need ' + goldCost + ' gold','#f44'); return; }
+  if((G.shards||0) < shardCost){ toast('Need ' + shardCost + ' shards','#f44'); return; }
+  G.gold -= goldCost;
+  G.shards -= shardCost;
+  f.stars++;
+  const mult = getStarMult(f.stars) / getStarMult(f.stars - 1);
+  f.power = Math.floor(f.power * mult);
+  f.defense = Math.floor(f.defense * mult);
+  toast(f.name + ' upgraded to ' + f.stars + ' stars!', '#ffd700');
+  save();
+  showTab('followers_detail', f.id);
+}
+
+function setWishList(cls){
+  if(!G.wishList) G.wishList = [];
+  if(G.wishList.includes(cls)){
+    G.wishList = G.wishList.filter(c => c !== cls);
+    toast(cls + ' removed from wish list', '#0ff');
+  } else if(G.wishList.length >= 3){
+    toast('Wish list full (3 max)!', '#f44');
+    return;
+  } else {
+    G.wishList.push(cls);
+    toast(cls + ' added to wish list! (+15% chance)', '#0ff');
+  }
+  save();
+  showTab('gacha');
+}
+
 function showPullResults(pulled){
   let html = '<h2>Summon Results</h2>';
+  html += '<div class="text-sm text-dim mb">Banner: ' + getCurrentBanner().name + '</div>';
   pulled.forEach(f => {
-    html += '<div class="card follower-card">';
+    html += '<div class="card follower-card" style="border-color:' + (f.rarity >= 3 ? RARITIES[f.rarity] === 'mythic' ? '#ff2060' : '#b026ff' : '#333') + '">';
     html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
-    html += ' <span class="text-sm">[' + RARITY_NAMES[f.rarity] + ' ' + f.class + ']</span><br>';
-    html += '<span class="text-sm">PWR:' + f.power + ' DEF:' + f.defense + '</span>';
+    html += ' <span class="text-sm">[' + RARITY_NAMES[f.rarity] + ' ' + f.class + ']</span>';
+    html += ' <span style="color:#ffd700">' + '★'.repeat(f.stars) + '☆'.repeat(5 - f.stars) + '</span><br>';
+    html += '<span class="text-sm">PWR:' + f.power + ' DEF:' + f.defense + ' | ' + f.ability + '</span>';
+    if(f._dupeShards) html += '<br><span class="text-sm" style="color:#0ff">DUPE! +' + f._dupeShards + ' shards</span>';
     html += '</div>';
   });
   html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'gacha\')">Back</button></div>';
@@ -2302,6 +2460,15 @@ function attackWorldBoss(){
     const gear = generateGear(G.level + 10, true);
     G.inventory.push(gear);
     toast('Boss dropped: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']', '#ffd700');
+    // Rare ticket drop from world boss
+    if(Math.random() < 0.08){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      toast('+1 Summon Ticket!', '#0ff');
+    }
+    if(G.worldBossKills > 3 && Math.random() < 0.03){
+      G.tickets10x = (G.tickets10x||0) + 1;
+      toast('+1 10x Summon Ticket!!', '#ffd700');
+    }
   } else {
     toast(msg, '#0ff');
   }
@@ -3140,13 +3307,17 @@ function renderFollowerDetail(c, fId){
   const feedCost = 10 + f.level * 5;
   const trainCost = 20 + f.level * 15;
 
+  const classInfo = FOLLOWER_CLASS_BONUSES[f.class] || {};
   let html = '<h2>' + f.name + '</h2>';
   html += '<div class="card">';
   html += '<span class="' + RARITIES[f.rarity] + '">[' + RARITY_NAMES[f.rarity] + ']</span> ' + f.class + '<br>';
+  html += '<span style="color:#ffd700">' + '★'.repeat(f.stars||1) + '☆'.repeat(5-(f.stars||1)) + '</span> Stars<br>';
   html += 'Level: ' + f.level + '/50<br>';
   html += '<div class="pbar pbar-cyan"><div class="pbar-fill" style="width:' + ((f.xp/xpNeeded)*100) + '%"></div>';
   html += '<span class="pbar-text">' + f.xp + '/' + xpNeeded + ' XP</span></div>';
   html += 'Power: ' + f.power + ' | Defense: ' + f.defense + '<br>';
+  html += 'Ability: <b style="color:#0ff">' + (f.ability||'None') + '</b><br>';
+  html += 'Class Bonus: ' + (classInfo.desc||'None') + '<br>';
   html += 'Happiness: <span style="color:' + hColor + '">' + f.happiness + '/100</span><br>';
   html += 'Loyalty: ' + f.loyalty + '/100<br>';
   html += 'City: ' + (G.cities[f.cityIdx || 0]?.name || 'Unassigned') + '<br>';
@@ -3156,7 +3327,14 @@ function renderFollowerDetail(c, fId){
 
   html += '<h3>Actions</h3>';
   html += '<button class="btn btn-green" onclick="feedFollower(' + f.id + ')">Feed (' + feedCost + 'g) +Happiness</button> ';
-  html += '<button class="btn btn-purple" onclick="trainFollower(' + f.id + ')">Train (' + trainCost + 'g) +XP</button><br>';
+  html += '<button class="btn btn-purple" onclick="trainFollower(' + f.id + ')">Train (' + trainCost + 'g) +XP</button>';
+  // Star upgrade
+  if((f.stars||1) < 5){
+    const sCost = getStarUpgradeCost(f.stars||1, f.rarity);
+    const sShards = getStarUpgradeShards(f.stars||1);
+    html += ' <button class="btn btn-gold" onclick="upgradeFollowerStar(' + f.id + ')">★ Upgrade Star (' + sCost + 'g + ' + sShards + ' shards)</button>';
+  }
+  html += '<br>';
 
   html += '<h3>Assign Role</h3>';
   const ci = f.cityIdx || 0;
@@ -3199,33 +3377,60 @@ function renderFollowerDetail(c, fId){
 }
 
 function renderGacha(c){
+  const banner = getCurrentBanner();
   let html = '<h2>Void Summons</h2>';
-  html += '<div class="card text-center">';
-  html += '<div style="font-size:20px;color:#b026ff;margin:10px">Summon Followers</div>';
-  html += '<div class="text-sm text-dim">Rates: Common 56% | Uncommon 30% | Rare 10% | Epic 4% | <span class="legendary">Legendary 0.1%</span> | <span class="mythic">Mythic 0.01%</span></div>';
-  html += '<div class="text-sm text-dim">Pity: Rare+ every 100 | Legendary every 500 | <span class="mythic">Mythic every 2000</span></div>';
+
+  // Banner
+  html += '<div class="card text-center" style="border-color:#b026ff">';
+  html += '<div style="font-size:18px;color:#b026ff;margin:6px">Banner: ' + banner.name + '</div>';
+  html += '<div class="text-sm">' + banner.desc + '</div>';
+  html += '<div class="text-sm text-dim mt">Rates: Common 56% | Uncommon 30% | Rare 10% | Epic 4% | <span class="legendary">Legendary 0.1%</span> | <span class="mythic">Mythic 0.01%</span></div>';
+  html += '<div class="text-sm text-dim">Pity: Rare+ @100 | Legendary @500 | <span class="mythic">Mythic @2000</span> | 10x guarantees Uncommon+</div>';
   html += '<div class="text-sm mt">Total pulls: ' + G.total_gacha_pulls + '</div>';
-  html += '<div class="text-sm">Next pity (Rare+): in ' + (100 - (G.total_gacha_pulls % 100)) + ' pulls</div>';
-  html += '<div class="text-sm">Next pity (Legendary): in ' + (500 - (G.total_gacha_pulls % 500)) + ' pulls</div>';
-  html += '<div class="text-sm mythic">Next pity (MYTHIC): in ' + (2000 - (G.total_gacha_pulls % 2000)) + ' pulls</div>';
+  html += '<div class="text-sm">Next pity (Rare+): ' + (100 - (G.total_gacha_pulls % 100)) + '</div>';
+  html += '<div class="text-sm">Next pity (Legendary): ' + (500 - (G.total_gacha_pulls % 500)) + '</div>';
+  html += '<div class="text-sm mythic">Next pity (MYTHIC): ' + (2000 - (G.total_gacha_pulls % 2000)) + '</div>';
+  // Pull buttons
   html += '<div class="mt">';
-  html += '<button class="btn btn-purple" onclick="doPull(1)">Single Pull (3 Gems)</button> ';
-  html += '<button class="btn btn-gold" onclick="doPull(10)">10x Pull (25 Gems)</button>';
+  html += '<button class="btn btn-purple" onclick="doPull(1,false)">1x Pull (3 Gems)</button> ';
+  html += '<button class="btn btn-gold" onclick="doPull(10,false)">10x Pull (25 Gems)</button>';
+  html += '</div>';
+  // Ticket buttons
+  html += '<div class="mt">';
+  html += '<button class="btn" style="border-color:#0ff;color:#0ff" onclick="useTicket1x()" ' + ((G.tickets1x||0)>0?'':'disabled') + '>Use 1x Ticket (' + (G.tickets1x||0) + ')</button> ';
+  html += '<button class="btn" style="border-color:#ffd700;color:#ffd700" onclick="useTicket10x()" ' + ((G.tickets10x||0)>0?'':'disabled') + '>Use 10x Ticket (' + (G.tickets10x||0) + ')</button>';
   html += '</div>';
   html += '</div>';
 
-  // Ways to earn gems
-  html += '<div class="card mt">';
-  html += '<h3>Earn Gems</h3>';
-  html += '<div class="text-sm">- Achievements: +2 gems each</div>';
-  html += '<div class="text-sm">- Hacking skill: 5% chance per train</div>';
-  html += '<div class="text-sm">- Prestige: +20 gems</div>';
-  html += '<div class="text-sm">- Boss kills: small chance</div>';
+  // Currency
+  html += '<div class="card">';
+  html += 'Gems: <span style="color:#b026ff">' + G.gems + '</span> | ';
+  html += 'Shards: <span style="color:#0ff">' + (G.shards||0) + '</span> | ';
+  html += '1x Tickets: <span style="color:#0ff">' + (G.tickets1x||0) + '</span> | ';
+  html += '10x Tickets: <span style="color:#ffd700">' + (G.tickets10x||0) + '</span>';
   html += '</div>';
 
-  html += '<div class="card mt">';
-  html += '<div class="text-sm">Gems: <span style="color:#b026ff">' + G.gems + '</span></div>';
+  // Wish List
+  html += '<div class="card">';
+  html += '<h3>Wish List (' + (G.wishList||[]).length + '/3)</h3>';
+  html += '<div class="text-sm text-dim mb">Selected classes get +15% summon chance.</div>';
+  FOLLOWER_CLASSES.forEach(cls => {
+    const active = (G.wishList||[]).includes(cls);
+    html += '<button class="btn ' + (active?'btn-cyan':'') + '" style="padding:4px 8px;min-height:32px" onclick="setWishList(\''+cls+'\')">' + cls + (active?' ✓':'') + '</button> ';
+  });
   html += '</div>';
+
+  // Follower class info
+  html += '<div class="card">';
+  html += '<h3>Follower Classes</h3>';
+  FOLLOWER_CLASSES.forEach(cls => {
+    const info = FOLLOWER_CLASS_BONUSES[cls];
+    html += '<div class="text-sm"><b>' + cls + '</b>: ' + info.desc;
+    if(info.combatBonus > 0) html += ', +' + Math.floor(info.combatBonus*100) + '% combat';
+    html += '</div>';
+  });
+  html += '</div>';
+
   c.innerHTML = html;
 }
 
@@ -3721,10 +3926,20 @@ function migrateOldSave(){
   if(G.worldBossKills === undefined) G.worldBossKills = 0;
   if(G.loginStreak === undefined) G.loginStreak = 0;
   // Assign followers to city 0 if they don't have a city, migrate old roles
+  if(!G.tickets1x) G.tickets1x = 0;
+  if(!G.tickets10x) G.tickets10x = 0;
+  if(!G.shards) G.shards = 0;
+  if(!G.wishList) G.wishList = [];
   G.followers.forEach(f => {
     if(f.cityIdx === undefined) f.cityIdx = 0;
     if(f.assigned === 'patrol') f.assigned = 'garrison';
-    if(f.assigned === 'mining') f.assigned = 'foundry'; // mining was generic, foundry is closest
+    if(f.assigned === 'mining') f.assigned = 'foundry';
+    // Add stars and abilities to old followers
+    if(f.stars === undefined) f.stars = getStartingStars(f.rarity);
+    if(!f.ability){
+      const abilities = FOLLOWER_ABILITIES[f.class] || FOLLOWER_ABILITIES['Fighter'];
+      f.ability = abilities[Math.min(f.rarity, abilities.length-1)];
+    }
   });
   // Update defense for all cities
   G.cities.forEach((c, i) => updateCityDefense(i));
