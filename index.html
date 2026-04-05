@@ -8115,6 +8115,449 @@ function withdrawWarChest(){
   showTab('missions');
 }
 
+// ==================== 25 NEW FEATURES - FUNCTIONS ====================
+
+// Feature 1: Stock Market
+function investGold(stock, amount){
+  if(!G.stockPrices) G.stockPrices = {VoidCorp:100,NeonTech:80,IronWorks:60,BioGen:120,CryptoVoid:200};
+  if(!G.investments) G.investments = {};
+  const price = G.stockPrices[stock] || 100;
+  const totalCost = price * amount;
+  if(G.gold < totalCost){ toast('Need '+totalCost+'g to buy '+amount+' shares of '+stock,'#f44'); return; }
+  G.gold -= totalCost;
+  G.investments[stock] = (G.investments[stock]||0) + amount;
+  toast('Bought '+amount+' shares of '+stock+' at '+price+'g each!','#0f0');
+  save(); showTab('stockmarket');
+}
+function sellStock(stock){
+  if(!G.investments || !G.investments[stock] || G.investments[stock] <= 0){ toast('No shares of '+stock,'#f44'); return; }
+  const shares = G.investments[stock];
+  const price = G.stockPrices[stock] || 100;
+  const total = shares * price;
+  G.gold += total; G.total_gold_earned += total;
+  G.investments[stock] = 0;
+  toast('Sold '+shares+' shares of '+stock+' for '+total+'g!','#ffd700');
+  save(); showTab('stockmarket');
+}
+function renderStockMarket(c){
+  if(!G.stockPrices) G.stockPrices = {VoidCorp:100,NeonTech:80,IronWorks:60,BioGen:120,CryptoVoid:200};
+  if(!G.investments) G.investments = {};
+  let html = '<h2>Stock Market</h2>';
+  html += '<div class="text-sm text-dim mb">Prices fluctuate every minute. Buy low, sell high!</div>';
+  const stocks = ['VoidCorp','NeonTech','IronWorks','BioGen','CryptoVoid'];
+  const colors = {'VoidCorp':'#b026ff','NeonTech':'#0ff','IronWorks':'#f80','BioGen':'#0f0','CryptoVoid':'#ffd700'};
+  stocks.forEach(function(s){
+    const price = G.stockPrices[s] || 100;
+    const owned = G.investments[s] || 0;
+    const value = owned * price;
+    html += '<div class="card">';
+    html += '<b style="color:'+colors[s]+'">' + s + '</b> - Price: <span style="color:#ffd700">' + price + 'g</span>';
+    if(owned > 0) html += ' | Owned: ' + owned + ' shares (worth ' + value + 'g)';
+    html += '<br>';
+    html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="investGold(\''+s+'\',1)">Buy 1 ('+price+'g)</button> ';
+    html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="investGold(\''+s+'\',5)">Buy 5 ('+(price*5)+'g)</button> ';
+    if(owned > 0) html += '<button class="btn btn-red" style="padding:4px 8px;min-height:30px" onclick="sellStock(\''+s+'\')">Sell All ('+value+'g)</button>';
+    html += '</div>';
+  });
+  let totalValue = 0;
+  stocks.forEach(function(s){ totalValue += (G.investments[s]||0) * (G.stockPrices[s]||0); });
+  if(totalValue > 0) html += '<div class="card"><b>Portfolio Value: <span style="color:#ffd700">'+totalValue+'g</span></b></div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+// Feature 2: Crafting Queue
+function queueCraft(recipeIdx){
+  if(!G.craftQueue) G.craftQueue = [];
+  if(G.craftQueue.length >= 10){ toast('Queue full! Max 10 items.','#f44'); return; }
+  G.craftQueue.push(recipeIdx);
+  toast('Added ' + (RECIPES[recipeIdx]?.name||'recipe') + ' to craft queue','#0ff');
+  save();
+}
+
+// Feature 8: Luxury Upgrades
+function buyLuxuryUpgrade(id){
+  if(!G.luxuryPurchases) G.luxuryPurchases = {goldenName:0,extraStat:0,energyBoost:0,luckCharm:0,xpTome:0};
+  const items = {
+    goldenName:{cost:500,max:1},extraStat:{cost:2000,max:5},
+    energyBoost:{cost:1000,max:3},luckCharm:{cost:1500,max:3},xpTome:{cost:3000,max:3}
+  };
+  const item = items[id];
+  if(!item){ toast('Unknown upgrade','#f44'); return; }
+  if((G.luxuryPurchases[id]||0) >= item.max){ toast('Already maxed!','#f44'); return; }
+  if(G.gold < item.cost){ toast('Need '+item.cost+'g!','#f44'); return; }
+  G.gold -= item.cost;
+  G.luxuryPurchases[id] = (G.luxuryPurchases[id]||0) + 1;
+  if(id === 'extraStat') G.statPoints++;
+  toast('Purchased luxury upgrade: ' + id + '!','#ffd700');
+  save(); showTab('profile');
+}
+
+// Feature 9: Daily Gift Exchange
+function dailyGiftExchange(){
+  if(G.gold < 100){ toast('Need 100g!','#f44'); return; }
+  const lastGift = G.lastGiftExchange || 0;
+  if(Date.now() - lastGift < 86400000){ toast('Already exchanged today!','#f44'); return; }
+  G.gold -= 100;
+  G.lastGiftExchange = Date.now();
+  const roll = Math.random();
+  let reward = '';
+  if(roll < 0.25){
+    const gems = 1 + Math.floor(Math.random()*3);
+    G.gems += gems;
+    reward = '+' + gems + ' gems';
+  } else if(roll < 0.40){
+    G.tickets1x = (G.tickets1x||0) + 1;
+    reward = '+1 Summon Ticket';
+  } else if(roll < 0.65){
+    const res = ['ore','scrap','data','bio'];
+    const r = res[Math.floor(Math.random()*res.length)];
+    const amt = 10 + Math.floor(Math.random()*21);
+    G.resources[r] = (G.resources[r]||0) + amt;
+    reward = '+' + amt + ' ' + r;
+  } else if(roll < 0.85){
+    const potTypes = ['hp','power','defense','luck','xp'];
+    const pt = potTypes[Math.floor(Math.random()*potTypes.length)];
+    G.potions[pt] = (G.potions[pt]||0) + 1;
+    reward = '+1 ' + pt + ' potion';
+  } else {
+    const shards = 5 + Math.floor(Math.random()*11);
+    G.shards = (G.shards||0) + shards;
+    reward = '+' + shards + ' shards';
+  }
+  toast('Daily Gift: ' + reward + '!','#ffd700');
+  save();
+}
+
+// Feature 11: Gear Loadout Presets
+function saveGearPreset(name){
+  if(!G.gearPresets) G.gearPresets = [];
+  if(G.gearPresets.length >= 3){ toast('Max 3 presets!','#f44'); return; }
+  const preset = {name: name, gear: JSON.parse(JSON.stringify(G.gear))};
+  G.gearPresets.push(preset);
+  toast('Gear preset "'+name+'" saved!','#0f0');
+  save();
+}
+function loadGearPreset(idx){
+  if(!G.gearPresets || !G.gearPresets[idx]){ toast('Invalid preset','#f44'); return; }
+  const preset = G.gearPresets[idx];
+  GEAR_SLOTS.forEach(function(slot){
+    if(G.gear[slot]) G.inventory.push(G.gear[slot]);
+    G.gear[slot] = null;
+  });
+  GEAR_SLOTS.forEach(function(slot){
+    const saved = preset.gear[slot];
+    if(!saved) return;
+    const idx2 = G.inventory.findIndex(function(item){ return item.id === saved.id; });
+    if(idx2 >= 0){
+      G.gear[slot] = G.inventory[idx2];
+      G.inventory.splice(idx2, 1);
+    }
+  });
+  toast('Loaded preset "'+preset.name+'"!','#0ff');
+  save();
+}
+
+// Feature 13: Follower Comparison
+function renderFollowerCompare(c, id1, id2){
+  const f1 = G.followers.find(function(x){ return x.id === id1; });
+  const f2 = G.followers.find(function(x){ return x.id === id2; });
+  if(!f1 || !f2){ c.innerHTML = '<h2>Follower not found</h2><button class="btn" onclick="showTab(\'town\')">Back</button>'; return; }
+  let html = '<h2>Follower Comparison</h2>';
+  html += '<div class="card"><table style="width:100%;color:#ccc;font-family:inherit">';
+  html += '<tr><th></th><th style="color:#0ff">' + f1.name + '</th><th style="color:#ffd700">' + f2.name + '</th></tr>';
+  const rows = [
+    ['Class', f1.class, f2.class],
+    ['Level', f1.level, f2.level],
+    ['Rarity', RARITY_NAMES[f1.rarity], RARITY_NAMES[f2.rarity]],
+    ['Power', f1.power, f2.power],
+    ['Defense', f1.defense, f2.defense],
+    ['Stars', f1.stars||1, f2.stars||1],
+    ['Happiness', f1.happiness, f2.happiness],
+    ['Loyalty', f1.loyalty, f2.loyalty],
+    ['Ability', f1.ability||'None', f2.ability||'None']
+  ];
+  rows.forEach(function(row){
+    var v1 = row[1], v2 = row[2];
+    var c1 = '#ccc', c2 = '#ccc';
+    if(typeof v1 === 'number' && typeof v2 === 'number'){
+      if(v1 > v2){ c1 = '#0f0'; c2 = '#f44'; }
+      else if(v2 > v1){ c2 = '#0f0'; c1 = '#f44'; }
+    }
+    html += '<tr><td style="color:#888">'+row[0]+'</td><td style="color:'+c1+'">'+v1+'</td><td style="color:'+c2+'">'+v2+'</td></tr>';
+  });
+  html += '</table></div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'town\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+// Feature 21: Challenge Dungeons
+function runChallengeDungeon(type){
+  if(G.energy < 30){ toast('Need 30 energy!','#f44'); return; }
+  if(!G.challengeDungeonClears) G.challengeDungeonClears = {};
+  if(G.challengeDungeonClears[type]){ toast('Already cleared this challenge!','#f44'); return; }
+  G.energy -= 30;
+  var playerPower = getCombatPower();
+  var playerDef = getCombatDefense();
+  var playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  if(G.skillLevels[14] >= 10) playerMaxHp += 30;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 60;
+  if(G.skillLevels[14] >= 99) playerMaxHp += 100;
+  var playerHp = playerMaxHp;
+  if(type === 'no_skills'){ playerPower = G.stats.power * 5; playerDef = G.stats.defense * 3; }
+  if(type === 'glass_cannon'){ playerHp = 1; playerMaxHp = 1; playerPower *= 5; }
+  var maxTurnsPerWave = type === 'speed_run' ? 15 : 30;
+  var wave = 0;
+  var won = true;
+  var log = ['=== CHALLENGE: ' + type.toUpperCase() + ' ==='];
+  while(wave < 5 && playerHp > 0){
+    wave++;
+    var scale = 1 + wave * 0.4;
+    var eHp = Math.floor(500 * scale);
+    var eAtk = Math.floor(30 * scale);
+    log.push('--- Wave ' + wave + ' ---');
+    var turn = 0;
+    while(playerHp > 0 && eHp > 0 && turn < maxTurnsPerWave){
+      turn++;
+      var dmg = Math.max(1, playerPower - Math.floor(eAtk * 0.1) + Math.floor(Math.random()*5));
+      if(Math.random()*100 < getLuck()) dmg = Math.floor(dmg * 2);
+      eHp -= dmg;
+      log.push('T'+turn+': Hit '+dmg+' (eHP:'+Math.max(0,eHp)+')');
+      if(eHp <= 0) break;
+      var eDmg2 = Math.max(1, eAtk - Math.floor(playerDef * 0.3));
+      playerHp -= eDmg2;
+    }
+    if(playerHp <= 0 || (eHp > 0 && turn >= maxTurnsPerWave)){
+      won = false;
+      log.push('=== DEFEATED ===');
+      break;
+    }
+  }
+  if(won){
+    G.challengeDungeonClears[type] = true;
+    log.push('=== CHALLENGE CLEARED! ===');
+    if(type === 'no_skills'){
+      if(!G.unlockedTitles) G.unlockedTitles = [];
+      if(!G.unlockedTitles.includes('Purist')){ G.unlockedTitles.push('Purist'); toast('Title unlocked: Purist!','#ffd700'); }
+    }
+    if(type === 'speed_run'){
+      G.shards = (G.shards||0) + 5;
+      toast('Challenge cleared! +5 shards!','#ffd700');
+    }
+    if(type === 'glass_cannon'){
+      if(!G.unlockedTitles) G.unlockedTitles = [];
+      if(!G.unlockedTitles.includes('Glass Cannon')){ G.unlockedTitles.push('Glass Cannon'); toast('Title unlocked: Glass Cannon!','#ffd700'); }
+    }
+    G.gold += 500; G.total_gold_earned += 500;
+    addXp(300);
+  }
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  var modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = '<h3>Challenge: ' + type + '</h3><div class="log">' + log.map(function(l){ return '<div class="log-line">'+l+'</div>'; }).join('') + '</div><br><button class="btn btn-cyan" onclick="this.closest(\'.modal-overlay\').remove();showTab(\'missions\')">Close</button>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  save();
+}
+
+// Feature 22: Seasonal Boss
+function fightSeasonalBoss(){
+  if(G.energy < 40){ toast('Need 40 energy!','#f44'); return; }
+  G.energy -= 40;
+  var month = new Date().getMonth();
+  var sbName, sbHp, sbAtk, sbDrop;
+  if(month <= 2){ sbName='Frost Wyrm'; sbHp=3000+G.level*80; sbAtk=80+G.level*3; sbDrop='Frost Crown'; }
+  else if(month <= 5){ sbName='Solar Phoenix'; sbHp=3500+G.level*90; sbAtk=90+G.level*3; sbDrop='Phoenix Plume'; }
+  else if(month <= 8){ sbName='Storm Titan'; sbHp=4000+G.level*100; sbAtk=100+G.level*4; sbDrop='Storm Gauntlet'; }
+  else { sbName='Shadow Reaper'; sbHp=4500+G.level*110; sbAtk=110+G.level*4; sbDrop='Reaper Cloak'; }
+  var playerPower = getCombatPower();
+  var playerDef = getCombatDefense();
+  var playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  if(G.skillLevels[14] >= 10) playerMaxHp += 30;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 60;
+  if(G.skillLevels[14] >= 99) playerMaxHp += 100;
+  var playerHp = playerMaxHp;
+  var enemyHp = sbHp;
+  var turn = 0;
+  var log = ['=== SEASONAL BOSS: '+sbName+' ==='];
+  while(playerHp > 0 && enemyHp > 0 && turn < 50){
+    turn++;
+    var dmg = Math.max(1, playerPower - Math.floor(sbAtk*0.1) + Math.floor(Math.random()*8));
+    if(Math.random()*100 < getLuck()) dmg = Math.floor(dmg*2);
+    enemyHp -= dmg;
+    log.push('T'+turn+': Hit '+dmg+' (bossHP:'+Math.max(0,enemyHp)+')');
+    if(enemyHp <= 0) break;
+    var eDmg = Math.max(1, sbAtk - Math.floor(playerDef*0.3));
+    playerHp -= eDmg;
+    log.push('  Boss hits you for '+eDmg+' (yourHP:'+Math.max(0,playerHp)+')');
+  }
+  var won = enemyHp <= 0;
+  if(won){
+    var sbKey = sbName + '_' + month;
+    G.lastSeasonalBossKill = sbKey;
+    G.bosses_killed++;
+    G.total_kills++;
+    var goldReward = 500 + G.level * 10;
+    G.gold += goldReward; G.total_gold_earned += goldReward;
+    addXp(500 + G.level * 5);
+    log.push('=== VICTORY! +'+goldReward+'g ===');
+    var gear = generateGear(G.level, true, 5);
+    gear.name = sbDrop;
+    G.inventory.push(gear);
+    log.push('Seasonal drop: ' + sbDrop + '!');
+    toast('Defeated ' + sbName + '! Got ' + sbDrop + '!','#ffd700');
+  } else {
+    log.push('=== DEFEATED ===');
+    toast('Failed to defeat ' + sbName + '!','#f44');
+  }
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  var modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = '<h3>'+sbName+'</h3><div class="log">' + log.map(function(l){ return '<div class="log-line">'+l+'</div>'; }).join('') + '</div><br><button class="btn btn-cyan" onclick="this.closest(\'.modal-overlay\').remove();showTab(\'missions\')">Close</button>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  save();
+}
+
+// Feature 24: Memory Match Mini-Game
+function startMemoryMatch(cost){
+  if(G.gold < cost){ toast('Need '+cost+'g!','#f44'); return; }
+  G.gold -= cost;
+  var nums = [1,2,3,4,1,2,3,4];
+  for(var i = nums.length-1; i > 0; i--){ var j = Math.floor(Math.random()*(i+1)); var t = nums[i]; nums[i] = nums[j]; nums[j] = t; }
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  var modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.style.minWidth = '280px';
+  var revealed = [false,false,false,false,false,false,false,false];
+  var matched = [false,false,false,false,false,false,false,false];
+  var firstPick = -1;
+  var pairs = 0;
+  var attempts = 0;
+  var locked = false;
+  var showAll = true;
+  function render(){
+    var html = '<h3>Memory Match</h3>';
+    html += '<div class="text-sm mb">Match all 4 pairs! Attempts: '+attempts+'</div>';
+    html += '<div class="grid2" style="gap:8px">';
+    for(var ci = 0; ci < 8; ci++){
+      var show = showAll || revealed[ci] || matched[ci];
+      var bg = matched[ci] ? '#0a2a0a' : (revealed[ci] ? '#1a1a3e' : '#1a1a2e');
+      var clr = matched[ci] ? '#0f0' : (show ? '#ffd700' : '#666');
+      html += '<div style="background:'+bg+';border:1px solid '+clr+';padding:20px;text-align:center;font-size:20px;cursor:pointer" onclick="window._mmClick('+ci+')">';
+      html += show ? nums[ci] : '?';
+      html += '</div>';
+    }
+    html += '</div>';
+    if(pairs >= 4){
+      var reward = 50 + G.level * 3;
+      html += '<div class="mt" style="color:#ffd700">YOU WIN! +'+reward+'g +1 gem ('+attempts+' attempts)</div>';
+      html += '<button class="btn btn-cyan" onclick="this.closest(\'.modal-overlay\').remove();showTab(\'gambling\')">Collect</button>';
+    }
+    modal.innerHTML = html;
+  }
+  window._mmClick = function(idx){
+    if(locked || matched[idx] || revealed[idx] || showAll) return;
+    revealed[idx] = true;
+    render();
+    if(firstPick < 0){
+      firstPick = idx;
+    } else {
+      attempts++;
+      locked = true;
+      if(nums[firstPick] === nums[idx]){
+        matched[firstPick] = true;
+        matched[idx] = true;
+        pairs++;
+        firstPick = -1;
+        locked = false;
+        render();
+        if(pairs >= 4){
+          var reward = 50 + G.level * 3;
+          G.gold += reward; G.total_gold_earned += reward;
+          G.gems += 1;
+          G.memoryMatchWins = (G.memoryMatchWins||0) + 1;
+          G.gamblingWins = (G.gamblingWins||0) + 1;
+          save();
+        }
+      } else {
+        setTimeout(function(){
+          revealed[firstPick] = false;
+          revealed[idx] = false;
+          firstPick = -1;
+          locked = false;
+          render();
+        }, 800);
+      }
+    }
+  };
+  render();
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  setTimeout(function(){ showAll = false; render(); }, 1500);
+  save();
+}
+
+// Feature 25: Prestige Shop
+function renderPrestigeShop(c){
+  if(!G.prestigeShopPurchases) G.prestigeShopPurchases = {};
+  var pp = G.prestige || 0;
+  var spent = 0;
+  for(var k in G.prestigeShopPurchases){ spent += (G.prestigeShopPurchases[k]||0); }
+  var available = pp - spent;
+  var html = '<h2>Prestige Shop</h2>';
+  html += '<div class="card"><b>Prestige Points: <span style="color:#ffd700">'+available+'</span></b> ('+pp+' earned, '+spent+' spent)</div>';
+  html += '<div class="text-sm text-dim mb">Spend prestige points (1 per prestige) on permanent upgrades.</div>';
+  var items = [
+    {id:'startingLevel',name:'+1 Starting Level per Prestige',desc:'Start at a higher level after prestige',max:10,cost:1},
+    {id:'permDropRate',name:'+5% Permanent Drop Rate',desc:'Better loot forever',max:5,cost:1},
+    {id:'permFollowerPower',name:'+10% Permanent Follower Power',desc:'Followers deal more damage',max:5,cost:1},
+    {id:'keepFollower',name:'Keep 1 Follower Through Prestige',desc:'Your best follower survives prestige',max:1,cost:2}
+  ];
+  items.forEach(function(item){
+    var owned = G.prestigeShopPurchases[item.id] || 0;
+    html += '<div class="card">';
+    html += '<b>' + item.name + '</b> ('+owned+'/'+item.max+') - ' + item.desc + '<br>';
+    html += '<span class="text-sm">Cost: '+item.cost+' prestige point(s)</span> ';
+    if(owned < item.max && available >= item.cost){
+      html += '<button class="btn btn-gold" onclick="buyPrestigeShopItem(\''+item.id+'\','+item.cost+');showTab(\'prestigeshop\')">Buy</button>';
+    } else if(owned >= item.max){
+      html += '<span style="color:#0f0">MAXED</span>';
+    } else {
+      html += '<span class="text-dim">Not enough points</span>';
+    }
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+function buyPrestigeShopItem(id, cost){
+  if(!G.prestigeShopPurchases) G.prestigeShopPurchases = {};
+  var pp = G.prestige || 0;
+  var spent = 0;
+  for(var k in G.prestigeShopPurchases){ spent += (G.prestigeShopPurchases[k]||0); }
+  var available = pp - spent;
+  if(available < cost){ toast('Need '+cost+' prestige point(s)!','#f44'); return; }
+  G.prestigeShopPurchases[id] = (G.prestigeShopPurchases[id]||0) + 1;
+  toast('Purchased: '+id+'!','#ffd700');
+  save();
+}
+
+// Feature 6: Bounty Hunter Rank helper
+function getBountyHunterRank(){
+  var bc = G.bountiesCompleted || 0;
+  if(bc >= 100) return {rank:'Legendary',bonus:8};
+  if(bc >= 50) return {rank:'Elite',bonus:6};
+  if(bc >= 25) return {rank:'Veteran',bonus:4};
+  if(bc >= 10) return {rank:'Hunter',bonus:2};
+  return {rank:'Novice',bonus:0};
+}
+
 // ==================== INIT ====================
 function migrateOldSave(){
   // Migrate old single-buildings saves to multi-city
@@ -8187,6 +8630,30 @@ function migrateOldSave(){
   if(!G.warChest) G.warChest = {amount:0, depositTime:0};
   if(!G.skillMilestonesAwarded) G.skillMilestonesAwarded = [];
   if(!G.awakenedDmgBonus) G.awakenedDmgBonus = G.awakenedCount || 0;
+  // === 25 New Features Migration ===
+  if(!G.investments) G.investments = {};
+  if(!G.stockPrices) G.stockPrices = {VoidCorp:100,NeonTech:80,IronWorks:60,BioGen:120,CryptoVoid:200};
+  if(!G.craftQueue) G.craftQueue = [];
+  if(!G.bountiesCompleted) G.bountiesCompleted = 0;
+  if(!G.fineResources) G.fineResources = {ore:0,scrap:0,data:0,bio:0};
+  if(!G.pristineResources) G.pristineResources = {ore:0,scrap:0,data:0,bio:0};
+  if(!G.luxuryPurchases) G.luxuryPurchases = {goldenName:0,extraStat:0,energyBoost:0,luckCharm:0,xpTome:0};
+  if(!G.lastGiftExchange) G.lastGiftExchange = 0;
+  if(!G.gearPresets) G.gearPresets = [];
+  if(!G.combatStats) G.combatStats = {totalDmgDealt:0,totalHits:0,totalCrits:0,dodgeCount:0,potionsUsed:0,highestCombo:0};
+  if(!G.sessionStart) G.sessionStart = Date.now();
+  if(!G.sessionStats) G.sessionStats = {gold:0,xp:0,kills:0};
+  if(G.autoPotionEnabled === undefined) G.autoPotionEnabled = true;
+  if(G.compactMode === undefined) G.compactMode = false;
+  if(!G.challengeDungeonClears) G.challengeDungeonClears = {};
+  if(!G.lastSeasonalBossKill) G.lastSeasonalBossKill = '';
+  if(!G.worldEvent) G.worldEvent = null;
+  if(!G.worldEventEnd) G.worldEventEnd = 0;
+  if(!G.memoryMatchWins) G.memoryMatchWins = 0;
+  if(!G.prestigeShopPurchases) G.prestigeShopPurchases = {};
+  // Reset session stats on load (new session)
+  G.sessionStart = Date.now();
+  G.sessionStats = {gold:0,xp:0,kills:0};
   // Rebirth migration for followers
   G.followers.forEach(f => {
     if(f.rebirthCount === undefined) f.rebirthCount = 0;
