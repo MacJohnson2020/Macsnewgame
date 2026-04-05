@@ -4749,6 +4749,8 @@ function processAutoBattle(){
 
   let followerPower = 0;
   combatFollowers.forEach(f => { followerPower += f.level * f.power * (f.rarity + 1) * 0.3; });
+  // Talent follower power bonus (#14)
+  followerPower = Math.floor(followerPower * (1 + getTalentBonus('fpow')));
 
   const enemyPower = mission.enemyHp * 0.3 + mission.enemyAtk * 2;
 
