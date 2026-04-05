@@ -338,6 +338,10 @@ function newGame(name, cls){
     wishList: [], // up to 3 follower class names
     prestige: 0,
     prestige_bonus: 0, // percent
+    autoSellRarity: -1, // -1 = off, 0+ = auto-sell below this rarity
+    expeditionLog: [], // last 20 expedition results
+    bossKillCounts: {}, // per-mission boss kill tracking
+    fastestKills: {}, // fastest kill turn counts per mission
     lastSave: Date.now(),
     lastOnline: Date.now(),
     achievements: [],
@@ -622,6 +626,12 @@ function getCombatPower(){
   if(G.skillLevels[13] >= 99) leadershipMult += 0.5; // COMMANDER: +50% follower power
   const activeFollowers = G.followers.filter(f => f.assigned === 'combat');
   activeFollowers.forEach(f => { p += Math.floor(f.level * f.power * 0.5 * leadershipMult); });
+  // Skill Total Level Milestones (#13)
+  const totalSkillLv = G.skillLevels.reduce((sum, lv) => sum + lv, 0);
+  if(totalSkillLv >= 1000) p = Math.floor(p * 1.20);
+  else if(totalSkillLv >= 500) p = Math.floor(p * 1.15);
+  else if(totalSkillLv >= 250) p = Math.floor(p * 1.10);
+  else if(totalSkillLv >= 100) p = Math.floor(p * 1.05);
   return Math.floor(p);
 }
 
@@ -1021,6 +1031,9 @@ function runCombat(mission, zoneIdx){
     G.missions_completed++;
     updateChallengeProgress('kills', 1);
     recordBestiaryKill(mission.name, mission.gold, mission.xp);
+    // Boss kill counter (#8)
+    if(!G.bossKillCounts) G.bossKillCounts = {};
+    G.bossKillCounts[mission.name] = (G.bossKillCounts[mission.name]||0) + 1;
     if(mission.boss){
       G.bosses_killed++; updateBountyProgress('boss', 1);
       if(Math.random() < 0.04){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
@@ -1053,8 +1066,16 @@ function runCombat(mission, zoneIdx){
       addSkillXp(parseInt(sk), Math.floor(rewards.skillXp[sk] * xpMult));
     }
     if(rewards.gear){
-      G.inventory.push(rewards.gear);
-      log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']' + (rewards.gear.critCraft ? ' ★CRITICAL CRAFT★' : ''));
+      // Auto-sell check (#3)
+      if(G.autoSellRarity >= 0 && rewards.gear.rarity < G.autoSellRarity){
+        const autoPrice = rewards.gear.level * (rewards.gear.rarity+1) * 3;
+        G.gold += autoPrice; G.total_gold_earned += autoPrice;
+        log.push('Auto-sold: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + '] for ' + autoPrice + 'g');
+        rewards.gear = null;
+      } else {
+        G.inventory.push(rewards.gear);
+        log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']' + (rewards.gear.critCraft ? ' ★CRITICAL CRAFT★' : ''));
+      }
     }
     log.push('+' + rewards.gold + ' gold, +' + Math.floor(rewards.xp * xpMult) + ' XP');
     addFactionRep(1 + (mission.boss ? 5 : 0));
@@ -1082,6 +1103,23 @@ function runCombat(mission, zoneIdx){
       const boxReward = awardMysteryBox();
       log.push('Mystery Box: ' + boxReward);
     }
+    // Resource drops from missions (#10)
+    const resTypes = ['ore','scrap','data','bio'];
+    const resDrop = resTypes[Math.floor(Math.random()*resTypes.length)];
+    const resAmt = 1 + Math.floor(Math.random()*3);
+    addResource(resDrop, resAmt);
+    log.push('+' + resAmt + ' ' + resDrop);
+
+    // Turn counter (#16)
+    log.push('Completed in ' + turn + ' turns.');
+    if(!G.fastestKills) G.fastestKills = {};
+    if(!G.fastestKills[mission.name] || turn < G.fastestKills[mission.name]){
+      G.fastestKills[mission.name] = turn;
+      if(G.fastestKills[mission.name] <= turn) log.push('New fastest kill: ' + turn + ' turns!');
+    }
+    if(!G.records) G.records = {};
+    if(!G.records.fastestKill || turn < G.records.fastestKill) G.records.fastestKill = turn;
+
     // Max combo display & tracking
     if(maxCombo >= 3) log.push('Max Combo: x' + maxCombo);
     if(!G._maxComboEver || maxCombo > G._maxComboEver) G._maxComboEver = maxCombo;
@@ -1102,6 +1140,7 @@ function runCombat(mission, zoneIdx){
   }
 
   G.combatLog = log;
+  G._lastCombatMission = {mission, zoneIdx}; // For quick repeat (#12)
   checkAchievements();
   save();
   showCombatResult(log, won, rewards);
@@ -1125,7 +1164,13 @@ function showCombatResult(log, won, rewards){
     html += '<div class="card mt"><span class="' + RARITIES[rewards.gear.rarity] + '">' + rewards.gear.name + '</span>';
     html += ' | PWR:' + rewards.gear.power + ' DEF:' + rewards.gear.defense + '</div>';
   }
-  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  // Quick Repeat (#12)
+  if(won && G._lastCombatMission){
+    html += '<div class="mt"><button class="btn btn-green" onclick=\'runCombat(' + JSON.stringify(G._lastCombatMission.mission).replace(/'/g,"\\'") + ',' + G._lastCombatMission.zoneIdx + ')\'>Run Again</button> ';
+    html += '<button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  } else {
+    html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  }
   document.getElementById('content').innerHTML = html;
 }
 
@@ -1240,6 +1285,8 @@ function runDungeon(dungeonIdx, nightmare){
     log.push('=== ' + (nightmare?'NIGHTMARE ':'') + 'DUNGEON COMPLETE! ===');
     G.bosses_killed++;
     G.dungeons_cleared++;
+    if(!G.bossKillCounts) G.bossKillCounts = {};
+    G.bossKillCounts[dg.name] = (G.bossKillCounts[dg.name]||0) + 1;
     if(nightmare) G.nightmareClears = (G.nightmareClears||0) + 1;
     updateBountyProgress('dungeon', wavesCleared);
     if(nightmare) updateChallengeProgress('nightmare', 1);
@@ -1434,6 +1481,48 @@ function enchantUpgradeRarity(invIdx){
   showTab('gear');
 }
 
+// ==================== GEAR UPGRADE SYSTEM (#2) ====================
+function upgradeGearLevel(invIdx){
+  const item = G.inventory[invIdx];
+  if(!item) return;
+  if(!item.upgradeLevel) item.upgradeLevel = 0;
+  if(item.upgradeLevel >= 10){ toast('Max upgrade level (+10)!','#f44'); return; }
+  const goldCost = Math.floor(50 * (item.rarity+1) * Math.pow(1.5, item.upgradeLevel));
+  const resCost = Math.floor(3 * (item.upgradeLevel + 1));
+  const resType = item.slot === 'weapon' ? 'ore' : item.slot === 'armor' ? 'bio' : item.slot === 'shield' ? 'scrap' : 'data';
+  if(G.gold < goldCost){ toast('Need ' + goldCost + ' gold','#f44'); return; }
+  if((G.resources[resType]||0) < resCost){ toast('Need ' + resCost + ' ' + resType,'#f44'); return; }
+  G.gold -= goldCost;
+  G.resources[resType] -= resCost;
+  item.upgradeLevel++;
+  // Each level adds +5% stats from base
+  const boostMult = 1.05;
+  item.power = Math.floor(item.power * boostMult);
+  item.defense = Math.floor(item.defense * boostMult);
+  toast(item.name + ' upgraded to +' + item.upgradeLevel + '! (+5% stats)', '#ffd700');
+  save(); showTab('gear');
+}
+
+// ==================== MASS SALVAGE (#19) ====================
+function massSalvage(maxRarity){
+  const toSalvage = G.inventory.filter(item => item.rarity <= maxRarity && !item.favorited);
+  if(toSalvage.length === 0){ toast('Nothing to salvage at that rarity!','#f44'); return; }
+  let totalGold = 0;
+  toSalvage.forEach(item => {
+    if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
+    const mult = (item.rarity+1) * item.level;
+    if(item.slot === 'weapon'){ addResource('ore', 2+Math.floor(mult*0.3)); addResource('scrap', 1+Math.floor(mult*0.2)); }
+    else if(item.slot === 'armor'){ addResource('ore', 1+Math.floor(mult*0.2)); addResource('bio', 2+Math.floor(mult*0.3)); }
+    else if(item.slot === 'shield'){ addResource('scrap', 3+Math.floor(mult*0.4)); }
+    else if(item.slot === 'implant'){ addResource('data', 3+Math.floor(mult*0.4)); }
+    totalGold += Math.floor(item.level * (item.rarity+1) * 1.5);
+  });
+  G.gold += totalGold;
+  G.inventory = G.inventory.filter(item => item.rarity > maxRarity || item.favorited);
+  toast('Salvaged ' + toSalvage.length + ' items for ' + totalGold + 'g + resources!', '#0ff');
+  save(); showTab('gear');
+}
+
 // ==================== CRAFTING SYSTEM ====================
 function craftGear(slot){
   // Determine max craftable rarity from Crafting skill
@@ -1530,10 +1619,16 @@ function doPull(count, useTicket){
   if(useTicket){
     if(count === 1 && (G.tickets1x||0) <= 0){ toast('No 1x tickets!','#f44'); return; }
     if(count === 10 && (G.tickets10x||0) <= 0){ toast('No 10x tickets!','#f44'); return; }
-    if(count === 1) G.tickets1x--;
+    if(count === 50){
+      // 50x uses 5x 10x tickets if available, else gems
+      let ticketsUsed = Math.min(5, G.tickets10x||0);
+      let gemsNeeded = (5 - ticketsUsed) * 20; // 20 gems per 10-pull in 50x discount
+      if(ticketsUsed === 0){ toast('No 10x tickets for 50x pull!','#f44'); return; }
+      G.tickets10x -= ticketsUsed;
+    } else if(count === 1) G.tickets1x--;
     else G.tickets10x--;
   } else {
-    const cost = count === 1 ? 3 : 25;
+    const cost = count === 1 ? 3 : count === 50 ? 100 : 25; // 50x = 100 gems (save 25)
     if(G.gems < cost){ toast('Not enough gems! Need ' + cost, '#f44'); return; }
     G.gems -= cost;
   }
@@ -1764,6 +1859,43 @@ function trainSkill(idx){
 
   save();
   showTab('skills');
+}
+
+// Speed Training x10 (#6)
+function trainSkillX10(idx){
+  let baseCost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
+  if(G.skillLevels[14] >= 99) baseCost = Math.floor(baseCost * 0.8);
+  else if(G.skillLevels[14] >= 75) baseCost = Math.floor(baseCost * 0.85);
+  else if(G.skillLevels[14] >= 25) baseCost = Math.floor(baseCost * 0.92);
+  baseCost = Math.max(1, baseCost);
+  const totalCost = baseCost * 10;
+  if(G.energy < totalCost){ toast('Need ' + totalCost + ' energy for x10', '#f44'); return; }
+  // Suppress showTab calls by calling trainSkill directly in a loop
+  let trained = 0;
+  for(let i = 0; i < 10; i++){
+    let cost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
+    if(G.skillLevels[14] >= 99) cost = Math.floor(cost * 0.8);
+    else if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.85);
+    else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
+    cost = Math.max(1, cost);
+    if(G.energy < cost) break;
+    G.energy -= cost;
+    const xpGain = 15 + G.skillLevels[idx] * 2;
+    addSkillXp(idx, xpGain);
+    updateBountyProgress('train', 1);
+    updateChallengeProgress('trains', 1);
+    if(idx === 12) updateBountyProgress('hack', 1);
+    if(idx === 4) updateBountyProgress('mine', 1);
+    if(idx === 5) updateBountyProgress('scavenge', 1);
+    G.gold += Math.floor(2 + G.skillLevels[idx] * 0.5);
+    if(idx === 4) addResource('ore', 1 + Math.floor(G.skillLevels[4] * 0.1));
+    if(idx === 5) addResource('scrap', 1 + Math.floor(G.skillLevels[5] * 0.1));
+    if(idx === 12) addResource('data', 1 + Math.floor(G.skillLevels[12] * 0.1));
+    if(idx === 6) addResource('bio', 1 + Math.floor(G.skillLevels[6] * 0.1));
+    trained++;
+  }
+  toast('Trained ' + SKILL_NAMES[idx] + ' x' + trained + '!', '#b026ff');
+  save(); showTab('skills');
 }
 
 // ==================== BUILDINGS ====================
@@ -2316,6 +2448,10 @@ function collectExpedition(idx){
   }
   // Follower XP
   followers.forEach(f => { f.assigned = 'idle'; f.xp += 20 + type.duration / 100; });
+  // Expedition Log (#4)
+  if(!G.expeditionLog) G.expeditionLog = [];
+  G.expeditionLog.unshift({msg, time: Date.now(), type: type.name});
+  if(G.expeditionLog.length > 20) G.expeditionLog.pop();
   G.expeditions.splice(idx, 1);
   toast(msg, '#ffd700');
   checkAchievements(); save();
@@ -3612,6 +3748,7 @@ function runTournament(){
 function salvageGear(invIdx){
   const item = G.inventory[invIdx];
   if(!item) return;
+  if(item.favorited){ toast('Cannot salvage favorited item!','#f44'); return; }
   if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
   const mult = (item.rarity+1) * item.level;
   // Weapon -> ore+scrap, Armor -> ore+bio, Shield -> scrap, Implant -> data
@@ -4552,11 +4689,46 @@ function calcOfflineProgress(){
     f.happiness = Math.max(0, f.happiness - Math.floor(elapsed / 3600) * 5);
   });
 
-  if(energyGained > 0 || goldGained > 0){
+  // Offline Auto-Battle Earnings (#20)
+  let abGold = 0, abXp = 0, abKills = 0;
+  if(G.autoBattle){
+    const zone = ZONES[G.autoBattle.zoneIdx];
+    if(zone){
+      const mission = zone.missions[G.autoBattle.missionIdx];
+      if(mission){
+        const combatFollowers = G.followers.filter(f => f.assigned === 'combat' && f.happiness > 20);
+        if(combatFollowers.length > 0){
+          let followerPower = 0;
+          combatFollowers.forEach(f => { followerPower += f.level * f.power * (f.rarity + 1) * 0.3; });
+          const enemyPower = mission.enemyHp * 0.3 + mission.enemyAtk * 2;
+          const ratio = followerPower / Math.max(1, enemyPower);
+          const winChance = Math.min(0.85, ratio * 0.5);
+          // Simulate battles every 10 seconds while offline
+          const battles = Math.floor(elapsed / 10);
+          for(let i = 0; i < Math.min(battles, 360); i++){ // cap at 1 hour worth
+            if(Math.random() < winChance){
+              const g = Math.floor(mission.gold * 0.6);
+              abGold += g; abKills++;
+              abXp += Math.floor(mission.xp * 0.4);
+            }
+          }
+          G.gold += abGold; G.total_gold_earned += abGold;
+          if(abXp > 0) addXp(abXp);
+          G.autoBattleEarnings.gold += abGold;
+          G.autoBattleEarnings.kills += abKills;
+          G.total_kills += abKills;
+          G.missions_completed += abKills;
+        }
+      }
+    }
+  }
+
+  if(energyGained > 0 || goldGained > 0 || abGold > 0){
     const mins = Math.floor(elapsed / 60);
     let msg = 'Welcome back! (' + mins + ' min offline)\n';
     if(energyGained > 0) msg += '+' + energyGained + ' Energy\n';
     if(goldGained > 0) msg += '+' + goldGained + ' Gold\n';
+    if(abGold > 0) msg += 'Auto-battle: +' + abGold + 'g, ' + abKills + ' kills\n';
     setTimeout(() => toast(msg, '#0ff'), 500);
   }
   G.lastOnline = now;
@@ -4576,6 +4748,13 @@ function updateHUD(){
   document.getElementById('hud-xp-fill').style.width = pct + '%';
   document.getElementById('hud-xp-text').textContent = G.xp + ' / ' + needed + ' XP';
   document.getElementById('hud-title').textContent = G.activeTitle ? '[ ' + G.activeTitle + ' ]' : '';
+  // Notification Badge (#15)
+  let badgeCount = 0;
+  if(G.expeditions) G.expeditions.forEach(exp => { if(Date.now() >= exp.endTime && !exp.collected) badgeCount++; });
+  if(G.bounties) G.bounties.forEach(b => { if(b.completed && !b.claimed) badgeCount++; });
+  if(G.notificationLog && G.notificationLog.length > 0) badgeCount += Math.min(3, G.notificationLog.filter(n => Date.now() - n.time < 300000).length);
+  const moreBtn = document.getElementById('tab-more');
+  if(moreBtn) moreBtn.textContent = badgeCount > 0 ? 'More (' + badgeCount + ')' : 'More';
 }
 
 function showTab(tab, extra){
@@ -4836,6 +5015,9 @@ function renderMissions(c){
       html += ' <button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="runDungeon(' + di + ',true)" ' + (nmHasKey?'':'disabled') + '>NM</button>';
     }
     html += ' <span class="text-sm text-dim">' + dg.desc + '</span>';
+    // Dungeon kill count (#8)
+    const dgKills = G.bossKillCounts?.[dg.name] || 0;
+    if(dgKills > 0) html += ' <span class="text-sm" style="color:#888">Clears: ' + dgKills + '</span>';
     html += '</div>';
   });
 
@@ -4861,6 +5043,9 @@ function renderMissions(c){
       html += m.name + tag + ' (EN:' + m.energy + ' | +' + m.gold + 'g +' + m.xp + 'xp)';
       html += '</button>';
       html += '<span class="text-sm" style="color:'+ind.color+'"> ['+ind.text+']</span>';
+      // Kill count (#8)
+      const killCount = G.bossKillCounts?.[m.name] || 0;
+      if(killCount > 0) html += ' <span class="text-sm text-dim">x' + killCount + '</span>';
       if(!G.autoBattle && !m.boss){
         html += ' <button class="btn" style="padding:2px 6px;min-height:28px;font-size:10px;color:#0f0;border-color:#0f0" onclick="startAutoBattle('+zi+','+mi+')">AUTO</button>';
       }
@@ -4903,6 +5088,7 @@ function renderSkills(c){
         html += '</div>';
       }
       html += '<button class="btn btn-purple" onclick="trainSkill(' + i + ')">Train (EN:' + cost + ')</button>';
+      html += ' <button class="btn" style="color:#b026ff;border-color:#b026ff;padding:4px 8px;min-height:30px" onclick="trainSkillX10(' + i + ')">Train x10 (EN:' + (cost*10) + ')</button>';
       html += '</div>';
     });
   }
@@ -4931,7 +5117,12 @@ function renderGear(c){
   }
   G.inventory.forEach((item, i) => {
     html += '<div class="card">';
+    // Favorite star (#9)
+    const favIcon = item.favorited ? '&#9733;' : '&#9734;';
+    const favColor = item.favorited ? '#ffd700' : '#666';
+    html += '<span style="color:'+favColor+';cursor:pointer;font-size:16px" onclick="toggleFavorite('+i+')">' + favIcon + '</span> ';
     html += '<span class="' + RARITIES[item.rarity] + '">' + item.name + '</span>';
+    html += (item.upgradeLevel ? ' <span style="color:#0f0">+' + item.upgradeLevel + '</span>' : '');
     html += ' [' + item.slot + '] PWR:' + item.power + ' DEF:' + item.defense + ' Lv.' + item.level;
     // Gear comparison vs equipped
     const equipped = G.gear[item.slot];
@@ -4951,8 +5142,14 @@ function renderGear(c){
     }
     html += '<br>';
     html += '<button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
-    html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
-    html += ' <button class="btn" style="padding:4px 8px;min-height:30px;color:#f80;border-color:#f80" onclick="salvageGear(' + i + ')">Salvage</button>';
+    if(!item.favorited){
+      html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
+      html += ' <button class="btn" style="padding:4px 8px;min-height:30px;color:#f80;border-color:#f80" onclick="salvageGear(' + i + ')">Salvage</button>';
+    } else {
+      html += ' <span class="text-sm" style="color:#ffd700">[Favorited - protected]</span>';
+    }
+    // Gear upgrade (#2)
+    html += ' <button class="btn" style="padding:4px 8px;min-height:30px;color:#0f0;border-color:#0f0" onclick="upgradeGearLevel(' + i + ')">Upgrade +' + (item.upgradeLevel||0) + '/10</button>';
     // Enchanting options
     if(G.skillLevels[11] >= 10){
       html += ' <button class="btn btn-purple" onclick="enchantReroll(' + i + ')">Reroll(' + getEnchantCost(item) + 'g)</button>';
@@ -4991,6 +5188,30 @@ function renderGear(c){
     html += '</div>';
   }
 
+  // Auto-Sell Threshold (#3)
+  html += '<h2>Auto-Sell</h2>';
+  html += '<div class="card">';
+  const asr = G.autoSellRarity !== undefined ? G.autoSellRarity : -1;
+  html += '<span class="text-sm">Auto-sell gear below rarity: </span>';
+  html += '<select onchange="G.autoSellRarity=parseInt(this.value);save();">';
+  html += '<option value="-1"' + (asr===-1?' selected':'') + '>OFF</option>';
+  for(let r=0;r<=4;r++){
+    html += '<option value="'+r+'"' + (asr===r?' selected':'') + '>Below ' + RARITY_NAMES[r] + '</option>';
+  }
+  html += '</select>';
+  html += '<div class="text-sm text-dim">Favorited items are never auto-sold.</div>';
+  html += '</div>';
+
+  // Mass Salvage (#19)
+  html += '<h2>Mass Salvage</h2>';
+  html += '<div class="card">';
+  html += '<div class="text-sm text-dim mb">Salvage all non-favorited items at or below a rarity.</div>';
+  for(let r=0;r<=3;r++){
+    const count = G.inventory.filter(item => item.rarity <= r && !item.favorited).length;
+    html += '<button class="btn btn-red" onclick="if(confirm(\'Salvage '+count+' items?\'))massSalvage('+r+')">Salvage all ' + RARITY_NAMES[r] + '- (' + count + ')</button> ';
+  }
+  html += '</div>';
+
   c.innerHTML = html;
 }
 
@@ -5026,12 +5247,22 @@ function unequip(slot){
 function sellItem(idx){
   const item = G.inventory[idx];
   if(!item) return;
+  if(item.favorited){ toast('Cannot sell favorited item!','#f44'); return; }
   const price = item.level * (item.rarity+1) * 3;
   G.gold += price;
   G.inventory.splice(idx, 1);
   toast('Sold for ' + price + ' gold', '#ffd700');
   save();
   showTab('gear');
+}
+
+// Gear Favorites (#9)
+function toggleFavorite(invIdx){
+  const item = G.inventory[invIdx];
+  if(!item) return;
+  item.favorited = !item.favorited;
+  toast(item.favorited ? item.name + ' favorited!' : item.name + ' unfavorited.', '#ffd700');
+  save(); showTab('gear');
 }
 
 // ==================== TOWN & FOLLOWERS UI ====================
@@ -5177,6 +5408,18 @@ function renderTown(c){
   const idleFollowers = cityFollowers.filter(f => f.assigned === 'idle' || f.assigned === 'combat');
   if(idleFollowers.length > 0){
     html += '<h3>Idle & Combat (' + idleFollowers.length + ')</h3>';
+    // Sort options (#17)
+    html += '<div class="text-sm mb">Sort: ';
+    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'rarity\';showTab(\'town\')">Rarity</button> ';
+    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'level\';showTab(\'town\')">Level</button> ';
+    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'power\';showTab(\'town\')">Power</button> ';
+    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'happiness\';showTab(\'town\')">Happiness</button>';
+    html += '</div>';
+    // Apply sort
+    if(G._followerSort === 'rarity') idleFollowers.sort((a,b) => b.rarity - a.rarity);
+    else if(G._followerSort === 'level') idleFollowers.sort((a,b) => b.level - a.level);
+    else if(G._followerSort === 'power') idleFollowers.sort((a,b) => b.power - a.power);
+    else if(G._followerSort === 'happiness') idleFollowers.sort((a,b) => a.happiness - b.happiness);
     idleFollowers.forEach(f => {
       const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
       html += '<div class="follower-card">';
@@ -5206,7 +5449,11 @@ function renderTown(c){
     html += '<h3>Bulk Actions</h3>';
     html += '<div class="card">';
     html += '<button class="btn btn-green" onclick="bulkFeed(' + ci + ')">Feed All (' + cityFollowers.length + ')</button> ';
-    html += '<button class="btn btn-purple" onclick="bulkTrain(' + ci + ')">Train All (' + cityFollowers.length + ')</button>';
+    html += '<button class="btn btn-purple" onclick="bulkTrain(' + ci + ')">Train All (' + cityFollowers.length + ')</button> ';
+    // Auto-Assign (#7)
+    html += '<button class="btn btn-cyan" onclick="autoAssignFollowers()">Auto-Assign Idle</button> ';
+    // City Rename (#14)
+    html += '<button class="btn" style="padding:4px 8px;min-height:30px;color:#888;border-color:#888" onclick="renameCity(' + ci + ')">Rename City (100g)</button>';
     html += '</div>';
   }
 
@@ -5259,6 +5506,64 @@ function bulkTrain(cityIdx){
   showTab('town');
 }
 
+// Follower Auto-Assign (#7)
+function autoAssignFollowers(){
+  const ci = G.currentCity;
+  const idleFollowers = G.followers.filter(f => (f.cityIdx||0) === ci && f.assigned === 'idle');
+  if(idleFollowers.length === 0){ toast('No idle followers to assign!','#f44'); return; }
+  let assigned = 0;
+  idleFollowers.forEach(f => {
+    const classInfo = FOLLOWER_CLASS_BONUSES[f.class];
+    if(!classInfo) return;
+    const bestBldg = classInfo.bestBuilding;
+    const bLv = G.cities[ci].buildings[bestBldg] || 0;
+    if(bLv <= 0) return;
+    const slots = getBuildingSlots(bestBldg, ci);
+    const current = getFollowersInSlot(bestBldg, ci).length;
+    if(current < slots){
+      f.assigned = bestBldg;
+      assigned++;
+    }
+  });
+  // Assign remaining idle to combat
+  const stillIdle = G.followers.filter(f => (f.cityIdx||0) === ci && f.assigned === 'idle');
+  stillIdle.forEach(f => { f.assigned = 'combat'; assigned++; });
+  toast('Auto-assigned ' + assigned + ' followers!', '#0ff');
+  save(); showTab('town');
+}
+
+// City Rename (#14)
+function renameCity(cityIdx){
+  const newName = prompt('Enter new city name:');
+  if(!newName || newName.trim() === '') return;
+  if(G.gold < 100){ toast('Need 100 gold to rename','#f44'); return; }
+  G.gold -= 100;
+  G.cities[cityIdx].name = newName.trim().substring(0, 20);
+  toast('City renamed to ' + G.cities[cityIdx].name + '!', '#0ff');
+  save(); showTab('town');
+}
+
+// Follower Gift System (#11)
+function giveFollowerGift(fId, giftType){
+  const f = G.followers.find(x => x.id === fId);
+  if(!f) return;
+  if(G.gold < 50){ toast('Need 50 gold','#f44'); return; }
+  G.gold -= 50;
+  if(giftType === 'food'){
+    f.happiness = Math.min(100, f.happiness + 20);
+    toast(f.name + ' loved the food! +20 happiness', '#0f0');
+  } else if(giftType === 'manual'){
+    f.xp += 50 + f.level * 10;
+    const needed = f.level * 50;
+    if(f.xp >= needed && f.level < 50){ f.xp -= needed; f.level++; f.power += (f.rarity+1); f.defense += Math.floor((f.rarity+1)*0.7); toast(f.name + ' leveled up!','#b026ff'); }
+    else { toast(f.name + ' gained training XP from manual!', '#0ff'); }
+  } else if(giftType === 'token'){
+    f.loyalty = Math.min(100, f.loyalty + 15);
+    toast(f.name + ' feels more loyal! +15 loyalty', '#ffd700');
+  }
+  save(); showTab('followers_detail', fId);
+}
+
 function renderFollowerDetail(c, fId){
   const f = G.followers.find(x => x.id === fId);
   if(!f){ showTab('town'); return; }
@@ -5289,6 +5594,11 @@ function renderFollowerDetail(c, fId){
   html += '<h3>Actions</h3>';
   html += '<button class="btn btn-green" onclick="feedFollower(' + f.id + ')">Feed (' + feedCost + 'g) +Happiness</button> ';
   html += '<button class="btn btn-purple" onclick="trainFollower(' + f.id + ')">Train (' + trainCost + 'g) +XP</button>';
+  // Gifts (#11)
+  html += '<br><span class="text-sm text-dim">Gifts (50g each):</span> ';
+  html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="giveFollowerGift('+f.id+',\'food\')">Food (+20 Happy)</button> ';
+  html += '<button class="btn btn-purple" style="padding:4px 8px;min-height:30px" onclick="giveFollowerGift('+f.id+',\'manual\')">Training Manual (+XP)</button> ';
+  html += '<button class="btn btn-gold" style="padding:4px 8px;min-height:30px" onclick="giveFollowerGift('+f.id+',\'token\')">Loyalty Token (+15)</button>';
   // Star upgrade
   if((f.stars||1) < 5){
     const sCost = getStarUpgradeCost(f.stars||1, f.rarity);
@@ -5401,7 +5711,8 @@ function renderGacha(c){
   // Pull buttons
   html += '<div class="mt">';
   html += '<button class="btn btn-purple" onclick="doPull(1,false)">1x Pull (3 Gems)</button> ';
-  html += '<button class="btn btn-gold" onclick="doPull(10,false)">10x Pull (25 Gems)</button>';
+  html += '<button class="btn btn-gold" onclick="doPull(10,false)">10x Pull (25 Gems)</button> ';
+  html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="doPull(50,false)">50x Pull (100 Gems)</button>';
   html += '</div>';
   // Ticket buttons
   html += '<div class="mt">';
@@ -5451,6 +5762,15 @@ function renderProfile(c){
   html += 'Prestige: ' + G.prestige + ' (+' + G.prestige_bonus + '% XP)<br>';
   html += 'Login Streak: ' + (G.loginStreak || 0) + ' days<br>';
   html += 'Class Passive: <span style="color:'+clsData.passiveColor+'">' + clsData.passive + '</span> - ' + clsData.passiveDesc + '<br>';
+  // Skill Total Level (#13)
+  const totalSkillLevel = G.skillLevels.reduce((sum, lv) => sum + lv, 0);
+  html += 'Total Skill Level: <span style="color:#b026ff">' + totalSkillLevel + '</span>/1485<br>';
+  let milestoneBonus = '';
+  if(totalSkillLevel >= 1000) milestoneBonus = '+20% all stats';
+  else if(totalSkillLevel >= 500) milestoneBonus = '+15% all stats';
+  else if(totalSkillLevel >= 250) milestoneBonus = '+10% all stats';
+  else if(totalSkillLevel >= 100) milestoneBonus = '+5% all stats';
+  if(milestoneBonus) html += '<span style="color:#ffd700">Skill Milestone: ' + milestoneBonus + '</span><br>';
   html += '</div>';
 
   // Potions
@@ -5502,6 +5822,27 @@ function renderProfile(c){
   html += 'Luck: ' + getLuck() + '<br>';
   html += 'Max HP: ' + (50 + G.level * 10 + G.stats.defense * 3) + '<br>';
   html += 'XP Boost: ' + Math.floor(getXpBoost() * 100) + '%<br>';
+  // XP Multiplier Breakdown (#18)
+  html += '<div class="text-sm mt" style="color:#888">';
+  html += 'XP Breakdown: Base 100%';
+  if(G.prestige_bonus > 0) html += ' + Prestige ' + G.prestige_bonus + '%';
+  const labBoost = getAllBuildingLevel('lab') * 5;
+  if(labBoost > 0) html += ' + Lab ' + labBoost + '%';
+  const researchXp = Math.floor(getResearchBonus('combatXp') * 100);
+  if(researchXp > 0) html += ' + Research ' + researchXp + '%';
+  const eventXp = Math.floor(getEventBonus('xp') * 100);
+  if(eventXp > 0) html += ' + Event ' + eventXp + '%';
+  const factionXp = Math.floor(getFactionBonus('xp') * 100);
+  if(factionXp > 0) html += ' + Faction ' + factionXp + '%';
+  const loreBonuses = getLoreBonuses();
+  const loreXp = Math.floor((loreBonuses.xp||0) * 100);
+  if(loreXp > 0) html += ' + Lore ' + loreXp + '%';
+  const clanXp = Math.floor(getClanBonus('xp') * 100);
+  if(clanXp > 0) html += ' + Clan ' + clanXp + '%';
+  let researchCity = 0;
+  G.cities.forEach(c2 => { if(c2.specialty === 'research') researchCity += 10; });
+  if(researchCity > 0) html += ' + City ' + researchCity + '%';
+  html += '</div>';
   html += '</div>';
 
   // Lifetime stats
@@ -5696,6 +6037,17 @@ function renderExpeditions(c){
       });
     }
   }
+  // Expedition Log (#4)
+  if(G.expeditionLog && G.expeditionLog.length > 0){
+    html += '<h3>Expedition Log</h3>';
+    G.expeditionLog.forEach(entry => {
+      const ago = Math.floor((Date.now() - entry.time) / 60000);
+      html += '<div class="card text-sm">';
+      html += '<span style="color:#ffd700">' + (entry.type||'Expedition') + '</span> (' + ago + 'm ago)<br>';
+      html += entry.msg;
+      html += '</div>';
+    });
+  }
   html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
   c.innerHTML = html;
 }
@@ -5886,6 +6238,7 @@ function renderHallOfFame(c){
   html += '<div class="text-sm text-dim mb">Your personal records.</div>';
   html += '<div class="card">';
   html += 'Highest Single Hit: <span style="color:#ffd700">' + (G.records?.highestHit||0) + '</span><br>';
+  html += 'Fastest Kill: <span style="color:#0f0">' + (G.records?.fastestKill||'N/A') + ' turns</span><br>';
   html += 'Total Damage Dealt: <span style="color:#0ff">' + (G.records?.totalDmgDealt||0) + '</span><br>';
   html += 'Login Streak Record: <span style="color:#0f0">' + Math.max(G.records?.longestStreak||0, G.loginStreak||0) + ' days</span><br>';
   html += 'Missions Completed: ' + G.missions_completed + '<br>';
@@ -6217,6 +6570,12 @@ function gameLoop(){
     processAutoBattle();
   }
 
+  // Idle Skill Training (#1) - 1 XP per tick to highest combat skill
+  if(G.skillLevels){
+    const primarySkill = getPrimaryCombatSkill();
+    addSkillXp(primarySkill, 1);
+  }
+
   // Follower passive effects
   followerTimer++;
   if(followerTimer >= 120){ // every 2 min
@@ -6416,6 +6775,11 @@ function migrateOldSave(){
   if(!G.weatherChangeTime) G.weatherChangeTime = 0;
   if(!G.secretAchievements) G.secretAchievements = [];
   if(!G.legendaryPullCount) G.legendaryPullCount = 0;
+  // New features migration
+  if(G.autoSellRarity === undefined) G.autoSellRarity = -1;
+  if(!G.expeditionLog) G.expeditionLog = [];
+  if(!G.bossKillCounts) G.bossKillCounts = {};
+  if(!G.fastestKills) G.fastestKills = {};
   // Update defense for all cities
   G.cities.forEach((c, i) => updateCityDefense(i));
 }
