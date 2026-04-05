@@ -81,6 +81,7 @@ select { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; fon
       <div><span class="stat-label">GEMS </span><span class="stat-val" style="color:#b026ff" id="hud-gems">10</span></div>
     </div>
     <div class="pbar pbar-cyan"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" id="hud-xp-text">0 / 100 XP</span></div>
+    <div id="hud-title" class="text-sm" style="color:#ffd700;text-align:center"></div>
   </div>
   <div id="content"></div>
   <div id="nav">
@@ -403,7 +404,28 @@ function newGame(name, cls){
     legendaryPullCount: 0,
     combatBonusGold: 0,
     mysteryBoxes: 0,
-    marketRefreshTime: 0
+    marketRefreshTime: 0,
+    // Faction system
+    faction: '',
+    factionRep: 0,
+    factionPower: {},
+    // Void rifts
+    activeRift: null,
+    riftsCompleted: 0,
+    // Tournaments
+    lastTournament: 0,
+    tournamentsWon: 0,
+    // Titles
+    activeTitle: '',
+    unlockedTitles: [],
+    // Lore
+    loreFragments: [],
+    // Notification log
+    notificationLog: [],
+    // Quick actions
+    quickActions: [],
+    // Gambling
+    gamblingWins: 0, gamblingLosses: 0
   };
 }
 
@@ -542,6 +564,9 @@ function getXpBoost(){
   });
   boost += getResearchBonus('combatXp') + getClanBonus('xp');
   boost += getEventBonus('xp');
+  boost += getFactionBonus('xp');
+  const loreBonuses = getLoreBonuses();
+  boost += loreBonuses.xp || 0;
   return boost;
 }
 
@@ -1018,6 +1043,10 @@ function runCombat(mission, zoneIdx){
       log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']' + (rewards.gear.critCraft ? ' ★CRITICAL CRAFT★' : ''));
     }
     log.push('+' + rewards.gold + ' gold, +' + Math.floor(rewards.xp * xpMult) + ' XP');
+    addFactionRep(1 + (mission.boss ? 5 : 0));
+    checkTitles();
+    // Lore fragment chance
+    if(Math.random() < 0.02){ const lf = findLoreFragment(); if(lf) log.push('LORE: Found "'+lf.piece+'" ('+lf.set+')'); }
     // Tiny ticket chance on any mission win
     if(Math.random() < 0.008){
       G.tickets1x = (G.tickets1x||0) + 1;
@@ -2931,6 +2960,417 @@ function getIdleSummary(){
   return { goldMin, energyRate, autoBattleActive, expeditionsActive, followerHappiness, passiveXpMin };
 }
 
+// ==================== FACTION SYSTEM ====================
+const FACTIONS = {
+  ironOrder: {name:'Iron Order',desc:'Military discipline. Combat power reigns.',color:'#888',
+    bonuses:{combat:0.12,defense:0.08,goldMin:2},leaderBonus:{combat:0.08,ticketRate:0.01}},
+  voidCult: {name:'Void Cult',desc:'Embrace corruption. Power at any cost.',color:'#b026ff',
+    bonuses:{corruption:0.15,lootRate:0.05,xp:0.05},leaderBonus:{corruption:0.1,relicChance:0.03}},
+  neonSyndicate: {name:'Neon Syndicate',desc:'Gold flows. Trade thrives.',color:'#f0f',
+    bonuses:{goldMin:5,buildCost:-0.08,goldMult:0.1},leaderBonus:{goldMin:8,marketDiscount:0.15}},
+  voidWalkers: {name:'Void Walkers',desc:'Exploration and knowledge.',color:'#0ff',
+    bonuses:{xp:0.08,skillXp:0.1,luck:5},leaderBonus:{xp:0.1,exploreBonus:0.2}},
+  ashborn: {name:'Ashborn',desc:'Followers are everything. Strength in numbers.',color:'#f80',
+    bonuses:{followerPow:0.1,happiness:5,bondRate:0.05},leaderBonus:{followerPow:0.15,summonDiscount:1}}
+};
+
+function joinFaction(factionId){
+  if(G.faction && G.faction === factionId){ toast('Already in this faction!','#f44'); return; }
+  if(G.faction){ G.factionRep = Math.floor(G.factionRep * 0.5); } // Lose half rep on switch
+  G.faction = factionId;
+  toast('Joined ' + FACTIONS[factionId].name + '!', FACTIONS[factionId].color);
+  save();
+}
+
+function addFactionRep(amount){
+  if(!G.faction) return;
+  G.factionRep = (G.factionRep||0) + amount;
+  // Update global faction power (simulated NPCs compete)
+  if(!G.factionPower) G.factionPower = {};
+  G.factionPower[G.faction] = (G.factionPower[G.faction]||0) + amount;
+  // Simulate other factions gaining power
+  for(const fId in FACTIONS){
+    if(fId !== G.faction){
+      G.factionPower[fId] = (G.factionPower[fId]||0) + Math.floor(amount * (0.3 + Math.random() * 0.5));
+    }
+  }
+}
+
+function getLeadingFaction(){
+  if(!G.factionPower) return '';
+  let best = '', bestPow = 0;
+  for(const fId in G.factionPower){
+    if(G.factionPower[fId] > bestPow){ best = fId; bestPow = G.factionPower[fId]; }
+  }
+  return best;
+}
+
+function getFactionBonus(type){
+  if(!G.faction || !FACTIONS[G.faction]) return 0;
+  let total = FACTIONS[G.faction].bonuses[type] || 0;
+  // Leader bonus if your faction is winning
+  if(getLeadingFaction() === G.faction){
+    total += FACTIONS[G.faction].leaderBonus[type] || 0;
+  }
+  return total;
+}
+
+function getFactionRank(){
+  const rep = G.factionRep || 0;
+  if(rep >= 10000) return {rank:'Overlord',tier:5};
+  if(rep >= 5000) return {rank:'Commander',tier:4};
+  if(rep >= 2000) return {rank:'Captain',tier:3};
+  if(rep >= 500) return {rank:'Soldier',tier:2};
+  if(rep >= 100) return {rank:'Recruit',tier:1};
+  return {rank:'Initiate',tier:0};
+}
+
+// ==================== VOID RIFTS ====================
+const RIFT_MODIFIERS = [
+  {name:'No Potions',desc:'Potions disabled',effect:'nopotions'},
+  {name:'Glass Cannon',desc:'2x damage dealt and received',effect:'glass'},
+  {name:'Speed Run',desc:'Max 20 turns per wave',effect:'speedrun'},
+  {name:'Void Touched',desc:'Corruption DoT each turn',effect:'voidtouch'},
+  {name:'Lucky Rift',desc:'3x loot drop rate',effect:'lucky'},
+  {name:'Berserker Rift',desc:'No healing, +30% damage',effect:'berserker'},
+  {name:'Mirror Rift',desc:'Enemy copies your stats',effect:'mirror'}
+];
+
+function spawnRift(){
+  if(G.activeRift) return;
+  if(G.level < 20) return;
+  const waves = 3 + Math.floor(Math.random()*3);
+  const mods = [];
+  const shuffled = [...RIFT_MODIFIERS].sort(()=>Math.random()-0.5);
+  mods.push(shuffled[0]);
+  if(Math.random() < 0.3) mods.push(shuffled[1]); // 30% chance for 2 mods
+  G.activeRift = {
+    waves, mods, modNames: mods.map(m=>m.name),
+    timeLimit: Date.now() + 600000, // 10 min to enter
+    baseHp: 200 + G.level * 20,
+    baseAtk: 15 + G.level * 3
+  };
+  addNotification('A Void Rift has opened! ' + waves + ' waves, mods: ' + mods.map(m=>m.name).join(', '));
+  toast('VOID RIFT opened! Check Missions!', '#b026ff');
+}
+
+function enterRift(){
+  if(!G.activeRift){ toast('No active rift!','#f44'); return; }
+  if(Date.now() > G.activeRift.timeLimit){ G.activeRift = null; toast('Rift expired!','#f44'); return; }
+  if(G.energy < 30){ toast('Need 30 energy','#f44'); return; }
+  G.energy -= 30;
+  const rift = G.activeRift;
+  const mods = rift.mods;
+  const hasMod = (eff) => mods.some(m => m.effect === eff);
+
+  let playerPower = getCombatPower();
+  let playerDef = getCombatDefense();
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  if(hasMod('glass')){ playerPower *= 2; }
+  if(hasMod('berserker')){ playerPower = Math.floor(playerPower * 1.3); }
+  let playerHp = playerMaxHp;
+  let log = [];
+  log.push('=== VOID RIFT ===');
+  log.push('Modifiers: ' + rift.modNames.join(', '));
+  let wavesCleared = 0, totalGold = 0, totalXp = 0, lootDrops = [];
+
+  for(let w = 1; w <= rift.waves; w++){
+    const isBoss = w === rift.waves;
+    let enemyHp = Math.floor(rift.baseHp * (1 + w * 0.4) * (isBoss ? 2 : 1));
+    let enemyAtk = Math.floor(rift.baseAtk * (1 + w * 0.3) * (isBoss ? 1.5 : 1));
+    if(hasMod('mirror')){ enemyHp = playerMaxHp; enemyAtk = Math.floor(playerPower * 0.7); }
+    log.push('--- Wave ' + w + '/' + rift.waves + (isBoss?' [RIFT BOSS]':'') + ' ---');
+    let turn = 0, maxTurns = hasMod('speedrun') ? 20 : 40;
+    while(playerHp > 0 && enemyHp > 0 && turn < maxTurns){
+      turn++;
+      let dmg = Math.max(1, playerPower - Math.floor(enemyAtk*0.1) + Math.floor(Math.random()*5));
+      if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg*2); log.push('T'+turn+': CRIT '+dmg); }
+      else { log.push('T'+turn+': Hit '+dmg); }
+      enemyHp -= dmg;
+      if(enemyHp <= 0) break;
+      let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef*0.25) + Math.floor(Math.random()*3));
+      if(hasMod('glass')) eDmg *= 2;
+      if(Math.random()*100 < Math.min(30, getCombatSpeed()*0.5)){ log.push('T'+turn+': DODGE'); }
+      else { playerHp -= eDmg; log.push('T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')'); }
+      if(hasMod('voidtouch')){ playerHp -= Math.floor(playerMaxHp*0.02); }
+      if(!hasMod('nopotions') && !hasMod('berserker') && playerHp > 0 && playerHp < playerMaxHp*0.2 && G.potions.hp > 0){
+        G.potions.hp--; playerHp = Math.min(playerMaxHp, playerHp+Math.floor(playerMaxHp*0.3)); log.push('  Auto-potion!');
+      }
+    }
+    if(enemyHp <= 0){
+      wavesCleared++; G.total_kills++;
+      const wGold = Math.floor((30+G.level*5)*w*(isBoss?3:1));
+      const wXp = Math.floor((20+G.level*4)*w*(isBoss?3:1));
+      totalGold += wGold; totalXp += wXp;
+      let dropChance = hasMod('lucky') ? 60 : 20;
+      if(Math.random()*100 < dropChance){
+        const gear = generateGear(G.level + w*3, isBoss);
+        G.inventory.push(gear); lootDrops.push(gear);
+        log.push('LOOT: '+gear.name+' ['+RARITY_NAMES[gear.rarity]+']');
+      }
+      playerHp = Math.min(playerMaxHp, playerHp + Math.floor(playerMaxHp*0.1));
+    } else { log.push('Wave '+w+' failed!'); break; }
+  }
+
+  if(wavesCleared === rift.waves){
+    log.push('=== RIFT COMPLETE! ===');
+    G.riftsCompleted = (G.riftsCompleted||0) + 1;
+    totalGold = Math.floor(totalGold * 2); totalXp = Math.floor(totalXp * 2);
+    G.gems += 3; log.push('+3 gems!');
+    if(Math.random() < 0.15){ G.tickets1x=(G.tickets1x||0)+1; log.push('+1 Ticket!'); }
+    if(Math.random() < 0.1){ const r=dropRelic(); if(r) log.push('RELIC: '+r.name+'!'); }
+    addFactionRep(50);
+    // Unique rift title
+    if(G.riftsCompleted === 1) unlockTitle('Rift Walker');
+    if(G.riftsCompleted >= 10) unlockTitle('Void Diver');
+    if(G.riftsCompleted >= 50) unlockTitle('Rift Lord');
+  }
+  G.gold += totalGold; G.total_gold_earned += totalGold; addXp(totalXp);
+  G.activeRift = null;
+  checkAchievements(); save();
+  showDungeonResult(log, wavesCleared, rift.waves, lootDrops);
+}
+
+// ==================== FOLLOWER TOURNAMENTS ====================
+function runTournament(){
+  if(G.followers.length < 8){ toast('Need 8+ followers!','#f44'); return; }
+  if(G.energy < 40){ toast('Need 40 energy','#f44'); return; }
+  const cooldown = 3600000; // 1 hour
+  if(Date.now() - (G.lastTournament||0) < cooldown){ toast('Tournament on cooldown! Wait '+Math.floor((cooldown-(Date.now()-G.lastTournament))/60000)+' min','#f44'); return; }
+  G.energy -= 40;
+  G.lastTournament = Date.now();
+
+  // Pick 8 strongest followers
+  const sorted = [...G.followers].sort((a,b) => getFollowerTotalPower(b) - getFollowerTotalPower(a));
+  let bracket = sorted.slice(0,8);
+  let log = [];
+  log.push('=== FOLLOWER TOURNAMENT ===');
+  log.push('8 fighters enter, 1 champion emerges!');
+  log.push('');
+
+  // 3 rounds: quarters, semis, final
+  const rounds = ['Quarter-Finals','Semi-Finals','GRAND FINAL'];
+  for(let round = 0; round < 3; round++){
+    log.push('--- ' + rounds[round] + ' ---');
+    const winners = [];
+    for(let i = 0; i < bracket.length; i += 2){
+      const f1 = bracket[i], f2 = bracket[i+1];
+      const p1 = getFollowerTotalPower(f1) + Math.floor(Math.random()*10);
+      const p2 = getFollowerTotalPower(f2) + Math.floor(Math.random()*10);
+      const winner = p1 >= p2 ? f1 : f2;
+      const loser = p1 >= p2 ? f2 : f1;
+      log.push(f1.name + ' (PWR:' + getFollowerTotalPower(f1) + ') vs ' + f2.name + ' (PWR:' + getFollowerTotalPower(f2) + ')');
+      log.push('  -> ' + winner.name + ' wins!');
+      winners.push(winner);
+      // Build bonds between fighters
+      updateBond(f1.id, f2.id, 1);
+      // Losers get consolation XP
+      loser.xp += 10;
+    }
+    bracket = winners;
+    log.push('');
+  }
+
+  const champion = bracket[0];
+  log.push('=== CHAMPION: ' + champion.name + '! ===');
+  champion.xp += 100;
+  champion.loyalty = Math.min(100, champion.loyalty + 20);
+  G.tournamentsWon = (G.tournamentsWon||0) + 1;
+  const goldReward = 200 + G.level * 10;
+  G.gold += goldReward; G.total_gold_earned += goldReward;
+  log.push('+' + goldReward + 'g, ' + champion.name + ' +100 XP +20 loyalty');
+  if(Math.random() < 0.1){ G.tickets1x=(G.tickets1x||0)+1; log.push('+1 Ticket!'); }
+  addFactionRep(20);
+  if(G.tournamentsWon === 1) unlockTitle('Tournament Host');
+  if(G.tournamentsWon >= 10) unlockTitle('Arena Master');
+
+  checkAchievements(); save();
+  let html = '<h2>Tournament Results</h2>';
+  html += '<div class="log" style="max-height:350px">';
+  log.forEach(l => { let c=''; if(l.includes('wins'))c='dmg-enemy'; else if(l.includes('CHAMPION'))c='heal'; html+='<div class="log-line '+c+'">'+l+'</div>'; });
+  html += '</div><div class="mt"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+// ==================== SALVAGE SYSTEM ====================
+function salvageGear(invIdx){
+  const item = G.inventory[invIdx];
+  if(!item) return;
+  if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
+  const mult = (item.rarity+1) * item.level;
+  // Weapon -> ore+scrap, Armor -> ore+bio, Shield -> scrap, Implant -> data
+  if(item.slot === 'weapon'){ addResource('ore', 2+Math.floor(mult*0.3)); addResource('scrap', 1+Math.floor(mult*0.2)); }
+  else if(item.slot === 'armor'){ addResource('ore', 1+Math.floor(mult*0.2)); addResource('bio', 2+Math.floor(mult*0.3)); }
+  else if(item.slot === 'shield'){ addResource('scrap', 3+Math.floor(mult*0.4)); }
+  else if(item.slot === 'implant'){ addResource('data', 3+Math.floor(mult*0.4)); }
+  // Small gold
+  const goldBack = Math.floor(item.level * (item.rarity+1) * 1.5);
+  G.gold += goldBack;
+  toast('Salvaged ' + item.name + ' -> resources + ' + goldBack + 'g', '#0ff');
+  G.inventory.splice(invIdx, 1);
+  save(); showTab('gear');
+}
+
+// ==================== FOLLOWER JOBS ====================
+const FOLLOWER_JOBS = {
+  shopkeeper: {name:'Shopkeeper',desc:'Sells junk gear for gold',incomePerMin:()=>3+G.level*0.2,req:'tavern'},
+  trainer: {name:'Trainer',desc:'Auto-trains a random skill',skillXpPerTick:()=>5+G.level,req:'lab'},
+  diplomat: {name:'Diplomat',desc:'Boosts trade route income +20%',tradeMult:0.2,req:'vault'},
+  recruiter: {name:'Recruiter',desc:'Small chance to find followers',recruitChance:0.005,req:'barracks'},
+  alchemist: {name:'Alchemist',desc:'Brews potions automatically',brewChance:0.02,req:'workshop'}
+};
+
+// ==================== GAMBLING DEN ====================
+function gambleCoinFlip(bet){
+  if(G.gold < bet){ toast('Not enough gold!','#f44'); return; }
+  G.gold -= bet;
+  if(Math.random() < 0.48){ // Slightly house-favored
+    G.gold += bet * 2;
+    G.gamblingWins = (G.gamblingWins||0) + 1;
+    toast('HEADS! You win ' + bet + ' gold!', '#0f0');
+  } else {
+    G.gamblingLosses = (G.gamblingLosses||0) + 1;
+    toast('TAILS! You lose ' + bet + ' gold.', '#f44');
+  }
+  addFactionRep(1);
+  save();
+}
+
+function gambleWheelSpin(){
+  const cost = 50 + G.level * 3;
+  if(G.gold < cost){ toast('Need '+cost+' gold!','#f44'); return; }
+  G.gold -= cost;
+  const roll = Math.random() * 100;
+  let msg = '';
+  if(roll < 5){ const g = cost*10; G.gold+=g; msg='JACKPOT! +'+g+'g!'; }
+  else if(roll < 15){ G.gems+=2; msg='+2 gems!'; }
+  else if(roll < 25){ G.tickets1x=(G.tickets1x||0)+1; msg='+1 Summon Ticket!'; }
+  else if(roll < 40){ const g=cost*3; G.gold+=g; msg='+'+g+'g!'; }
+  else if(roll < 55){ const g=cost; G.gold+=g; msg='Break even! +'+g+'g'; }
+  else if(roll < 70){ addResource('ore',10); addResource('scrap',10); msg='+10 ore +10 scrap'; }
+  else if(roll < 85){ const g=Math.floor(cost*0.5); G.gold+=g; msg='Small win +'+g+'g'; }
+  else { msg='Nothing! Better luck next time.'; }
+  G.gamblingWins = (G.gamblingWins||0) + (roll < 55 ? 1 : 0);
+  if(roll >= 55) G.gamblingLosses = (G.gamblingLosses||0) + 1;
+  toast('Wheel: ' + msg, roll < 15 ? '#ffd700' : '#0ff');
+  addFactionRep(2);
+  save();
+}
+
+function gambleHighCard(){
+  const cost = 100 + G.level * 5;
+  if(G.gold < cost){ toast('Need '+cost+' gold!','#f44'); return; }
+  G.gold -= cost;
+  const yourCard = Math.floor(Math.random()*13)+1;
+  const dealerCard = Math.floor(Math.random()*13)+1;
+  const cardNames = ['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  if(yourCard > dealerCard){
+    const win = Math.floor(cost * (1 + (yourCard-dealerCard)*0.3));
+    G.gold += win;
+    G.gamblingWins = (G.gamblingWins||0)+1;
+    toast('You: '+cardNames[yourCard]+' vs Dealer: '+cardNames[dealerCard]+' - WIN! +'+win+'g', '#0f0');
+  } else if(yourCard === dealerCard){
+    G.gold += cost;
+    toast('You: '+cardNames[yourCard]+' vs Dealer: '+cardNames[dealerCard]+' - PUSH! Money back.', '#ffd700');
+  } else {
+    G.gamblingLosses = (G.gamblingLosses||0)+1;
+    toast('You: '+cardNames[yourCard]+' vs Dealer: '+cardNames[dealerCard]+' - LOSE!', '#f44');
+  }
+  addFactionRep(2);
+  save();
+}
+
+// ==================== TITLES ====================
+const TITLE_SOURCES = {
+  'Void Slayer':'Kill 100 enemies','The Untouchable':'10+ combo in combat','Raid Shadow':'Win 25 raids',
+  'Rift Walker':'Complete 1 void rift','Void Diver':'Complete 10 rifts','Rift Lord':'Complete 50 rifts',
+  'Tournament Host':'Win 1 tournament','Arena Master':'Win 10 tournaments',
+  'Tower Climber':'Arena floor 25','Sky Scraper':'Arena floor 50','Stratosphere':'Arena floor 100',
+  'Whale Lord':'100 gacha pulls','Mythic Hunter':'Own a mythic follower',
+  'Lore Keeper':'Collect 10 lore fragments','Historian':'Collect all lore',
+  'Gold Baron':'Earn 100k gold','Ascended':'Ascend once','World Ender':'World Tier 5',
+  'Gambler':'Win 50 gambles','Card Shark':'Win 100 gambles',
+  'Faction Leader':'Reach Overlord rank','Iron Will':'Iron Order member',
+  'Void Touched':'Void Cult member','Syndicate Boss':'Neon Syndicate member',
+  'Pathfinder':'Void Walkers member','Ashborn Champion':'Ashborn member'
+};
+
+function unlockTitle(title){
+  if(!G.unlockedTitles) G.unlockedTitles = [];
+  if(G.unlockedTitles.includes(title)) return;
+  G.unlockedTitles.push(title);
+  toast('Title unlocked: ' + title, '#ffd700');
+}
+
+function setTitle(title){
+  G.activeTitle = title;
+  toast('Title set: ' + title, '#0ff');
+  save();
+}
+
+function checkTitles(){
+  if(G.total_kills >= 100) unlockTitle('Void Slayer');
+  if(G.total_raids_won >= 25) unlockTitle('Raid Shadow');
+  if((G.arenaFloor||1) >= 25) unlockTitle('Tower Climber');
+  if((G.arenaFloor||1) >= 50) unlockTitle('Sky Scraper');
+  if((G.arenaFloor||1) >= 100) unlockTitle('Stratosphere');
+  if(G.total_gacha_pulls >= 100) unlockTitle('Whale Lord');
+  if(G.followers.some(f=>f.rarity>=5)) unlockTitle('Mythic Hunter');
+  if(G.total_gold_earned >= 100000) unlockTitle('Gold Baron');
+  if((G.ascension||0) >= 1) unlockTitle('Ascended');
+  if((G.worldTier||1) >= 5) unlockTitle('World Ender');
+  if((G.gamblingWins||0) >= 50) unlockTitle('Gambler');
+  if((G.gamblingWins||0) >= 100) unlockTitle('Card Shark');
+  if(getFactionRank().tier >= 5) unlockTitle('Faction Leader');
+  if(G.faction === 'ironOrder') unlockTitle('Iron Will');
+  if(G.faction === 'voidCult') unlockTitle('Void Touched');
+  if(G.faction === 'neonSyndicate') unlockTitle('Syndicate Boss');
+  if(G.faction === 'voidWalkers') unlockTitle('Pathfinder');
+  if(G.faction === 'ashborn') unlockTitle('Ashborn Champion');
+  if((G.loreFragments||[]).length >= 10) unlockTitle('Lore Keeper');
+}
+
+// ==================== LORE FRAGMENTS ====================
+const LORE_SETS = {
+  'Void Origins':{pieces:['The First Breach','Corruption Spreads','The Fallen Cities','The Void Heart Awakens','Echoes of the Lost'],bonus:{xp:0.03},desc:'+3% XP'},
+  'Iron Legacy':{pieces:['The Founders','Rise of the Order','The Great War','Iron Hearts','Steel and Blood'],bonus:{combat:0.03},desc:'+3% combat'},
+  'Lost Civilizations':{pieces:['Before the Void','The Golden Age','The Collapse','Remnants','Hope in Ashes'],bonus:{luck:3},desc:'+3 luck'},
+  'Void Bestiary':{pieces:['Lesser Void','Corrupted Beasts','Abyssal Horrors','Void Lords','The Eternal'],bonus:{lootRate:0.03},desc:'+3% loot'}
+};
+
+function findLoreFragment(){
+  if(!G.loreFragments) G.loreFragments = [];
+  // Pick random fragment not owned
+  const allFragments = [];
+  for(const setName in LORE_SETS){
+    LORE_SETS[setName].pieces.forEach(p => { if(!G.loreFragments.includes(p)) allFragments.push({set:setName,piece:p}); });
+  }
+  if(allFragments.length === 0) return null;
+  const frag = allFragments[Math.floor(Math.random()*allFragments.length)];
+  G.loreFragments.push(frag.piece);
+  updateChallengeProgress('relics', 1); // reuse relics counter
+  return frag;
+}
+
+function getLoreBonuses(){
+  const bonuses = {};
+  for(const setName in LORE_SETS){
+    const set = LORE_SETS[setName];
+    const owned = set.pieces.filter(p => (G.loreFragments||[]).includes(p)).length;
+    if(owned === set.pieces.length){
+      for(const k in set.bonus) bonuses[k] = (bonuses[k]||0) + set.bonus[k];
+    }
+  }
+  return bonuses;
+}
+
+// ==================== NOTIFICATION CENTER ====================
+function addNotification(msg){
+  if(!G.notificationLog) G.notificationLog = [];
+  G.notificationLog.unshift({msg, time: Date.now()});
+  if(G.notificationLog.length > 50) G.notificationLog.pop();
+}
+
 // ==================== PRESTIGE PERKS ====================
 const PRESTIGE_PERKS = [
   {id:'pp_xp',name:'Veteran Wisdom',desc:'+5% XP per prestige',effect:'xp',perLevel:0.05},
@@ -3719,6 +4159,7 @@ function updateHUD(){
   const pct = Math.min(100, (G.xp / needed) * 100);
   document.getElementById('hud-xp-fill').style.width = pct + '%';
   document.getElementById('hud-xp-text').textContent = G.xp + ' / ' + needed + ' XP';
+  document.getElementById('hud-title').textContent = G.activeTitle ? '[ ' + G.activeTitle + ' ]' : '';
 }
 
 function showTab(tab, extra){
@@ -3750,6 +4191,11 @@ function showTab(tab, extra){
     case 'bestiary': renderBestiary(c); break;
     case 'halloffame': renderHallOfFame(c); break;
     case 'dashboard': renderDashboard(c); break;
+    case 'factions': renderFactions(c); break;
+    case 'gambling': renderGambling(c); break;
+    case 'titles': renderTitles(c); break;
+    case 'lore': renderLore(c); break;
+    case 'notifications': renderNotifications(c); break;
     case 'followers_detail': renderFollowerDetail(c, extra); break;
     case 'inventory': renderInventory(c); break;
     default: renderMissions(c);
@@ -3791,6 +4237,30 @@ function renderMissions(c){
     html += 'Zone: ' + G.autoBattle.zoneName + ' | Mission: ' + G.autoBattle.missionName + '<br>';
     html += 'Earned: ' + G.autoBattleEarnings.gold + 'g | ' + G.autoBattleEarnings.kills + ' kills | ' + (G.autoBattleEarnings.items||0) + ' items<br>';
     html += '<button class="btn btn-red" onclick="stopAutoBattle()">Stop Auto-Battle</button>';
+    html += '</div>';
+  }
+
+  // Void Rift
+  if(G.activeRift){
+    const riftTime = Math.max(0, Math.floor((G.activeRift.timeLimit - Date.now()) / 1000));
+    html += '<div class="card" style="border-color:#b026ff;background:#0a0520">';
+    html += '<h3 style="color:#b026ff">VOID RIFT OPEN!</h3>';
+    html += '<div class="text-sm">' + G.activeRift.waves + ' waves | Mods: ' + G.activeRift.modNames.join(', ') + '</div>';
+    html += '<div class="text-sm" style="color:#f44">Closes in: ' + Math.floor(riftTime/60) + 'm ' + (riftTime%60) + 's</div>';
+    html += '<button class="btn btn-purple" onclick="enterRift()">Enter Rift (30 EN)</button>';
+    html += '</div>';
+  }
+
+  // Tournament
+  if(G.followers.length >= 8){
+    const cooldownLeft = Math.max(0, 3600000 - (Date.now() - (G.lastTournament||0)));
+    html += '<div class="card" style="border-color:#ffd700">';
+    html += '<h3 style="color:#ffd700">Follower Tournament</h3>';
+    if(cooldownLeft > 0){
+      html += '<div class="text-sm">Cooldown: ' + Math.floor(cooldownLeft/60000) + 'm</div>';
+    } else {
+      html += '<button class="btn btn-gold" onclick="runTournament()">Start Tournament (40 EN)</button>';
+    }
     html += '</div>';
   }
 
@@ -4023,6 +4493,7 @@ function renderGear(c){
     html += '<br>';
     html += '<button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
     html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
+    html += ' <button class="btn" style="padding:4px 8px;min-height:30px;color:#f80;border-color:#f80" onclick="salvageGear(' + i + ')">Salvage</button>';
     // Enchanting options
     if(G.skillLevels[11] >= 10){
       html += ' <button class="btn btn-purple" onclick="enchantReroll(' + i + ')">Reroll(' + getEnchantCost(item) + 'g)</button>';
@@ -4654,6 +5125,11 @@ function renderMore(c){
   html += '<button class="btn btn-purple" onclick="showTab(\'bestiary\')">Bestiary</button> ';
   html += '<button class="btn" onclick="showTab(\'halloffame\')">Hall of Fame</button> ';
   html += '<button class="btn btn-green" onclick="showTab(\'dashboard\')">Idle Dashboard</button> ';
+  html += '<button class="btn" style="color:#f80;border-color:#f80" onclick="showTab(\'factions\')">Factions</button> ';
+  html += '<button class="btn btn-gold" onclick="showTab(\'gambling\')">Gambling Den</button> ';
+  html += '<button class="btn" onclick="showTab(\'titles\')">Titles</button> ';
+  html += '<button class="btn btn-purple" onclick="showTab(\'lore\')">Lore</button> ';
+  html += '<button class="btn" onclick="showTab(\'notifications\')">Notifications</button> ';
   // Ascension
   if(hasResearch('ascend') && G.level >= 100){
     html += '<div class="card mt" style="border-color:#ff2060"><button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button></div>';
@@ -5008,6 +5484,126 @@ function renderDashboard(c){
   c.innerHTML = html;
 }
 
+// ==================== FACTIONS / GAMBLING / TITLES / LORE / NOTIFICATIONS UI ====================
+function renderFactions(c){
+  let html = '<h2>Factions</h2>';
+  const leader = getLeadingFaction();
+  if(G.faction){
+    const f = FACTIONS[G.faction];
+    const rank = getFactionRank();
+    html += '<div class="card" style="border-color:'+f.color+'">';
+    html += '<b style="color:'+f.color+'">' + f.name + '</b> - ' + rank.rank + '<br>';
+    html += 'Rep: ' + (G.factionRep||0) + ' | ' + f.desc + '<br>';
+    html += '<div class="text-sm">Bonuses: ';
+    for(const k in f.bonuses) html += k+': '+f.bonuses[k]+' ';
+    html += '</div>';
+    if(leader === G.faction) html += '<div style="color:#ffd700">YOUR FACTION IS LEADING! Leader bonuses active!</div>';
+    html += '</div>';
+  }
+  // Faction standings
+  html += '<h3>Faction Power Rankings</h3>';
+  const sorted = Object.keys(FACTIONS).sort((a,b) => (G.factionPower?.[b]||0) - (G.factionPower?.[a]||0));
+  sorted.forEach((fId, rank) => {
+    const f = FACTIONS[fId];
+    const pow = G.factionPower?.[fId] || 0;
+    const isYours = fId === G.faction;
+    const isLeader = fId === leader;
+    html += '<div class="card" style="border-color:'+(isYours?f.color:'#333')+'">';
+    html += '<b style="color:'+f.color+'">#' + (rank+1) + ' ' + f.name + '</b>' + (isLeader?' <span style="color:#ffd700">[LEADING]</span>':'') + (isYours?' <span style="color:#0ff">[YOU]</span>':'');
+    html += ' | Power: ' + pow + '<br>';
+    html += '<span class="text-sm">' + f.desc + '</span><br>';
+    if(!isYours) html += '<button class="btn" style="color:'+f.color+';border-color:'+f.color+'" onclick="joinFaction(\''+fId+'\');showTab(\'factions\')">Join</button>';
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderGambling(c){
+  let html = '<h2>Gambling Den</h2>';
+  html += '<div class="card"><b>Stats:</b> Wins: '+(G.gamblingWins||0)+' | Losses: '+(G.gamblingLosses||0)+'</div>';
+  // Coin flip
+  html += '<div class="card"><h3>Coin Flip</h3>';
+  html += '<div class="text-sm text-dim">Double or nothing. 48% win chance (house edge).</div>';
+  [50,100,500,1000].forEach(bet => {
+    html += '<button class="btn btn-gold" onclick="gambleCoinFlip('+bet+');showTab(\'gambling\')">Flip '+bet+'g</button> ';
+  });
+  html += '</div>';
+  // Wheel
+  html += '<div class="card"><h3>Wheel of Fortune</h3>';
+  const wheelCost = 50 + G.level * 3;
+  html += '<div class="text-sm text-dim">Spin for prizes! 5% jackpot (10x), gems, tickets, resources, or nothing.</div>';
+  html += '<button class="btn btn-purple" onclick="gambleWheelSpin();showTab(\'gambling\')">Spin ('+wheelCost+'g)</button>';
+  html += '</div>';
+  // High card
+  html += '<div class="card"><h3>High Card</h3>';
+  const cardCost = 100 + G.level * 5;
+  html += '<div class="text-sm text-dim">Draw against the dealer. Higher card wins. Bigger gap = bigger payout.</div>';
+  html += '<button class="btn btn-cyan" onclick="gambleHighCard();showTab(\'gambling\')">Play ('+cardCost+'g)</button>';
+  html += '</div>';
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderTitles(c){
+  let html = '<h2>Titles</h2>';
+  html += '<div class="card">Active: <b style="color:#ffd700">' + (G.activeTitle || 'None') + '</b></div>';
+  html += '<h3>Unlocked (' + (G.unlockedTitles||[]).length + '/' + Object.keys(TITLE_SOURCES).length + ')</h3>';
+  (G.unlockedTitles||[]).forEach(t => {
+    const active = t === G.activeTitle;
+    html += '<div class="card" style="border-color:'+(active?'#ffd700':'#333')+'">';
+    html += '<b>' + t + '</b> - ' + (TITLE_SOURCES[t]||'') + ' ';
+    if(!active) html += '<button class="btn btn-cyan" style="padding:2px 6px;min-height:24px" onclick="setTitle(\''+t+'\');showTab(\'titles\')">Equip</button>';
+    else html += '<span style="color:#ffd700">[ACTIVE]</span>';
+    html += '</div>';
+  });
+  html += '<h3>Locked</h3>';
+  for(const t in TITLE_SOURCES){
+    if(!(G.unlockedTitles||[]).includes(t)){
+      html += '<div class="card text-dim"><b>???</b> - ' + TITLE_SOURCES[t] + '</div>';
+    }
+  }
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderLore(c){
+  let html = '<h2>Lore Fragments</h2>';
+  html += '<div class="text-sm text-dim mb">Found from missions, dungeons, exploration. Complete sets for bonuses.</div>';
+  for(const setName in LORE_SETS){
+    const set = LORE_SETS[setName];
+    const owned = set.pieces.filter(p => (G.loreFragments||[]).includes(p));
+    const complete = owned.length === set.pieces.length;
+    html += '<div class="card" style="border-color:'+(complete?'#ffd700':'#333')+'">';
+    html += '<b>' + setName + '</b> (' + owned.length + '/' + set.pieces.length + ')';
+    if(complete) html += ' <span style="color:#ffd700">[COMPLETE: ' + set.desc + ']</span>';
+    html += '<br>';
+    set.pieces.forEach(p => {
+      const has = (G.loreFragments||[]).includes(p);
+      html += '<span style="color:'+(has?'#0ff':'#444')+'">' + (has?p:'???') + '</span> ';
+    });
+    html += '</div>';
+  }
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
+function renderNotifications(c){
+  let html = '<h2>Notification Log</h2>';
+  html += '<div class="text-sm text-dim mb">Recent events and activity.</div>';
+  if(!G.notificationLog || G.notificationLog.length === 0){
+    html += '<div class="text-dim">No notifications yet.</div>';
+  }
+  (G.notificationLog||[]).forEach(n => {
+    const ago = Math.floor((Date.now() - n.time) / 60000);
+    html += '<div class="card text-sm">';
+    html += '<span class="text-dim">' + (ago < 1 ? 'Just now' : ago + 'm ago') + '</span> ' + n.msg;
+    html += '</div>';
+  });
+  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  c.innerHTML = html;
+}
+
 // ==================== FOLLOWER EQUIPMENT UI ====================
 // Added to follower detail - show in renderFollowerDetail
 
@@ -5154,6 +5750,36 @@ function gameLoop(){
 
   // Update weather
   updateWeather();
+
+  // Void rift spawn check (every ~5 min, 3% chance)
+  if(energyTimer % 300 === 0 && Math.random() < 0.03) spawnRift();
+
+  // Follower jobs processing (every 2 min tick with followers)
+  if(followerTimer === 0){
+    G.followers.forEach(f => {
+      if(f.assigned === 'shopkeeper' || f.job === 'shopkeeper'){
+        const income = Math.floor(3 + G.level * 0.2);
+        G.gold += income;
+      }
+      if(f.assigned === 'trainer' || f.job === 'trainer'){
+        const sk = Math.floor(Math.random()*15);
+        addSkillXp(sk, Math.floor(5 + G.level * 0.5));
+      }
+      if((f.assigned === 'recruiter' || f.job === 'recruiter') && Math.random() < 0.005){
+        const nf = generateFollower();
+        G.followers.push(nf);
+        addNotification(f.name + ' recruited ' + nf.name + '!');
+        toast(f.name + ' recruited ' + nf.name + '!', '#ffd700');
+      }
+      if((f.assigned === 'alchemist' || f.job === 'alchemist') && Math.random() < 0.02){
+        const potTypes = Object.keys(POTIONS);
+        const pt = potTypes[Math.floor(Math.random()*potTypes.length)];
+        G.potions[pt] = (G.potions[pt]||0) + 1;
+        addNotification(f.name + ' brewed a ' + POTIONS[pt].name);
+      }
+    });
+    checkTitles();
+  }
 
   // Check events every 5 min
   if(energyTimer % 300 === 0) checkEvent();
