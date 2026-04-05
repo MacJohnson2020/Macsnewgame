@@ -314,7 +314,7 @@ function newGame(name, cls){
     name: name,
     class: cls,
     level: 1, xp: 0,
-    gold: 0, gems: 10,
+    gold: 0, gems: 15,
     energy: 100, maxEnergy: 100,
     stats: { power:5, defense:5, speed:5, luck:5 },
     statPoints: 0,
@@ -564,6 +564,13 @@ function addXp(amount){
     G.level++;
     G.statPoints += 3;
     toast('LEVEL UP! You are now level ' + G.level, '#0ff');
+    // Level milestone gems (front-loaded)
+    if(G.level <= 10) G.gems += 3; // 3 gems per level early
+    else if(G.level <= 25) G.gems += 2;
+    else if(G.level <= 50) G.gems += 1;
+    // Ticket milestones
+    if(G.level === 15 || G.level === 30 || G.level === 50){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
+    if(G.level === 75 || G.level === 100){ G.tickets10x = (G.tickets10x||0) + 1; toast('+1 10x Summon Ticket!!','#ffd700'); }
     checkAchievements();
     needed = xpForLevel(G.level);
   }
@@ -2301,17 +2308,17 @@ function getWorldTierLootBonus(){
 
 // ==================== DAILY LOGIN ====================
 const DAILY_REWARDS = [
-  {day:1,gold:50,gems:0,desc:'50 gold'},
-  {day:2,gold:100,gems:0,desc:'100 gold'},
-  {day:3,gold:0,gems:2,desc:'2 gems'},
-  {day:4,gold:200,gems:0,desc:'200 gold'},
-  {day:5,gold:0,gems:3,desc:'3 gems'},
-  {day:6,gold:300,gems:1,desc:'300 gold + 1 gem'},
-  {day:7,gold:500,gems:5,desc:'500 gold + 5 gems'},
-  {day:10,gold:800,gems:3,desc:'800 gold + 3 gems'},
-  {day:14,gold:1000,gems:5,desc:'1000 gold + 5 gems'},
-  {day:21,gold:2000,gems:8,desc:'2000 gold + 8 gems'},
-  {day:30,gold:5000,gems:15,desc:'5000 gold + 15 gems + Guaranteed Rare+ pull'}
+  {day:1,gold:50,gems:3,t1x:0,desc:'50 gold + 3 gems'},
+  {day:2,gold:100,gems:2,t1x:0,desc:'100 gold + 2 gems'},
+  {day:3,gold:0,gems:5,t1x:0,desc:'5 gems'},
+  {day:4,gold:200,gems:0,t1x:1,desc:'200 gold + 1x Ticket'},
+  {day:5,gold:0,gems:5,t1x:0,desc:'5 gems'},
+  {day:6,gold:300,gems:3,t1x:0,desc:'300 gold + 3 gems'},
+  {day:7,gold:500,gems:5,t1x:1,desc:'500 gold + 5 gems + 1x Ticket'},
+  {day:10,gold:800,gems:3,t1x:1,desc:'800 gold + 3 gems + 1x Ticket'},
+  {day:14,gold:1000,gems:5,t1x:2,desc:'1000 gold + 5 gems + 2x Tickets'},
+  {day:21,gold:2000,gems:5,t1x:1,t10x:1,desc:'2000 gold + 5 gems + 10x Ticket!'},
+  {day:30,gold:5000,gems:10,t1x:2,t10x:1,desc:'5000 gold + 10 gems + 2x Tickets + 10x Ticket + Rare+ pull'}
 ];
 
 function checkDailyLogin(){
@@ -2334,6 +2341,8 @@ function checkDailyLogin(){
   G.gold += reward.gold;
   G.total_gold_earned += reward.gold;
   G.gems += reward.gems;
+  if(reward.t1x) G.tickets1x = (G.tickets1x||0) + reward.t1x;
+  if(reward.t10x) G.tickets10x = (G.tickets10x||0) + reward.t10x;
   let msg = 'Daily Login! Day ' + G.loginStreak + ': ' + reward.desc;
   // Day 30 bonus: free rare+ follower
   if(G.loginStreak >= 30 && G.loginStreak % 30 === 0){
@@ -2676,8 +2685,18 @@ function checkAchievements(){
     if(!G.achievements.includes(a.id) && a.check()){
       G.achievements.push(a.id);
       toast('Achievement: ' + a.name + '!', '#ffd700');
-      // reward
-      G.gems += 2;
+      // Early achievements give gems, late ones give tickets
+      const earlyAchievements = ['first_kill','kill_10','level_5','level_10','gold_500','gold_1k','pull_1','followers_1','followers_5','building_1','boss_1'];
+      const midAchievements = ['kill_50','level_25','gold_5k','pull_10','boss_10','followers_10','building_5','skill_10','dungeon_1','raid_win_1','city_2'];
+      if(earlyAchievements.includes(a.id)){
+        G.gems += 5; // generous early gems
+      } else if(midAchievements.includes(a.id)){
+        G.gems += 3;
+      } else {
+        G.gems += 1;
+        // Late achievements give tickets
+        G.tickets1x = (G.tickets1x||0) + 1;
+      }
     }
   });
 }
