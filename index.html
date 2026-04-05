@@ -189,6 +189,28 @@ const ZONES = [
   ]}
 ];
 
+// Zone elemental weaknesses (#2)
+const ZONE_ELEMENTS = ['fire','ice','fire','void','ice','void','fire','ice','void','physical'];
+const ELEMENT_NAMES = {physical:'Physical',fire:'Fire',ice:'Ice',void:'Void'};
+const ELEMENT_COLORS = {physical:'#aaa',fire:'#f80',ice:'#4af',void:'#b026ff'};
+
+// Talent definitions (#14)
+const TALENT_DEFS = [
+  {id:'power',name:'+5% Power',desc:'+5% combat power per level',max:5},
+  {id:'defense',name:'+5% Defense',desc:'+5% combat defense per level',max:5},
+  {id:'speed',name:'+5% Speed',desc:'+5% combat speed per level',max:5},
+  {id:'luck',name:'+5% Luck',desc:'+5% luck per level',max:5},
+  {id:'goldmin',name:'+3 Gold/min',desc:'+3 gold per minute per level',max:5},
+  {id:'xp',name:'+5% XP',desc:'+5% XP gain per level',max:5},
+  {id:'energy',name:'+5 Energy',desc:'+5 max energy per level',max:5},
+  {id:'crit',name:'+3% Crit',desc:'+3% crit rate per level',max:5},
+  {id:'dodge',name:'+3% Dodge',desc:'+3% dodge rate per level',max:5},
+  {id:'fpow',name:'+5% Follower Power',desc:'+5% follower combat power per level',max:5}
+];
+
+function getTalentLevel(id){ return (G.talents && G.talents[id]) || 0; }
+function getTalentBonus(id){ return getTalentLevel(id) * (id==='goldmin'?3:id==='energy'?5:id==='crit'?3:id==='dodge'?3:5) / 100; }
+
 const BUILDINGS = [
   {id:'generator',name:'Generator',desc:'Energy regen speed',baseCost:50,costMult:1.8,effect:'energy_regen',slotBonus:'Faster regen per worker'},
   {id:'foundry',name:'Foundry',desc:'Passive gold/min',baseCost:80,costMult:1.8,effect:'gold_per_min',slotBonus:'+gold/min per worker'},
@@ -443,7 +465,41 @@ function newGame(name, cls){
     // Corruption zones
     corruptedZones: {},
     // Bounty contracts
-    followerContracts: []
+    followerContracts: [],
+    // === NEW FEATURES ===
+    // Elemental system (#2)
+    element: 'physical',
+    // Mastery badges (#12)
+    masteryBadges: {},
+    // Passive talent points (#14)
+    talentPoints: 0,
+    talents: {},
+    talentPointsAwarded: 0,
+    // Awakened legacy bonus (#17)
+    awakenedDmgBonus: 0,
+    // Endless Void mode (#18)
+    endlessRecord: 0,
+    // Boss Rush (#19)
+    bossRushCleared: false,
+    // Secret Shop (#20)
+    secretShop: null,
+    secretShopExpiry: 0,
+    // Treasure Maps (#21)
+    treasureMaps: 0,
+    // Faction War (#22)
+    factionWarResult: null,
+    factionWarWeek: '',
+    // Artifact Fragments (#23)
+    artifactFragments: 0,
+    artifacts: [],
+    // Blueprints (#24)
+    blueprints: [],
+    // War Chest (#25)
+    warChest: { amount: 0, depositTime: 0 },
+    // Milestone rewards tracking (#11)
+    skillMilestonesAwarded: [],
+    // Damage recap tracking (#9 combat)
+    lastDamageRecap: null
   };
 }
 
@@ -563,6 +619,8 @@ function getMaxEnergy(){
   if(hasSynergy('energy')) base += 10;
   base += getResearchBonus('maxEnergy');
   base += getRelicBonus('maxEnergy');
+  // Talent bonus (#14)
+  if(G.talents) base += getTalentLevel('energy') * 5;
   return base;
 }
 
@@ -585,6 +643,8 @@ function getXpBoost(){
   boost += getFactionBonus('xp');
   const loreBonuses = getLoreBonuses();
   boost += loreBonuses.xp || 0;
+  // Talent bonus (#14)
+  if(G.talents) boost += getTalentBonus('xp');
   return boost;
 }
 
@@ -632,6 +692,10 @@ function getCombatPower(){
   else if(totalSkillLv >= 500) p = Math.floor(p * 1.15);
   else if(totalSkillLv >= 250) p = Math.floor(p * 1.10);
   else if(totalSkillLv >= 100) p = Math.floor(p * 1.05);
+  // Talent bonus (#14)
+  if(G.talents) p = Math.floor(p * (1 + getTalentBonus('power')));
+  // Legacy bonus from awakened (#17)
+  if(G.awakenedDmgBonus) p = Math.floor(p * (1 + G.awakenedDmgBonus * 0.01));
   return Math.floor(p);
 }
 
@@ -644,6 +708,8 @@ function getCombatDefense(){
   d += cls.defense * G.level;
   // Survival skill: +2 def per level
   d += Math.floor(G.skillLevels[14] * 2);
+  // Talent bonus (#14)
+  if(G.talents) d = Math.floor(d * (1 + getTalentBonus('defense')));
   return Math.floor(d);
 }
 
@@ -653,6 +719,8 @@ function getCombatSpeed(){
   s += cls.speed * Math.floor(G.level/2);
   // Stealth adds speed
   s += Math.floor(G.skillLevels[3] * 0.8);
+  // Talent bonus (#14)
+  if(G.talents) s = Math.floor(s * (1 + getTalentBonus('speed')));
   return Math.floor(s);
 }
 
@@ -668,6 +736,8 @@ function getLuck(){
   l += Math.floor(G.skillLevels[3] * 0.5);
   l += getRelicBonus('luck') + getClanBonus('luck');
   l += getRelicBonus('speed'); // speed relic adds to luck calc too
+  // Talent bonus (#14)
+  if(G.talents) l = Math.floor(l * (1 + getTalentBonus('luck')));
   return Math.floor(l);
 }
 
@@ -716,6 +786,8 @@ function getGoldPerMin(){
   // Relic & clan bonuses
   base += getRelicBonus('goldMin');
   base += getClanBonus('gold');
+  // Talent bonus (#14)
+  if(G.talents) base += getTalentLevel('goldmin') * 3;
   return base;
 }
 
@@ -736,6 +808,12 @@ function addXp(amount){
     // Ticket milestones
     if(G.level === 15 || G.level === 30 || G.level === 50){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
     if(G.level === 75 || G.level === 100){ G.tickets10x = (G.tickets10x||0) + 1; toast('+1 10x Summon Ticket!!','#ffd700'); }
+    // Talent points (#14): 1 per 5 levels
+    if(G.level % 5 === 0){
+      if(!G.talentPoints) G.talentPoints = 0;
+      G.talentPoints++;
+      toast('+1 Talent Point! (Level ' + G.level + ')', '#b026ff');
+    }
     checkAchievements();
     needed = xpForLevel(G.level);
   }
@@ -751,10 +829,42 @@ function addSkillXp(skillIdx, amount){
     G.skillLevels[skillIdx]++;
     toast(SKILL_NAMES[skillIdx] + ' level ' + G.skillLevels[skillIdx] + '!', '#b026ff');
     needed = xpForSkillLevel(G.skillLevels[skillIdx]);
+    // Mastery badge (#12)
+    if(G.skillLevels[skillIdx] === 99){
+      if(!G.masteryBadges) G.masteryBadges = {};
+      G.masteryBadges[skillIdx] = true;
+      toast(SKILL_NAMES[skillIdx] + ' MASTERED! Badge earned!', '#ffd700');
+    }
   }
+  // Milestone rewards every 100 skill levels (#11)
+  checkSkillMilestones();
 }
 
-function generateGear(missionLevel, isBoss){
+function checkSkillMilestones(){
+  if(!G.skillMilestonesAwarded) G.skillMilestonesAwarded = [];
+  const total = G.skillLevels.reduce((s,l) => s+l, 0);
+  const milestones = [
+    {lv:100, gold:500, gems:5, desc:'100 Total Skill Levels'},
+    {lv:250, gold:1500, gems:10, desc:'250 Total Skill Levels'},
+    {lv:500, gold:3000, gems:20, t1x:3, desc:'500 Total Skill Levels'},
+    {lv:750, gold:5000, gems:30, t1x:5, desc:'750 Total Skill Levels'},
+    {lv:1000, gold:10000, gems:50, t10x:1, desc:'1000 Total Skill Levels'},
+    {lv:1250, gold:15000, gems:75, t10x:2, desc:'1250 Total Skill Levels'},
+    {lv:1500, gold:25000, gems:100, t10x:3, desc:'1500 Total Skill Levels'}
+  ];
+  milestones.forEach(m => {
+    if(total >= m.lv && !G.skillMilestonesAwarded.includes(m.lv)){
+      G.skillMilestonesAwarded.push(m.lv);
+      G.gold += m.gold; G.total_gold_earned += m.gold;
+      G.gems += m.gems;
+      if(m.t1x) G.tickets1x = (G.tickets1x||0) + m.t1x;
+      if(m.t10x) G.tickets10x = (G.tickets10x||0) + m.t10x;
+      toast('MILESTONE: ' + m.desc + '! +' + m.gold + 'g +' + m.gems + ' gems' + (m.t1x?' +'+m.t1x+' tickets':'') + (m.t10x?' +'+m.t10x+' 10x tickets':''), '#ffd700');
+    }
+  });
+}
+
+function generateGear(missionLevel, isBoss, zoneHint){
   const luck = getLuck();
   let rarityRoll = Math.random() * 10000;
   let luckBonus = luck * 3; // luck shifts the roll
@@ -768,7 +878,20 @@ function generateGear(missionLevel, isBoss){
   // else ~60% Common
   if(isBoss && rarity < 2) rarity = 2; // boss guarantees rare+
 
-  const slot = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
+  // Zone-weighted loot (#7)
+  let slot;
+  if(zoneHint !== undefined && zoneHint >= 0){
+    const roll = Math.random();
+    if(zoneHint <= 2){ // early zones favor weapons
+      slot = roll < 0.45 ? 'weapon' : roll < 0.65 ? 'armor' : roll < 0.85 ? 'shield' : 'implant';
+    } else if(zoneHint <= 5){ // mid zones favor armor
+      slot = roll < 0.25 ? 'weapon' : roll < 0.55 ? 'armor' : roll < 0.80 ? 'shield' : 'implant';
+    } else { // late zones favor implants
+      slot = roll < 0.20 ? 'weapon' : roll < 0.35 ? 'armor' : roll < 0.55 ? 'shield' : 'implant';
+    }
+  } else {
+    slot = GEAR_SLOTS[Math.floor(Math.random()*GEAR_SLOTS.length)];
+  }
   const names = GEAR_NAMES[slot];
   const name = names[rarity] || names[names.length-1];
   const mult = RARITY_MULT[rarity];
@@ -875,14 +998,32 @@ function runCombat(mission, zoneIdx){
   let comboCount = 0;
   let maxCombo = 0;
 
+  // Battle Rage meter (#4)
+  let rage = 0;
+
+  // Damage recap tracking (#9)
+  let totalDmgDealt = 0;
+  let totalDmgTaken = 0;
+  let critsLanded = 0;
+  // Follower damage tracking for MVP (#6)
+  let followerDmgMap = {};
+  // Enemy shield from special ability (#1)
+  let enemyShieldActive = false;
+
   // Random event tracking
   let bonusGoldEvent = false;
   let enemyEnrageTurns = 0;
   let enemyConfusedTurn = false;
 
+  // Elemental bonus (#2)
+  const playerElement = G.element || 'physical';
+  const zoneWeakness = ZONE_ELEMENTS[zoneIdx] || 'physical';
+  const elementMatch = playerElement === zoneWeakness;
+
   log.push('--- ' + mission.name + ' ---');
   const wInfo = getWeatherInfo();
   if(weatherId !== 'clear') log.push('Weather: ' + wInfo.name + ' (' + wInfo.desc + ')');
+  if(elementMatch) log.push('<span style="color:' + ELEMENT_COLORS[playerElement] + '">ELEMENT MATCH! ' + ELEMENT_NAMES[playerElement] + ' vs weakness! +20% dmg</span>');
   log.push('Your HP: ' + playerHp + ' | Enemy HP: ' + enemyHp);
 
   while(playerHp > 0 && enemyHp > 0 && turn < 50){
@@ -913,9 +1054,19 @@ function runCombat(mission, zoneIdx){
 
     // Player attacks
     let dmg = Math.max(1, playerPower - Math.floor(enemyAtk * 0.2) + Math.floor(Math.random()*5));
+    // Elemental bonus (#2)
+    if(elementMatch) dmg = Math.floor(dmg * 1.20);
     // Combo damage bonus
     if(comboCount >= 10) dmg = Math.floor(dmg * 1.20);
     else if(comboCount >= 5) dmg = Math.floor(dmg * 1.10);
+    // Enemy shield debuff from special ability (#1)
+    if(enemyShieldActive){ dmg = Math.floor(dmg * 0.7); enemyShieldActive = false; }
+    // Rage burst (#4)
+    if(rage >= 100){
+      dmg = Math.floor(dmg * 2);
+      log.push('  RAGE BURST! 2x damage unleashed!');
+      rage = 0;
+    }
     // Weather: corruption damage bonus
     if(weatherCorruptMod > 1 && G.skillLevels[2] > 0) dmg = Math.floor(dmg * weatherCorruptMod);
     // Class passives
@@ -955,36 +1106,53 @@ function runCombat(mission, zoneIdx){
     if(G.skillLevels[3] >= 99) critRate += 15;
     // Synergy: War Blessing
     if(hasSynergy('crit')) critRate += 10;
+    // Talent crit bonus (#14)
+    critRate += getTalentLevel('crit') * 3;
     let critMult = 2;
     if(G.skillLevels[3] >= 50) critMult = 2.5;
     // Assassination: only on enemies below 20% HP
     if(G.skillLevels[3] >= 75 && enemyHp < enemyMaxHp * 0.2 && Math.random() < 0.02){ enemyHp = 0; log.push('Turn ' + turn + ': ASSASSINATE! Finished them off!'); }
+    let isCrit = false;
     if(Math.random()*100 < critRate && enemyHp > 0){
-      dmg = Math.floor(dmg * critMult);
-      log.push('Turn ' + turn + ': You CRIT for ' + dmg + ' damage!');
+      // Combo Finisher (#8): combo 7+ and crit = 3x instead of normal crit
+      if(comboCount >= 7){
+        dmg = Math.floor(dmg * 3);
+        log.push('Turn ' + turn + ': FINISHER! x3 CRIT for ' + dmg + ' damage!');
+      } else {
+        dmg = Math.floor(dmg * critMult);
+        log.push('Turn ' + turn + ': You CRIT for ' + dmg + ' damage!');
+      }
+      isCrit = true;
+      critsLanded++;
     } else if(enemyHp > 0){
       log.push('Turn ' + turn + ': You deal ' + dmg + ' damage.');
     }
     // Corruption DoT
-    if(corruptionDoT > 0 && enemyHp > 0){ enemyHp -= corruptionDoT; }
+    if(corruptionDoT > 0 && enemyHp > 0){ enemyHp -= corruptionDoT; totalDmgDealt += corruptionDoT; }
     // Corruption life drain (5% of dmg)
     if(G.skillLevels[2] >= 75){ playerHp = Math.min(playerMaxHp, playerHp + Math.floor(dmg * 0.05)); }
     // Melee cleave
     if(G.skillLevels[0] >= 50 && Math.random() < 0.25){
       const cleave = Math.floor(dmg * 0.5);
       enemyHp -= cleave;
+      totalDmgDealt += cleave;
       log.push('  CLEAVE! +' + cleave + ' bonus damage!');
     }
     // Ranged double tap
     if(G.skillLevels[1] >= 75 && Math.random() < 0.2){
       const dt = Math.floor(dmg * 0.6);
       enemyHp -= dt;
+      totalDmgDealt += dt;
       log.push('  DOUBLE TAP! +' + dt + ' bonus damage!');
     }
     enemyHp -= dmg;
+    totalDmgDealt += dmg;
+    rage += 10; // Rage: +10 per hit dealt (#4)
     comboCount++; // landed a hit
     if(comboCount > maxCombo) maxCombo = comboCount;
     if(comboCount >= 3) log.push('  COMBO x' + comboCount + '!' + (comboCount >= 10 ? ' (+20% dmg)' : comboCount >= 5 ? ' (+10% dmg)' : ''));
+    // Show rage every 5 turns (#4)
+    if(turn % 5 === 0 && rage > 0 && rage < 100) log.push('  [Rage: ' + rage + '/100]');
     if(enemyHp <= 0){ won = true; break; }
 
     // Enemy attacks
@@ -996,22 +1164,58 @@ function runCombat(mission, zoneIdx){
       let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
       // Enemy enrage buff
       if(enemyEnrageTurns > 0){ eDmg = Math.floor(eDmg * 1.3); enemyEnrageTurns--; }
+      // Critical Defense (#5): 8% chance to BLOCK (15% for Tank)
+      let blockChance = G.class === 'tank' ? 15 : 8;
+      if(Math.random() * 100 < blockChance){
+        eDmg = Math.floor(eDmg * 0.4);
+        log.push('Turn ' + turn + ': BLOCK! Reduced incoming damage by 60%!');
+      }
       // Class passives (defense)
       let dodgeRate = Math.min(35, playerSpeed * 0.5 * weatherSpeedMod);
       if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
       if(G.class === 'ranger') dodgeRate += 8; // Rangers naturally dodgy
       if(G.skillLevels[3] >= 99) dodgeRate += 10;
       dodgeRate += weatherDodgeBonus; // Weather: harsh winds dodge bonus
+      // Talent dodge bonus (#14)
+      dodgeRate += getTalentLevel('dodge') * 3;
       if(G.class === 'tank' && playerHp > playerMaxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
       // Paladin: Divine Shield blocks first hit
       if(G.class === 'paladin' && turn === 1){ eDmg = 0; log.push('Turn 1: DIVINE SHIELD blocks the attack!'); }
       if(Math.random()*100 < dodgeRate && eDmg > 0){
         log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
+        // Counter-Attack (#3): 30% chance after dodge for 50% damage
+        if(Math.random() < 0.30){
+          const counterDmg = Math.floor(playerPower * 0.5);
+          enemyHp -= counterDmg;
+          totalDmgDealt += counterDmg;
+          log.push('  COUNTER! ' + counterDmg + ' damage!');
+          if(enemyHp <= 0){ won = true; break; }
+        }
         // Dodge keeps combo alive
       } else {
         playerHp -= eDmg;
+        totalDmgTaken += eDmg;
+        rage += 20; // Rage: +20 per hit taken (#4)
         comboCount = 0; // took damage, reset combo
         log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
+      }
+      // Enemy special abilities (#1): 10% chance after enemy attacks
+      if(enemyHp > 0 && Math.random() < 0.10){
+        if(zoneIdx <= 2){
+          const healAmt = Math.floor(enemyMaxHp * 0.10);
+          enemyHp = Math.min(enemyMaxHp, enemyHp + healAmt);
+          log.push('  >> Enemy heals 10% HP! (+' + healAmt + ')');
+        } else if(zoneIdx <= 5){
+          enemyShieldActive = true;
+          log.push('  >> Enemy shields! -30% dmg next turn!');
+        } else if(zoneIdx <= 8){
+          enemyEnrageTurns = Math.max(enemyEnrageTurns, 2);
+          log.push('  >> Enemy enrages! +25% ATK for 2 turns!');
+        } else {
+          const addHp = Math.floor(enemyMaxHp * 0.50);
+          enemyHp += addHp;
+          log.push('  >> Enemy summons add! +50% HP! (+' + addHp + ')');
+        }
       }
       // HP potion auto-use at low HP
       if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0){
@@ -1027,6 +1231,10 @@ function runCombat(mission, zoneIdx){
 
   if(won){
     log.push('=== VICTORY! ===');
+    // Damage Recap (#9)
+    log.push('--- DAMAGE RECAP ---');
+    log.push('Total Damage Dealt: ' + totalDmgDealt + ' | Taken: ' + totalDmgTaken);
+    log.push('Turns: ' + turn + ' | Crits: ' + critsLanded);
     G.total_kills++;
     G.missions_completed++;
     updateChallengeProgress('kills', 1);
@@ -1037,10 +1245,27 @@ function runCombat(mission, zoneIdx){
     if(mission.boss){
       G.bosses_killed++; updateBountyProgress('boss', 1);
       if(Math.random() < 0.04){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
+      // Blueprint drop (#24): 1% from boss kills
+      if(Math.random() < 0.01){
+        if(!G.blueprints) G.blueprints = [];
+        const bpNames = ['Void Saber Blueprint','Nexus Helm Blueprint','Abyss Guard Blueprint','Omega Implant Blueprint','Titan Gauntlet Blueprint'];
+        const bpName = bpNames[Math.floor(Math.random()*bpNames.length)];
+        if(!G.blueprints.includes(bpName)){
+          G.blueprints.push(bpName);
+          log.push('BLUEPRINT DROP: ' + bpName + '!');
+          toast('Blueprint found: ' + bpName, '#ffd700');
+        }
+      }
     }
     updateBountyProgress('kill', 1);
 
     rewards.gold = Math.floor(mission.gold * (1 + Math.random()*0.3));
+    // Overkill Bonus (#10)
+    if(Math.abs(enemyHp) > enemyMaxHp * 0.5){
+      const overkillBonus = Math.floor(rewards.gold * 0.25);
+      rewards.gold += overkillBonus;
+      log.push('OVERKILL! +' + overkillBonus + ' bonus gold!');
+    }
     rewards.xp = mission.xp;
     rewards.skillXp = mission.skillXp || {};
 
@@ -1051,7 +1276,14 @@ function runCombat(mission, zoneIdx){
     if(G.skillLevels[5] >= 25) dropChance += 5;
     if(G.skillLevels[5] >= 50) dropChance += 3; // Better rarity handled elsewhere
     if(Math.random()*100 < dropChance){
-      rewards.gear = generateGear(G.level, mission.boss);
+      rewards.gear = generateGear(G.level, mission.boss, zoneIdx);
+    }
+    // Treasure Map drop (#21): 3% from missions
+    if(Math.random() < 0.03){
+      if(!G.treasureMaps) G.treasureMaps = 0;
+      G.treasureMaps++;
+      log.push('You found a TREASURE MAP!');
+      toast('+1 Treasure Map!', '#ffd700');
     }
 
     // XP potion & synergy bonuses
@@ -1127,6 +1359,22 @@ function runCombat(mission, zoneIdx){
     if(weatherLuckBonus > 0) log.push('Lucky Stars granted +' + weatherLuckBonus + ' luck this fight.');
     // Track win with 1 HP for secret achievement
     if(playerHp === 1) G._wonWith1Hp = true;
+    // Post-combat MVP (#6)
+    const combatFollowersForMVP = G.followers.filter(f => f.assigned === 'combat' && f.happiness > 20);
+    if(combatFollowersForMVP.length > 0){
+      let mvp = combatFollowersForMVP[0], mvpDmg = 0;
+      combatFollowersForMVP.forEach(f => {
+        const fDmg = Math.floor(f.level * f.power * (f.rarity+1) * 0.1);
+        if(fDmg > mvpDmg){ mvpDmg = fDmg; mvp = f; }
+      });
+      log.push('MVP: ' + (mvp.name||'Unknown') + ' contributed ~' + mvpDmg + ' equivalent damage!');
+    }
+    // Artifact fragment drop (#23) from nightmare zones 7+
+    if(zoneIdx >= 7 && Math.random() < 0.05){
+      G.artifactFragments = (G.artifactFragments||0) + 1;
+      log.push('+1 Artifact Fragment! (' + G.artifactFragments + '/10)');
+      toast('+1 Artifact Fragment!', '#ff2060');
+    }
   } else {
     log.push('=== DEFEAT ===');
     log.push('You were overwhelmed...');
@@ -1157,6 +1405,9 @@ function showCombatResult(log, won, rewards){
     else if(line.includes('VICTORY')) cls = 'heal';
     else if(line.includes('DEFEAT')) cls = 'dmg-player';
     else if(line.includes('LOOT')) cls = 'legendary';
+    else if(line.includes('COUNTER') || line.includes('BLOCK') || line.includes('RAGE BURST')) cls = 'heal';
+    else if(line.includes('OVERKILL') || line.includes('FINISHER')) cls = 'legendary';
+    else if(line.includes('DAMAGE RECAP')) cls = 'dmg-enemy';
     html += '<div class="log-line ' + cls + '">' + line + '</div>';
   });
   html += '</div>';
@@ -1287,7 +1538,15 @@ function runDungeon(dungeonIdx, nightmare){
     G.dungeons_cleared++;
     if(!G.bossKillCounts) G.bossKillCounts = {};
     G.bossKillCounts[dg.name] = (G.bossKillCounts[dg.name]||0) + 1;
-    if(nightmare) G.nightmareClears = (G.nightmareClears||0) + 1;
+    if(nightmare){
+      G.nightmareClears = (G.nightmareClears||0) + 1;
+      // Artifact fragment drop from nightmare dungeons (#23)
+      if(Math.random() < 0.15){
+        G.artifactFragments = (G.artifactFragments||0) + 1;
+        log.push('+1 Artifact Fragment! (' + G.artifactFragments + '/10)');
+        toast('+1 Artifact Fragment!', '#ff2060');
+      }
+    }
     updateBountyProgress('dungeon', wavesCleared);
     if(nightmare) updateChallengeProgress('nightmare', 1);
     updateChallengeProgress('dungeons', 1);
@@ -1748,7 +2007,14 @@ function trainFollower(id){
   const cost = 20 + f.level * 15;
   if(G.gold < cost){ toast('Need ' + cost + ' gold','#f44'); return; }
   G.gold -= cost;
-  f.xp += 30 + f.level * 5;
+  let trainXp = 30 + f.level * 5;
+  // Mentor bonus (#16): 2x XP if mentored
+  if(f.mentorUntil && Date.now() < f.mentorUntil){
+    trainXp = Math.floor(trainXp * 2);
+  }
+  // Talent follower power bonus (#14)
+  trainXp = Math.floor(trainXp * (1 + getTalentBonus('fpow')));
+  f.xp += trainXp;
   const needed = f.level * 50;
   if(f.xp >= needed && f.level < 50){
     f.xp -= needed;
@@ -2495,6 +2761,30 @@ function craftRecipe(idx){
   save();
 }
 
+// Blueprint crafting (#24)
+function craftBlueprint(idx){
+  if(!G.blueprints || !G.blueprints[idx]){ toast('Blueprint not found','#f44'); return; }
+  if(G.skillLevels[8] < 50){ toast('Need Crafting Lv.50','#f44'); return; }
+  const cost = 2000 + idx * 1000;
+  if(G.gold < cost){ toast('Need '+cost+' gold','#f44'); return; }
+  G.gold -= cost;
+  const bpName = G.blueprints[idx];
+  const slot = bpName.toLowerCase().includes('saber') || bpName.toLowerCase().includes('gauntlet') ? 'weapon' : bpName.toLowerCase().includes('helm') ? 'armor' : bpName.toLowerCase().includes('guard') ? 'shield' : 'implant';
+  const mult = RARITY_MULT[4]; // legendary
+  const basePower = Math.floor((3 + G.level * 1.5) * mult);
+  const gear = {
+    id: Date.now()+Math.random(), name: bpName.replace(' Blueprint',''), slot: slot, rarity: 4,
+    power: slot==='weapon' ? basePower : Math.floor(basePower*0.3),
+    defense: (slot==='armor'||slot==='shield') ? basePower : Math.floor(basePower*0.2),
+    level: Math.max(1, Math.floor(G.level * mult * 0.5)),
+    reqSkill:-1, reqLevel:0, blueprint:true
+  };
+  G.inventory.push(gear);
+  toast('Crafted from blueprint: ' + gear.name + ' [Legendary]!', '#ffd700');
+  addSkillXp(8, 50);
+  save();
+}
+
 // ==================== EVENT SYSTEM ====================
 const EVENTS = [
   {name:'Double XP Weekend',desc:'+50% XP from all sources',bonus:{xp:0.5},duration:3600*4},
@@ -2681,6 +2971,12 @@ function exploreTile(tileIdx){
       G.gems += 2; msg += ' +2 gems';
       if(Math.random() < 0.1){ G.tickets1x = (G.tickets1x||0) + 1; msg += ' +Ticket!'; }
       break;
+  }
+  // Treasure map drop from exploration (#21): 3% chance
+  if(Math.random() < 0.03){
+    if(!G.treasureMaps) G.treasureMaps = 0;
+    G.treasureMaps++;
+    msg += ' +Treasure Map!';
   }
   toast(msg, '#0ff');
   checkAchievements(); save();
@@ -2925,6 +3221,8 @@ function claimChallenge(idx){
   if(ch.t1x) G.tickets1x = (G.tickets1x||0) + ch.t1x;
   if(ch.t10x) G.tickets10x = (G.tickets10x||0) + ch.t10x;
   toast('Challenge complete! ' + (ch.gold?'+'+ch.gold+'g ':'') + (ch.gems?'+'+ch.gems+' gems ':'') + (ch.t1x?'+'+ch.t1x+'x ticket ':'') + (ch.t10x?'+10x ticket!':''), '#ffd700');
+  // Weekly challenge bonus (#15)
+  checkWeeklyChallengeBonus();
   checkAchievements(); save();
 }
 
@@ -3320,7 +3618,8 @@ function awakenFollower(fId){
   f.ability = 'Awakened: ' + abilities[abilities.length-1];
   f.name = 'Awakened ' + f.name;
   G.awakenedCount = (G.awakenedCount||0) + 1;
-  toast(f.name + ' has AWAKENED! +50% stats, ultimate ability!', '#ff2060');
+  G.awakenedDmgBonus = G.awakenedCount; // +1% global damage per awakened (#17)
+  toast(f.name + ' has AWAKENED! +50% stats, ultimate ability! (+1% global dmg)', '#ff2060');
   if(G.awakenedCount === 1) unlockTitle('Soul Forger');
   if(G.awakenedCount >= 5) unlockTitle('Awakener');
   checkAchievements(); save();
@@ -4393,6 +4692,11 @@ function attackWorldBoss(){
       G.tickets10x = (G.tickets10x||0) + 1;
       toast('+1 10x Summon Ticket!!', '#ffd700');
     }
+    // Artifact fragment from world boss (#23)
+    if(Math.random() < 0.20){
+      G.artifactFragments = (G.artifactFragments||0) + 1;
+      toast('+1 Artifact Fragment! (' + G.artifactFragments + '/10)', '#ff2060');
+    }
   } else {
     toast(msg, '#0ff');
   }
@@ -4808,6 +5112,7 @@ function renderMissions(c){
   html += '<div class="card text-sm">';
   html += 'Your Power: <span style="color:#0ff">' + getCombatPower() + '</span> | Def: ' + getCombatDefense() + ' | Speed: ' + getCombatSpeed() + ' | Luck: ' + getLuck();
   html += ' | HP: ' + (50 + G.level*10 + G.stats.defense*3);
+  html += '<br>Element: <span style="color:' + ELEMENT_COLORS[G.element||'physical'] + '">' + ELEMENT_NAMES[G.element||'physical'] + '</span>';
   const cls = CLASSES[G.class];
   html += '<br>Class: <span style="color:'+cls.passiveColor+'">' + cls.passive + '</span> - ' + cls.passiveDesc;
   if(G.activeBuff) html += '<br>Active buff: <span style="color:#ffd700">' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns)</span>';
@@ -5022,6 +5327,51 @@ function renderMissions(c){
   });
 
   // Regular Missions with combat preview & auto-battle
+  // Endless Void mode (#18) & Boss Rush (#19)
+  if(G.level >= 30){
+    html += '<div class="card" style="border-color:#ff2060">';
+    html += '<h3 style="color:#ff2060">Special Modes</h3>';
+    html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="startEndlessVoid()">Endless Void (30 EN)</button>';
+    html += ' <span class="text-sm">Record: Wave ' + (G.endlessRecord||0) + '</span>';
+    html += '<br><button class="btn btn-gold" onclick="startBossRush()">Boss Rush (50 EN)</button>';
+    html += ' <span class="text-sm">' + (G.bossRushCleared ? '<span style="color:#0f0">CLEARED</span>' : 'Not yet cleared') + '</span>';
+    html += '</div>';
+  }
+
+  // Secret Shop (#20)
+  if(G.secretShop && Date.now() < (G.secretShopExpiry||0)){
+    const shopTimeLeft = Math.floor((G.secretShopExpiry - Date.now()) / 1000);
+    html += '<div class="card" style="border-color:#ff2060;background:#1a0a2a">';
+    html += '<h3 style="color:#ff2060">SECRET SHOP!</h3>';
+    html += '<div class="text-sm">Rare items! Disappears in ' + Math.floor(shopTimeLeft/60) + 'm ' + (shopTimeLeft%60) + 's</div>';
+    G.secretShop.forEach((item, i) => {
+      if(item.bought) { html += '<div class="text-dim">SOLD</div>'; return; }
+      html += '<button class="btn btn-purple" onclick="buySecretShop('+i+')">' + item.name + ' (' + item.cost + 'g)</button> ';
+    });
+    html += '</div>';
+  }
+
+  // Treasure Maps (#21)
+  if((G.treasureMaps||0) > 0){
+    html += '<div class="card" style="border-color:#ffd700">';
+    html += '<b style="color:#ffd700">Treasure Maps: ' + G.treasureMaps + '</b> ';
+    html += '<button class="btn btn-gold" onclick="useTreasureMap()">Use Map</button>';
+    html += '</div>';
+  }
+
+  // War Chest (#25)
+  html += '<div class="card">';
+  html += '<b>War Chest</b> ';
+  const wc = G.warChest || {amount:0,depositTime:0};
+  if(wc.amount > 0){
+    const hours = (Date.now() - wc.depositTime) / 3600000;
+    const interest = Math.floor(wc.amount * 0.02 * hours);
+    html += 'Deposited: ' + wc.amount + 'g | Interest: ~' + interest + 'g ';
+    html += '<button class="btn btn-green" onclick="withdrawWarChest()">Withdraw</button> ';
+  }
+  html += '<button class="btn" onclick="var a=prompt(\'Deposit gold (max 10000):\');if(a)depositWarChest(parseInt(a))">Deposit</button>';
+  html += '</div>';
+
   html += '<h3 style="margin-top:12px">Missions</h3>';
   const myPower = getCombatPower();
   ZONES.forEach((zone, zi) => {
@@ -5032,7 +5382,10 @@ function renderMissions(c){
     // Corruption zone indicator
     const zoneCorruption = G.corruptedZones?.[zone.name];
     const corruptTag = zoneCorruption ? ' <span style="color:'+(FACTIONS[zoneCorruption]?.color||'#666')+'">['+FACTIONS[zoneCorruption]?.name+' territory]</span>' : '';
-    html += '<div class="card"><h3>' + zone.name + corruptTag + '</h3>';
+    const zoneElem = ZONE_ELEMENTS[zi] || 'physical';
+    const elemColor = ELEMENT_COLORS[zoneElem];
+    const elemMatch = (G.element||'physical') === zoneElem;
+    html += '<div class="card"><h3>' + zone.name + corruptTag + ' <span style="color:'+elemColor+';font-size:11px">[Weak: '+ELEMENT_NAMES[zoneElem]+']</span>' + (elemMatch?' <span style="color:#0f0;font-size:11px">MATCH!</span>':'') + '</h3>';
     zone.missions.forEach((m, mi) => {
       const enemyPwr = Math.floor(m.enemyAtk * (1 + zi * 0.1));
       const rec = getRecommendedPower(m.enemyHp, m.enemyAtk);
@@ -5074,7 +5427,9 @@ function renderSkills(c){
       else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
       cost = Math.max(1, cost);
       html += '<div class="card">';
+      const hasBadge = G.masteryBadges && G.masteryBadges[i];
       html += '<b>' + name + '</b> Lv.' + lv + '/99';
+      if(hasBadge) html += ' <span style="color:#ffd700" title="Mastered!">&#9733;</span>';
       html += ' <span class="text-sm text-dim">- ' + SKILL_DESCS[i] + '</span>';
       html += '<div class="pbar pbar-purple"><div class="pbar-fill" style="width:' + pct + '%"></div>';
       html += '<span class="pbar-text">' + xp + '/' + needed + '</span></div>';
@@ -5612,6 +5967,16 @@ function renderFollowerDetail(c, fId){
     html += ' <button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="awakenFollower('+f.id+')">AWAKEN ('+aCost+'g + '+aShards+' shards)</button>';
   }
   if(f.awakened) html += ' <span style="color:#ff2060">[AWAKENED]</span>';
+  // Rebirth (#13)
+  if(f.level >= 50 && (f.rebirthCount||0) < 3){
+    html += ' <button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="rebirthFollower('+f.id+')">REBIRTH (Reset to Lv1, keep 20% stats)</button>';
+  }
+  if(f.rebirthCount > 0) html += ' <span style="color:#ff2060">[Rebirth x' + f.rebirthCount + ']</span>';
+  if(f.permBonusPower > 0) html += ' <span class="text-sm" style="color:#0f0">Perm: +' + f.permBonusPower + 'P +' + f.permBonusDef + 'D</span>';
+  // Mentor (#16)
+  if(f.mentorUntil && Date.now() < f.mentorUntil){
+    html += '<br><span style="color:#0ff">Mentored by ' + (f.mentorName||'???') + ' (2x XP) - ' + Math.floor((f.mentorUntil-Date.now())/60000) + 'm left</span>';
+  }
   html += '<br>';
 
   // Follower Equipment
@@ -5652,6 +6017,22 @@ function renderFollowerDetail(c, fId){
     });
   } else {
     html += '<div class="text-sm text-dim">No bonds yet. Fight alongside other followers to build bonds.</div>';
+  }
+
+  // Mentor System (#16)
+  html += '<h3>Mentoring</h3>';
+  if(f.level >= 40){
+    const students = G.followers.filter(x => x.id !== f.id && x.level < 40);
+    if(students.length > 0){
+      html += '<div class="text-sm text-dim">This follower can mentor others (Lv40+). Student gets 2x training XP for 1 hour.</div>';
+      students.slice(0,5).forEach(s => {
+        html += '<button class="btn btn-cyan" style="padding:4px 8px;min-height:30px" onclick="mentorFollower('+f.id+','+s.id+');showTab(\'followers_detail\','+f.id+')">' + s.name + ' (Lv.'+s.level+')</button> ';
+      });
+    } else {
+      html += '<div class="text-sm text-dim">No eligible students (need followers below Lv40).</div>';
+    }
+  } else {
+    html += '<div class="text-sm text-dim">Reach Lv40 to become a mentor.</div>';
   }
 
   html += '<h3>Assign Role</h3>';
@@ -5772,6 +6153,47 @@ function renderProfile(c){
   else if(totalSkillLevel >= 100) milestoneBonus = '+5% all stats';
   if(milestoneBonus) html += '<span style="color:#ffd700">Skill Milestone: ' + milestoneBonus + '</span><br>';
   html += '</div>';
+
+  // Passive Talents (#14)
+  html += '<h3>Talents (Points: ' + (G.talentPoints||0) + ')</h3>';
+  html += '<div class="card">';
+  TALENT_DEFS.forEach(t => {
+    const cur = getTalentLevel(t.id);
+    html += '<div>' + t.name + ': <b>' + cur + '/' + t.max + '</b> <span class="text-sm text-dim">' + t.desc + '</span>';
+    if((G.talentPoints||0) > 0 && cur < t.max){
+      html += ' <button class="btn btn-purple" style="padding:2px 8px;min-height:24px" onclick="buyTalent(\''+t.id+'\')">+</button>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Artifact Fragments & Artifacts (#23)
+  html += '<h3>Artifacts</h3>';
+  html += '<div class="card">';
+  html += 'Fragments: ' + (G.artifactFragments||0) + '/10 ';
+  if((G.artifactFragments||0) >= 10) html += '<button class="btn btn-gold" onclick="forgeArtifact();showTab(\'profile\')">Forge Artifact!</button>';
+  if(G.artifacts && G.artifacts.length > 0){
+    html += '<br>';
+    G.artifacts.forEach(a => {
+      html += '<div class="text-sm" style="color:#ff2060">' + a.name + ' - ' + a.desc + '</div>';
+    });
+  }
+  html += '</div>';
+
+  // Blueprints (#24)
+  if(G.blueprints && G.blueprints.length > 0){
+    html += '<h3>Blueprints</h3>';
+    html += '<div class="card">';
+    G.blueprints.forEach(bp => {
+      html += '<div class="text-sm" style="color:#ffd700">' + bp + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Faction War Result (#22)
+  if(G.factionWarResult){
+    html += '<div class="card" style="border-color:#f80"><b>Faction War Result:</b> Rank #' + G.factionWarResult.rank + ' - ' + G.factionWarResult.bonus + '</div>';
+  }
 
   // Potions
   html += '<h3>Alchemy</h3>';
@@ -5940,6 +6362,10 @@ function renderMore(c){
   html += '<button class="btn btn-red" onclick="showTab(\'sieges\')">City Sieges</button> ';
   html += '<button class="btn" style="color:#f80;border-color:#f80" onclick="showTab(\'resourcecraft\')">Resource Crafting</button> ';
   html += '<button class="btn btn-cyan" onclick="showTab(\'contracts\')">Bounty Contracts</button> ';
+  // New feature links
+  if((G.artifactFragments||0) > 0 || (G.artifacts||[]).length > 0){
+    html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="showTab(\'profile\')">Artifacts ('+((G.artifacts||[]).length)+')</button> ';
+  }
   // Ascension
   if(hasResearch('ascend') && G.level >= 100){
     html += '<div class="card mt" style="border-color:#ff2060"><button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button></div>';
@@ -6065,6 +6491,21 @@ function renderRecipes(c){
     else { html += '<span class="text-dim">Skills too low</span>'; }
     html += '</div>';
   });
+  // Blueprint recipes (#24)
+  if(G.blueprints && G.blueprints.length > 0){
+    html += '<h3>Blueprint Recipes</h3>';
+    html += '<div class="text-sm text-dim mb">Special recipes unlocked from boss blueprint drops.</div>';
+    G.blueprints.forEach((bp, i) => {
+      const bpCost = 2000 + i * 1000;
+      const canCraft = G.skillLevels[8] >= 50;
+      html += '<div class="card" style="border-color:' + (canCraft?'#ff2060':'#333') + '">';
+      html += '<span style="color:#ff2060">' + bp + '</span><br>';
+      html += '<span class="text-sm">Requires: Crafting Lv.50 | Cost: ' + bpCost + 'g</span> ';
+      if(canCraft){ html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="craftBlueprint('+i+');showTab(\'recipes\')">Craft!</button>'; }
+      else { html += '<span class="text-dim">Need Crafting 50</span>'; }
+      html += '</div>';
+    });
+  }
   html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
   c.innerHTML = html;
 }
@@ -6255,6 +6696,13 @@ function renderHallOfFame(c){
   html += 'Bestiary Entries: ' + Object.keys(G.bestiary||{}).length + '<br>';
   html += 'Prestige: ' + G.prestige + ' | Ascension: ' + (G.ascension||0) + '<br>';
   html += 'World Tier: ' + (G.worldTier||1) + '<br>';
+  html += 'Endless Void Record: Wave <span style="color:#ff2060">' + (G.endlessRecord||0) + '</span><br>';
+  html += 'Boss Rush: ' + (G.bossRushCleared ? '<span style="color:#0f0">CLEARED</span>' : 'Not cleared') + '<br>';
+  html += 'Awakened Followers: ' + (G.awakenedCount||0) + ' (+' + (G.awakenedDmgBonus||0) + '% global dmg)<br>';
+  html += 'Treasure Maps Used: ' + (G.treasureMaps||0) + ' remaining<br>';
+  html += 'Artifact Fragments: ' + (G.artifactFragments||0) + '/10 | Artifacts: ' + (G.artifacts||[]).length + '<br>';
+  html += 'Blueprints: ' + (G.blueprints||[]).length + '<br>';
+  html += 'Mastered Skills: ' + Object.keys(G.masteryBadges||{}).length + '/15<br>';
   html += '</div>';
   html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
   c.innerHTML = html;
@@ -6511,6 +6959,13 @@ function showCharacterCreation(){
     html += '<option value="' + k + '">' + cl.name + ' - ' + cl.desc + '</option>';
   }
   html += '</select></div>';
+  html += '<div class="mb"><label>Element:</label><br>';
+  html += '<select id="char-element">';
+  html += '<option value="physical">Physical - Raw force</option>';
+  html += '<option value="fire">Fire - Burning damage</option>';
+  html += '<option value="ice">Ice - Freezing strikes</option>';
+  html += '<option value="void">Void - Dark energy</option>';
+  html += '</select></div>';
   html += '<button class="btn btn-cyan" onclick="startGame()" style="width:100%;font-size:16px;padding:14px">BEGIN</button>';
   html += '</div></div>';
   c.innerHTML = html;
@@ -6521,7 +6976,9 @@ function showCharacterCreation(){
 function startGame(){
   const name = document.getElementById('char-name').value.trim() || 'Raider';
   const cls = document.getElementById('char-class').value;
+  const elem = document.getElementById('char-element') ? document.getElementById('char-element').value : 'physical';
   G = newGame(name, cls);
+  G.element = elem;
   // Apply class starting stats
   const clData = CLASSES[cls];
   G.stats.power += clData.power;
@@ -6568,6 +7025,16 @@ function gameLoop(){
   // Auto-battle (every 10 seconds)
   if(G.autoBattle && energyTimer % 10 === 0){
     processAutoBattle();
+  }
+
+  // Secret Shop spawn (#20): 5% chance per minute
+  if(energyTimer % 60 === 0 && Math.random() < 0.05){
+    spawnSecretShop();
+  }
+
+  // Faction Wars (#22): check weekly
+  if(energyTimer % 3600 === 0){
+    factionWarResult();
   }
 
   // Idle Skill Training (#1) - 1 XP per tick to highest combat skill
@@ -6728,6 +7195,339 @@ function gameLoop(){
   updateHUD();
 }
 
+// ==================== NEW FEATURES ====================
+
+// Follower Rebirth (#13)
+function rebirthFollower(fId){
+  const f = G.followers.find(x => x.id === fId);
+  if(!f){ toast('Follower not found!','#f44'); return; }
+  if(f.level < 50){ toast('Follower must be level 50 to rebirth!','#f44'); return; }
+  if(!f.rebirthCount) f.rebirthCount = 0;
+  if(f.rebirthCount >= 3){ toast('Max 3 rebirths!','#f44'); return; }
+  f.rebirthCount++;
+  const permPowerBonus = Math.floor(f.power * 0.20);
+  const permDefBonus = Math.floor(f.defense * 0.20);
+  if(!f.permBonusPower) f.permBonusPower = 0;
+  if(!f.permBonusDef) f.permBonusDef = 0;
+  f.permBonusPower += permPowerBonus;
+  f.permBonusDef += permDefBonus;
+  f.level = 1;
+  f.xp = 0;
+  f.power = (f.rarity + 1) * 3 + f.permBonusPower;
+  f.defense = (f.rarity + 1) * 2 + f.permBonusDef;
+  toast(f.name + ' REBORN! ('+f.rebirthCount+'/3) Permanent bonus: +' + permPowerBonus + ' PWR +' + permDefBonus + ' DEF', '#ff2060');
+  save();
+  showTab('followers_detail', f.id);
+}
+
+// Passive Talent Points (#14)
+function buyTalent(talentId){
+  if(!G.talentPoints || G.talentPoints <= 0){ toast('No talent points!','#f44'); return; }
+  if(!G.talents) G.talents = {};
+  const def = TALENT_DEFS.find(t => t.id === talentId);
+  if(!def){ toast('Unknown talent','#f44'); return; }
+  const cur = G.talents[talentId] || 0;
+  if(cur >= def.max){ toast('Talent maxed! ('+def.max+'/'+def.max+')','#f44'); return; }
+  G.talentPoints--;
+  G.talents[talentId] = cur + 1;
+  toast('Talent: ' + def.name + ' upgraded to ' + (cur+1) + '/' + def.max, '#b026ff');
+  save();
+  showTab('profile');
+}
+
+// Weekly Challenge Bonus (#15)
+function checkWeeklyChallengeBonus(){
+  if(!G.challenges || G.challenges.length === 0) return;
+  const allClaimed = G.challenges.every(ch => ch.claimed);
+  if(allClaimed && !G._weeklyChallengeBonus){
+    G._weeklyChallengeBonus = G.challengeMonth;
+    G.tickets10x = (G.tickets10x||0) + 1;
+    G.gold += 500; G.total_gold_earned += 500;
+    G.gems += 10;
+    toast('ALL CHALLENGES COMPLETE! +1 10x Ticket +500g +10 gems!', '#ffd700');
+    save();
+  }
+}
+
+// Mentor System (#16)
+function mentorFollower(mentorId, studentId){
+  const mentor = G.followers.find(x => x.id === mentorId);
+  const student = G.followers.find(x => x.id === studentId);
+  if(!mentor || !student){ toast('Follower not found!','#f44'); return; }
+  if(mentor.id === student.id){ toast('Cannot self-mentor!','#f44'); return; }
+  if(mentor.level < 40){ toast('Mentor must be level 40+!','#f44'); return; }
+  student.mentorUntil = Date.now() + 3600000; // 1 hour
+  student.mentorName = mentor.name;
+  toast(mentor.name + ' is now mentoring ' + student.name + ' for 1 hour! 2x training XP!', '#0ff');
+  save();
+}
+
+// Legacy Bonus from Awakened (#17): already tracked in awakenFollower
+// Add the +1% global damage per awakened follower in getCombatPower (already done above)
+
+// Endless Void Mode (#18)
+function startEndlessVoid(){
+  if(G.energy < 30){ toast('Need 30 energy!','#f44'); return; }
+  G.energy -= 30;
+  let playerPower = getCombatPower();
+  let playerDef = getCombatDefense();
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  if(G.skillLevels[14] >= 10) playerMaxHp += 30;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 60;
+  if(G.skillLevels[14] >= 99) playerMaxHp += 100;
+  let playerHp = playerMaxHp;
+  let wave = 0;
+  let totalGold = 0;
+  let totalXp = 0;
+  let log = ['=== ENDLESS VOID ==='];
+  while(playerHp > 0 && wave < 999){
+    wave++;
+    const scale = 1 + wave * 0.3;
+    let enemyHp = Math.floor(200 * scale);
+    const enemyAtk = Math.floor(15 * scale);
+    log.push('--- Wave ' + wave + ' (Enemy HP:'+enemyHp+' ATK:'+enemyAtk+') ---');
+    let turn = 0;
+    while(playerHp > 0 && enemyHp > 0 && turn < 30){
+      turn++;
+      let dmg = Math.max(1, playerPower - Math.floor(enemyAtk*0.15) + Math.floor(Math.random()*5));
+      if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg * 2); log.push('W'+wave+' T'+turn+': CRIT '+dmg); }
+      else log.push('W'+wave+' T'+turn+': Hit '+dmg);
+      enemyHp -= dmg;
+      if(enemyHp <= 0) break;
+      let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef*0.3) + Math.floor(Math.random()*3));
+      if(Math.random()*100 < Math.min(30, getCombatSpeed()*0.5)){
+        log.push('W'+wave+' T'+turn+': DODGE!');
+      } else {
+        playerHp -= eDmg;
+        log.push('W'+wave+' T'+turn+': Took '+eDmg+' (HP:'+Math.max(0,playerHp)+')');
+      }
+    }
+    if(enemyHp <= 0){
+      const wGold = 10 + wave * 5;
+      const wXp = 5 + wave * 3;
+      totalGold += wGold; totalXp += wXp;
+      log.push('Wave '+wave+' cleared! +'+wGold+'g +'+wXp+'xp');
+      G.total_kills++;
+    } else break;
+  }
+  const reachedWave = wave;
+  if(!G.endlessRecord) G.endlessRecord = 0;
+  if(reachedWave > G.endlessRecord){
+    G.endlessRecord = reachedWave;
+    log.push('NEW RECORD: Wave ' + reachedWave + '!');
+  }
+  G.gold += totalGold; G.total_gold_earned += totalGold;
+  addXp(totalXp);
+  log.push('=== VOID COLLAPSED at Wave ' + reachedWave + ' ===');
+  log.push('Total: +' + totalGold + 'g +' + totalXp + 'xp');
+  G.combatLog = log;
+  checkAchievements(); save();
+  showCombatResult(log, true, {gold:totalGold, xp:totalXp, gear:null});
+}
+
+// Boss Rush Mode (#19)
+function startBossRush(){
+  if(G.energy < 50){ toast('Need 50 energy!','#f44'); return; }
+  G.energy -= 50;
+  let playerPower = getCombatPower();
+  let playerDef = getCombatDefense();
+  let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
+  if(G.skillLevels[14] >= 10) playerMaxHp += 30;
+  if(G.skillLevels[14] >= 50) playerMaxHp += 60;
+  if(G.skillLevels[14] >= 99) playerMaxHp += 100;
+  let playerHp = playerMaxHp;
+  let log = ['=== BOSS RUSH ==='];
+  let totalGold = 0, totalXp = 0;
+  let bossesDefeated = 0;
+  for(let zi = 0; zi < ZONES.length; zi++){
+    const zone = ZONES[zi];
+    if(G.level < zone.minLv) break;
+    const bossMission = zone.missions.find(m => m.boss);
+    if(!bossMission) continue;
+    let enemyHp = Math.floor(bossMission.enemyHp * (1 + zi * 0.15));
+    const enemyAtk = Math.floor(bossMission.enemyAtk * (1 + zi * 0.1));
+    log.push('--- BOSS: ' + bossMission.name + ' (HP:'+enemyHp+') ---');
+    let turn = 0;
+    while(playerHp > 0 && enemyHp > 0 && turn < 40){
+      turn++;
+      let dmg = Math.max(1, playerPower - Math.floor(enemyAtk*0.15) + Math.floor(Math.random()*5));
+      if(Math.random()*100 < getLuck()){ dmg = Math.floor(dmg * 2); }
+      enemyHp -= dmg;
+      if(enemyHp <= 0) break;
+      let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef*0.3) + Math.floor(Math.random()*3));
+      if(Math.random()*100 < Math.min(30, getCombatSpeed()*0.5)){
+        log.push('  DODGE!');
+      } else {
+        playerHp -= eDmg;
+      }
+    }
+    if(enemyHp <= 0){
+      bossesDefeated++;
+      const bGold = bossMission.gold * 2;
+      const bXp = bossMission.xp * 2;
+      totalGold += bGold; totalXp += bXp;
+      log.push(bossMission.name + ' defeated! +' + bGold + 'g +' + bXp + 'xp');
+      // Heal 20% between bosses
+      playerHp = Math.min(playerMaxHp, playerHp + Math.floor(playerMaxHp * 0.2));
+      log.push('  Healed 20% HP. (HP: '+playerHp+')');
+    } else {
+      log.push('FAILED at ' + bossMission.name + '!');
+      break;
+    }
+  }
+  if(bossesDefeated === ZONES.filter(z => G.level >= z.minLv && z.missions.some(m=>m.boss)).length){
+    G.bossRushCleared = true;
+    log.push('BOSS RUSH COMPLETE! All bosses defeated!');
+    totalGold += 2000; G.gems += 20;
+    toast('Boss Rush cleared! +2000g +20 gems!', '#ffd700');
+  }
+  G.gold += totalGold; G.total_gold_earned += totalGold;
+  addXp(totalXp);
+  log.push('=== Boss Rush: ' + bossesDefeated + ' bosses defeated, +' + totalGold + 'g ===');
+  G.combatLog = log;
+  checkAchievements(); save();
+  showCombatResult(log, bossesDefeated > 0, {gold:totalGold, xp:totalXp, gear:null});
+}
+
+// Secret Shop (#20)
+function spawnSecretShop(){
+  if(G.secretShop && Date.now() < (G.secretShopExpiry||0)) return;
+  G.secretShop = [
+    {name:'Mythic Gear Box', cost:3000+Math.floor(Math.random()*2000), type:'mythicgear', bought:false},
+    {name:'10x Summon Ticket', cost:4000+Math.floor(Math.random()*2000), type:'ticket10x', bought:false},
+    {name:'Rare Relic Chest', cost:5000+Math.floor(Math.random()*3000), type:'relic', bought:false}
+  ];
+  G.secretShopExpiry = Date.now() + 300000; // 5 minutes
+  toast('A SECRET SHOP has appeared!', '#ff2060');
+}
+
+function buySecretShop(idx){
+  if(!G.secretShop || !G.secretShop[idx] || G.secretShop[idx].bought) return;
+  const item = G.secretShop[idx];
+  if(G.gold < item.cost){ toast('Need '+item.cost+' gold','#f44'); return; }
+  G.gold -= item.cost;
+  item.bought = true;
+  if(item.type === 'mythicgear'){
+    const gear = generateGear(G.level + 20, true);
+    gear.rarity = Math.max(gear.rarity, 4); // at least legendary
+    G.inventory.push(gear);
+    toast('Got: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']!', '#ffd700');
+  } else if(item.type === 'ticket10x'){
+    G.tickets10x = (G.tickets10x||0) + 1;
+    toast('+1 10x Summon Ticket!', '#ffd700');
+  } else if(item.type === 'relic'){
+    const relic = dropRelic();
+    if(relic) toast('Got relic: ' + relic.name + '!', '#ff2060');
+    else { G.gems += 15; toast('No new relics - got 15 gems instead!', '#b026ff'); }
+  }
+  save();
+  showTab('missions');
+}
+
+// Treasure Maps (#21)
+function useTreasureMap(){
+  if(!G.treasureMaps || G.treasureMaps <= 0){ toast('No treasure maps!','#f44'); return; }
+  G.treasureMaps--;
+  const roll = Math.random();
+  let msg = '';
+  if(roll < 0.30){
+    const gold = 500 + Math.floor(Math.random() * 4500);
+    G.gold += gold; G.total_gold_earned += gold;
+    msg = 'Found treasure: +' + gold + ' gold!';
+  } else if(roll < 0.50){
+    G.tickets1x = (G.tickets1x||0) + 2;
+    msg = 'Found treasure: +2 Summon Tickets!';
+  } else if(roll < 0.65){
+    G.tickets10x = (G.tickets10x||0) + 1;
+    msg = 'Found treasure: +1 10x Summon Ticket!';
+  } else if(roll < 0.80){
+    const relic = dropRelic();
+    msg = relic ? 'Found treasure: Relic - ' + relic.name + '!' : 'Found treasure: +10 gems!';
+    if(!relic) G.gems += 10;
+  } else {
+    const gear = generateGear(G.level + 15, true);
+    gear.rarity = Math.max(gear.rarity, 3); // at least epic
+    G.inventory.push(gear);
+    msg = 'Found treasure: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']!';
+  }
+  toast(msg, '#ffd700');
+  save();
+  showTab('missions');
+}
+
+// Faction Wars (#22)
+function factionWarResult(){
+  const weekId = new Date().toISOString().slice(0,10);
+  const weekNum = Math.floor(Date.now() / (7*86400000));
+  const weekStr = 'week_' + weekNum;
+  if(G.factionWarWeek === weekStr) return; // already processed this week
+  G.factionWarWeek = weekStr;
+  if(!G.faction) return;
+  const sorted = Object.keys(FACTIONS).sort((a,b) => (G.factionPower?.[b]||0) - (G.factionPower?.[a]||0));
+  const myRank = sorted.indexOf(G.faction);
+  if(myRank === 0){
+    G.factionWarResult = {rank:1, bonus:'Leader: +10% all stats this week'};
+    toast('FACTION WAR: Your faction won! +10% all stats this week!', '#ffd700');
+  } else if(myRank <= 1){
+    G.factionWarResult = {rank:2, bonus:'2nd: +5% all stats this week'};
+    toast('FACTION WAR: 2nd place! +5% all stats this week!', '#0ff');
+  } else if(myRank <= 2){
+    G.factionWarResult = {rank:3, bonus:'3rd: +2% all stats this week'};
+    toast('FACTION WAR: 3rd place! +2% all stats this week!', '#0ff');
+  } else {
+    G.factionWarResult = {rank:myRank+1, bonus:'No bonus this week'};
+  }
+  save();
+}
+
+// Artifact Fragments (#23)
+function forgeArtifact(){
+  if((G.artifactFragments||0) < 10){ toast('Need 10 fragments! Have: '+(G.artifactFragments||0),'#f44'); return; }
+  G.artifactFragments -= 10;
+  if(!G.artifacts) G.artifacts = [];
+  const artifactNames = ['Shard of Eternity','Void Heart Crystal','Nexus Star','Abyssal Eye','Titan Core'];
+  const name = artifactNames[Math.floor(Math.random()*artifactNames.length)];
+  const artifact = {
+    id: Date.now()+Math.random(),
+    name: name,
+    power: 20 + Math.floor(Math.random()*30),
+    defense: 15 + Math.floor(Math.random()*25),
+    desc: '+' + (20+Math.floor(Math.random()*30)) + ' PWR, +' + (15+Math.floor(Math.random()*25)) + ' DEF'
+  };
+  G.artifacts.push(artifact);
+  toast('ARTIFACT FORGED: ' + name + '!', '#ff2060');
+  save();
+}
+
+// Blueprint Drops (#24): tracked in G.blueprints, shown in recipes
+
+// War Chest (#25)
+function depositWarChest(amount){
+  if(!amount || amount <= 0){ toast('Invalid amount','#f44'); return; }
+  if(!G.warChest) G.warChest = {amount:0, depositTime:0};
+  if(G.warChest.amount + amount > 10000){ toast('Max deposit is 10000g! Current: '+G.warChest.amount,'#f44'); return; }
+  if(G.gold < amount){ toast('Not enough gold!','#f44'); return; }
+  G.gold -= amount;
+  if(G.warChest.amount === 0) G.warChest.depositTime = Date.now();
+  G.warChest.amount += amount;
+  toast('Deposited ' + amount + 'g into War Chest. Earning 2% interest/hour.', '#ffd700');
+  save();
+  showTab('missions');
+}
+
+function withdrawWarChest(){
+  if(!G.warChest || G.warChest.amount <= 0){ toast('Nothing to withdraw!','#f44'); return; }
+  const hours = Math.max(0, (Date.now() - G.warChest.depositTime) / 3600000);
+  const interest = Math.floor(G.warChest.amount * 0.02 * hours);
+  const total = G.warChest.amount + interest;
+  G.gold += total;
+  G.total_gold_earned += interest;
+  toast('Withdrew ' + total + 'g (' + G.warChest.amount + ' + ' + interest + ' interest)!', '#ffd700');
+  G.warChest = {amount:0, depositTime:0};
+  save();
+  showTab('missions');
+}
+
 // ==================== INIT ====================
 function migrateOldSave(){
   // Migrate old single-buildings saves to multi-city
@@ -6780,6 +7580,32 @@ function migrateOldSave(){
   if(!G.expeditionLog) G.expeditionLog = [];
   if(!G.bossKillCounts) G.bossKillCounts = {};
   if(!G.fastestKills) G.fastestKills = {};
+  // === New features migration ===
+  if(!G.element) G.element = 'physical';
+  if(!G.masteryBadges) G.masteryBadges = {};
+  if(!G.talents) G.talents = {};
+  if(G.talentPoints === undefined){
+    G.talentPoints = Math.floor(G.level / 5);
+  }
+  if(!G.endlessRecord) G.endlessRecord = 0;
+  if(G.bossRushCleared === undefined) G.bossRushCleared = false;
+  if(!G.secretShop) G.secretShop = null;
+  if(!G.secretShopExpiry) G.secretShopExpiry = 0;
+  if(!G.treasureMaps) G.treasureMaps = 0;
+  if(!G.factionWarResult) G.factionWarResult = null;
+  if(!G.factionWarWeek) G.factionWarWeek = '';
+  if(!G.artifactFragments) G.artifactFragments = 0;
+  if(!G.artifacts) G.artifacts = [];
+  if(!G.blueprints) G.blueprints = [];
+  if(!G.warChest) G.warChest = {amount:0, depositTime:0};
+  if(!G.skillMilestonesAwarded) G.skillMilestonesAwarded = [];
+  if(!G.awakenedDmgBonus) G.awakenedDmgBonus = G.awakenedCount || 0;
+  // Rebirth migration for followers
+  G.followers.forEach(f => {
+    if(f.rebirthCount === undefined) f.rebirthCount = 0;
+    if(!f.permBonusPower) f.permBonusPower = 0;
+    if(!f.permBonusDef) f.permBonusDef = 0;
+  });
   // Update defense for all cities
   G.cities.forEach((c, i) => updateCityDefense(i));
 }
