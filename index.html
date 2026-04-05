@@ -5090,6 +5090,15 @@ function doPrestige(){
   const gems = G.gems + 20; // bonus gems
   const achievements = G.achievements;
   const totalPulls = G.total_gacha_pulls;
+  // Feature 25: Preserve prestige shop and luxury upgrades
+  const psp = JSON.parse(JSON.stringify(G.prestigeShopPurchases || {}));
+  const luxP = JSON.parse(JSON.stringify(G.luxuryPurchases || {}));
+  const cStats = JSON.parse(JSON.stringify(G.combatStats || {}));
+  const bComp = G.bountiesCompleted || 0;
+  let keptF = null;
+  if(psp.keepFollower && G.followers.length > 0){
+    keptF = JSON.parse(JSON.stringify(G.followers.reduce((best, f) => (!best || f.rarity > best.rarity || (f.rarity === best.rarity && f.level > best.level)) ? f : best, null)));
+  }
 
   G = newGame(name, cls);
   G.prestige = newPrestige;
@@ -5097,6 +5106,20 @@ function doPrestige(){
   G.gems = gems;
   G.achievements = achievements;
   G.total_gacha_pulls = totalPulls;
+  G.prestigeShopPurchases = psp;
+  G.luxuryPurchases = luxP;
+  G.combatStats = cStats;
+  G.bountiesCompleted = bComp;
+  if(psp.startingLevel){
+    for(let i = 0; i < psp.startingLevel; i++){
+      if(G.level < 100){ G.xp = 0; G.level++; G.statPoints += 3; }
+    }
+  }
+  if(keptF){
+    keptF.assigned = 'idle'; keptF.cityIdx = 0;
+    G.followers.push(keptF);
+    toast('Kept follower: ' + keptF.name + '!', '#b026ff');
+  }
   toast('PRESTIGE ' + newPrestige + '! +' + newBonus + '% XP bonus!', '#ffd700');
   save();
   showTab('profile');
