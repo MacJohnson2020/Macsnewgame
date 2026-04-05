@@ -96,9 +96,12 @@ select { background:#1a1a2e; border:1px solid #333; color:#ccc; padding:8px; fon
 <script>
 // ==================== GAME DATA ====================
 const CLASSES = {
-  striker: { name:'Striker', desc:'High damage, fast attacks', power:3, defense:1, speed:3, luck:1 },
-  tank: { name:'Tank', desc:'Tanky, slow but strong', power:2, defense:4, speed:1, luck:1 },
-  phantom: { name:'Phantom', desc:'Evasive, lucky, crits', power:2, defense:1, speed:2, luck:3 }
+  striker: { name:'Striker', desc:'High damage, fast attacks', power:3, defense:1, speed:3, luck:1,
+    passive:'Adrenaline Rush', passiveDesc:'+15% dmg for 3 turns after killing an enemy', passiveColor:'#f44' },
+  tank: { name:'Tank', desc:'Tanky, slow but strong', power:2, defense:4, speed:1, luck:1,
+    passive:'Fortified', passiveDesc:'Take 20% less dmg when above 70% HP', passiveColor:'#4af' },
+  phantom: { name:'Phantom', desc:'Evasive, lucky, crits', power:2, defense:1, speed:2, luck:3,
+    passive:'Ghost Step', passiveDesc:'25% dodge on first 2 turns of combat', passiveColor:'#b026ff' }
 };
 
 // Skills: 0-3 Combat, 4-7 Gathering, 8-11 Production, 12-14 Utility
@@ -281,7 +284,20 @@ function newGame(name, cls){
     bounties: [],
     bountyRefreshTime: 0,
     dungeons_cleared: 0,
-    total_raids_won: 0
+    total_raids_won: 0,
+    // Daily login
+    loginStreak: 0,
+    lastLoginDay: '',
+    // Potions
+    potions: { hp:0, power:0, defense:0, luck:0, xp:0 },
+    activeBuff: null, // {type, turnsLeft}
+    // World boss
+    worldBossHp: 0,
+    worldBossDmgDealt: 0,
+    worldBossKills: 0,
+    // Auto-battle
+    autoBattle: null, // {zoneIdx, missionIdx, followerIds:[]}
+    autoBattleEarnings: { gold:0, xp:0, kills:0 }
   };
 }
 
@@ -325,6 +341,7 @@ function getMaxEnergy(){
   let base = 100;
   const vaultLv = getAllBuildingLevel('vault');
   base += vaultLv * 5;
+  if(hasSynergy('energy')) base += 10; // Power Grid synergy
   return base;
 }
 
@@ -540,13 +557,18 @@ function runCombat(mission, zoneIdx){
   G.energy -= mission.energy;
 
   let playerPower = getCombatPower();
-  const playerDef = getCombatDefense();
+  let playerDef = getCombatDefense();
   const playerSpeed = getCombatSpeed();
   let playerMaxHp = 50 + G.level * 10 + G.stats.defense * 3;
   // Survival skill HP bonuses
   if(G.skillLevels[14] >= 10) playerMaxHp += 30;
   if(G.skillLevels[14] >= 50) playerMaxHp += 60;
-  if(G.skillLevels[14] >= 99) playerMaxHp += 100; // SURVIVOR
+  if(G.skillLevels[14] >= 99) playerMaxHp += 100;
+  // Synergy: Power Grid
+  if(hasSynergy('energy')) playerMaxHp += 10;
+  // Potion buffs
+  if(G.activeBuff && G.activeBuff.type === 'power') playerPower = Math.floor(playerPower * 1.2);
+  if(G.activeBuff && G.activeBuff.type === 'defense') playerDef = Math.floor(playerDef * 1.2);
   // Hunting boss damage bonus
   const huntingBossBonus = (mission.boss && G.skillLevels[7] >= 99) ? 1.25 : (mission.boss && G.skillLevels[7] >= 75) ? 1.15 : 1;
   playerPower = Math.floor(playerPower * huntingBossBonus);
@@ -568,6 +590,10 @@ function runCombat(mission, zoneIdx){
     turn++;
     // Player attacks
     let dmg = Math.max(1, playerPower - Math.floor(enemyAtk * 0.2) + Math.floor(Math.random()*5));
+    // Class passive: Striker Adrenaline Rush (+15% when enemy below 50%)
+    if(G.class === 'striker' && enemyHp < enemyMaxHp * 0.5) dmg = Math.floor(dmg * 1.15);
+    // XP potion buff
+    // (handled at XP reward, not here)
     // Combat skill modifiers
     const primary = getPrimaryCombatSkill();
     // Melee bonuses
@@ -590,10 +616,14 @@ function runCombat(mission, zoneIdx){
     let corruptionDoT = 0;
     if(G.skillLevels[2] >= 25) corruptionDoT = Math.floor(dmg * 0.08); // Poison DoT
     // Crit chance (stealth)
+    // Luck potion
     let critRate = getLuck();
+    if(G.activeBuff && G.activeBuff.type === 'luck') critRate = Math.floor(critRate * 1.3);
     if(G.skillLevels[3] >= 10) critRate += 3;
     if(G.skillLevels[3] >= 25) critRate += 5;
-    if(G.skillLevels[3] >= 99) critRate += 15; // Shadow: +15% crit
+    if(G.skillLevels[3] >= 99) critRate += 15;
+    // Synergy: War Blessing
+    if(hasSynergy('crit')) critRate += 10;
     let critMult = 2;
     if(G.skillLevels[3] >= 50) critMult = 2.5;
     // Assassination: only on enemies below 20% HP
@@ -625,14 +655,24 @@ function runCombat(mission, zoneIdx){
 
     // Enemy attacks
     let eDmg = Math.max(1, enemyAtk - Math.floor(playerDef * 0.3) + Math.floor(Math.random()*3));
-    // Dodge chance based on speed + Shadow bonus
+    // Class passive: Phantom Ghost Step (25% dodge first 2 turns)
     let dodgeRate = Math.min(35, playerSpeed * 0.5);
-    if(G.skillLevels[3] >= 99) dodgeRate += 10; // Shadow dodge bonus
+    if(G.class === 'phantom' && turn <= 2) dodgeRate += 25;
+    if(G.skillLevels[3] >= 99) dodgeRate += 10;
+    // Class passive: Tank Fortified (20% less dmg above 70% HP)
+    if(G.class === 'tank' && playerHp > playerMaxHp * 0.7) eDmg = Math.floor(eDmg * 0.8);
     if(Math.random()*100 < dodgeRate){
       log.push('Turn ' + turn + ': Enemy attacks but you DODGE!');
     } else {
       playerHp -= eDmg;
       log.push('Turn ' + turn + ': Enemy deals ' + eDmg + ' damage. (HP: ' + Math.max(0,playerHp) + ')');
+    }
+    // HP potion auto-use at low HP
+    if(playerHp > 0 && playerHp < playerMaxHp * 0.25 && G.potions.hp > 0){
+      G.potions.hp--;
+      const heal = Math.floor(playerMaxHp * 0.3);
+      playerHp = Math.min(playerMaxHp, playerHp + heal);
+      log.push('  Auto-used HP Potion! Healed ' + heal + ' HP');
     }
   }
 
@@ -659,20 +699,31 @@ function runCombat(mission, zoneIdx){
       rewards.gear = generateGear(G.level, mission.boss);
     }
 
+    // XP potion & synergy bonuses
+    let xpMult = 1;
+    if(G.activeBuff && G.activeBuff.type === 'xp') xpMult += 0.25;
+    if(hasSynergy('skillxp')) xpMult += 0.08;
+
     G.gold += rewards.gold;
     G.total_gold_earned += rewards.gold;
-    addXp(rewards.xp);
+    addXp(Math.floor(rewards.xp * xpMult));
     for(const sk in rewards.skillXp){
-      addSkillXp(parseInt(sk), rewards.skillXp[sk]);
+      addSkillXp(parseInt(sk), Math.floor(rewards.skillXp[sk] * xpMult));
     }
     if(rewards.gear){
       G.inventory.push(rewards.gear);
       log.push('LOOT: ' + rewards.gear.name + ' [' + RARITY_NAMES[rewards.gear.rarity] + ']');
     }
-    log.push('+' + rewards.gold + ' gold, +' + rewards.xp + ' XP');
+    log.push('+' + rewards.gold + ' gold, +' + Math.floor(rewards.xp * xpMult) + ' XP');
   } else {
     log.push('=== DEFEAT ===');
     log.push('You were overwhelmed...');
+  }
+
+  // Decrement potion buff
+  if(G.activeBuff){
+    G.activeBuff.turnsLeft--;
+    if(G.activeBuff.turnsLeft <= 0){ G.activeBuff = null; }
   }
 
   G.combatLog = log;
@@ -1396,6 +1447,265 @@ function showRaidResult(result){
   document.getElementById('content').innerHTML = html;
 }
 
+// ==================== DAILY LOGIN ====================
+const DAILY_REWARDS = [
+  {day:1,gold:50,gems:0,desc:'50 gold'},
+  {day:2,gold:100,gems:0,desc:'100 gold'},
+  {day:3,gold:0,gems:2,desc:'2 gems'},
+  {day:4,gold:200,gems:0,desc:'200 gold'},
+  {day:5,gold:0,gems:3,desc:'3 gems'},
+  {day:6,gold:300,gems:1,desc:'300 gold + 1 gem'},
+  {day:7,gold:500,gems:5,desc:'500 gold + 5 gems'},
+  {day:10,gold:800,gems:3,desc:'800 gold + 3 gems'},
+  {day:14,gold:1000,gems:5,desc:'1000 gold + 5 gems'},
+  {day:21,gold:2000,gems:8,desc:'2000 gold + 8 gems'},
+  {day:30,gold:5000,gems:15,desc:'5000 gold + 15 gems + Guaranteed Rare+ pull'}
+];
+
+function checkDailyLogin(){
+  const today = new Date().toISOString().split('T')[0];
+  if(G.lastLoginDay === today) return; // already claimed
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  if(G.lastLoginDay === yesterday){
+    G.loginStreak++;
+  } else if(G.lastLoginDay){
+    G.loginStreak = 1; // streak broken
+  } else {
+    G.loginStreak = 1; // first login
+  }
+  G.lastLoginDay = today;
+  // Find best matching reward
+  let reward = DAILY_REWARDS[0];
+  for(let i = DAILY_REWARDS.length - 1; i >= 0; i--){
+    if(G.loginStreak >= DAILY_REWARDS[i].day){ reward = DAILY_REWARDS[i]; break; }
+  }
+  G.gold += reward.gold;
+  G.total_gold_earned += reward.gold;
+  G.gems += reward.gems;
+  let msg = 'Daily Login! Day ' + G.loginStreak + ': ' + reward.desc;
+  // Day 30 bonus: free rare+ follower
+  if(G.loginStreak >= 30 && G.loginStreak % 30 === 0){
+    const f = generateFollower(Math.max(2, Math.floor(Math.random()*3)+2));
+    G.followers.push(f);
+    msg += ' + ' + f.name + ' [' + RARITY_NAMES[f.rarity] + ']!';
+  }
+  toast(msg, '#ffd700');
+  save();
+}
+
+// ==================== POTION SYSTEM ====================
+const POTIONS = {
+  hp: {name:'HP Potion',desc:'Heal 30% HP in combat',reqAlch:10,reqHarv:1,cost:30,color:'#f44'},
+  power: {name:'Power Elixir',desc:'+20% power for 5 turns',reqAlch:25,reqHarv:15,cost:60,color:'#f80'},
+  defense: {name:'Iron Tonic',desc:'+20% defense for 5 turns',reqAlch:25,reqHarv:15,cost:60,color:'#4af'},
+  luck: {name:'Fortune Brew',desc:'+30% luck for 5 turns',reqAlch:50,reqHarv:30,cost:100,color:'#ffd700'},
+  xp: {name:'Insight Serum',desc:'+25% XP for 10 turns',reqAlch:75,reqHarv:50,cost:150,color:'#0ff'}
+};
+
+function brewPotion(type){
+  const p = POTIONS[type];
+  if(!p) return;
+  if(G.skillLevels[10] < p.reqAlch){ toast('Need Alchemy Lv.' + p.reqAlch, '#f44'); return; }
+  if(G.skillLevels[6] < p.reqHarv){ toast('Need Harvesting Lv.' + p.reqHarv, '#f44'); return; }
+  let cost = p.cost;
+  if(G.skillLevels[10] >= 99) cost = Math.floor(cost * 0.5); // ALCHEMIST: 50% cheaper
+  if(G.gold < cost){ toast('Need ' + cost + ' gold', '#f44'); return; }
+  G.gold -= cost;
+  G.potions[type] = (G.potions[type] || 0) + 1;
+  addSkillXp(10, 10 + G.skillLevels[10]);
+  addSkillXp(6, 5 + G.skillLevels[6]);
+  toast('Brewed ' + p.name + '! (x' + G.potions[type] + ')', p.color);
+  save();
+}
+
+function usePotion(type){
+  if(!G.potions[type] || G.potions[type] <= 0){ toast('No ' + POTIONS[type].name + '!', '#f44'); return; }
+  G.potions[type]--;
+  let duration = 5;
+  if(type === 'xp') duration = 10;
+  if(G.skillLevels[10] >= 99) duration = Math.floor(duration * 1.5); // ALCHEMIST: 50% longer
+  G.activeBuff = { type: type, turnsLeft: duration };
+  toast('Used ' + POTIONS[type].name + '! (' + duration + ' turns)', POTIONS[type].color);
+  save();
+}
+
+// ==================== BUILDING SYNERGIES ====================
+function getBuildingSynergies(cityIdx){
+  const city = G.cities[cityIdx !== undefined ? cityIdx : G.currentCity];
+  const b = city.buildings;
+  const synergies = [];
+  // Foundry + Workshop = +15% crafting output
+  if((b.foundry||0) >= 5 && (b.workshop||0) >= 5)
+    synergies.push({name:'Industrial Complex',desc:'Foundry+Workshop: +15% crafting quality',bonus:'craft'});
+  // Barracks + Shrine = +10% combat luck
+  if((b.barracks||0) >= 5 && (b.shrine||0) >= 5)
+    synergies.push({name:'War Blessing',desc:'Barracks+Shrine: +10% crit in combat',bonus:'crit'});
+  // Lab + Shrine = +8% skill XP
+  if((b.lab||0) >= 5 && (b.shrine||0) >= 5)
+    synergies.push({name:'Enlightenment',desc:'Lab+Shrine: +8% skill XP',bonus:'skillxp'});
+  // Generator + Vault = +10 max energy
+  if((b.generator||0) >= 5 && (b.vault||0) >= 5)
+    synergies.push({name:'Power Grid',desc:'Generator+Vault: +10 max energy',bonus:'energy'});
+  // Tavern + Barracks = followers in barracks get +20% power
+  if((b.tavern||0) >= 5 && (b.barracks||0) >= 5)
+    synergies.push({name:'Battle Feast',desc:'Tavern+Barracks: barracks soldiers +20% power',bonus:'soldier'});
+  // All buildings >= 10 = mega synergy
+  if(BUILDINGS.every(bd => (b[bd.id]||0) >= 10))
+    synergies.push({name:'Metropolis',desc:'All buildings Lv.10+: +5% to everything',bonus:'all'});
+  return synergies;
+}
+
+function hasSynergy(bonus){
+  for(let i = 0; i < G.cities.length; i++){
+    if(getBuildingSynergies(i).some(s => s.bonus === bonus)) return true;
+  }
+  return false;
+}
+
+// ==================== WORLD BOSS ====================
+function getWorldBoss(){
+  const tier = (G.worldBossKills || 0);
+  const hp = 50000 * Math.pow(1.5, tier);
+  const name = ['Void Colossus','Abyssal Leviathan','Nexus Titan','Corruption Incarnate','The Eternal'][Math.min(tier, 4)];
+  const atk = 50 + tier * 30;
+  return { name, maxHp: Math.floor(hp), atk, tier };
+}
+
+function attackWorldBoss(){
+  if(G.energy < 15){ toast('Need 15 energy', '#f44'); return; }
+  G.energy -= 15;
+
+  const boss = getWorldBoss();
+  if(!G.worldBossHp || G.worldBossHp <= 0) G.worldBossHp = boss.maxHp;
+
+  const power = getCombatPower();
+  let dmg = Math.floor(power * (0.8 + Math.random() * 0.4));
+  // Class passive & potions apply
+  if(G.activeBuff && G.activeBuff.type === 'power') dmg = Math.floor(dmg * 1.2);
+  // Crits
+  if(Math.random() * 100 < getLuck()) dmg = Math.floor(dmg * 2);
+
+  G.worldBossHp -= dmg;
+  G.worldBossDmgDealt = (G.worldBossDmgDealt || 0) + dmg;
+
+  let msg = 'Hit ' + boss.name + ' for ' + dmg + '! (HP: ' + Math.max(0, G.worldBossHp) + '/' + boss.maxHp + ')';
+
+  if(G.worldBossHp <= 0){
+    // Boss killed!
+    G.worldBossKills = (G.worldBossKills || 0) + 1;
+    const goldReward = 500 + G.worldBossKills * 200;
+    const gemReward = 3 + G.worldBossKills;
+    const xpReward = 300 + G.worldBossKills * 100;
+    G.gold += goldReward;
+    G.total_gold_earned += goldReward;
+    G.gems += gemReward;
+    addXp(xpReward);
+    G.worldBossHp = 0;
+    G.worldBossDmgDealt = 0;
+    msg = boss.name + ' DEFEATED! +' + goldReward + 'g +' + gemReward + ' gems +' + xpReward + 'xp! Next boss is stronger...';
+    toast(msg, '#ffd700');
+    // Drop gear
+    const gear = generateGear(G.level + 10, true);
+    G.inventory.push(gear);
+    toast('Boss dropped: ' + gear.name + ' [' + RARITY_NAMES[gear.rarity] + ']', '#ffd700');
+  } else {
+    toast(msg, '#0ff');
+  }
+
+  // Decrement buff
+  if(G.activeBuff){
+    G.activeBuff.turnsLeft--;
+    if(G.activeBuff.turnsLeft <= 0) G.activeBuff = null;
+  }
+
+  checkAchievements();
+  save();
+  showTab('missions');
+}
+
+// ==================== AUTO-BATTLE ====================
+function startAutoBattle(zoneIdx, missionIdx){
+  const zone = ZONES[zoneIdx];
+  if(!zone || G.level < zone.minLv) return;
+  const mission = zone.missions[missionIdx];
+  if(!mission) return;
+  // Need at least 1 combat follower
+  const combatFollowers = G.followers.filter(f => f.assigned === 'combat' && f.happiness > 20);
+  if(combatFollowers.length === 0){ toast('Need followers assigned to combat!', '#f44'); return; }
+  G.autoBattle = { zoneIdx, missionIdx, missionName: mission.name, zoneName: zone.name };
+  G.autoBattleEarnings = { gold:0, xp:0, kills:0, items:0 };
+  toast('Auto-battle started: ' + mission.name, '#0ff');
+  save();
+  showTab('missions');
+}
+
+function stopAutoBattle(){
+  if(!G.autoBattle) return;
+  toast('Auto-battle stopped. Earned: ' + G.autoBattleEarnings.gold + 'g, ' + G.autoBattleEarnings.kills + ' kills', '#0ff');
+  G.autoBattle = null;
+  save();
+  showTab('missions');
+}
+
+function processAutoBattle(){
+  if(!G.autoBattle) return;
+  const zone = ZONES[G.autoBattle.zoneIdx];
+  if(!zone) { G.autoBattle = null; return; }
+  const mission = zone.missions[G.autoBattle.missionIdx];
+  if(!mission) { G.autoBattle = null; return; }
+
+  // Followers fight on their own - uses their combined power
+  const combatFollowers = G.followers.filter(f => f.assigned === 'combat' && f.happiness > 20);
+  if(combatFollowers.length === 0){ stopAutoBattle(); return; }
+
+  let followerPower = 0;
+  combatFollowers.forEach(f => { followerPower += f.level * f.power * (f.rarity + 1) * 0.3; });
+
+  const enemyPower = mission.enemyHp * 0.3 + mission.enemyAtk * 2;
+
+  // Win chance based on power ratio
+  const ratio = followerPower / Math.max(1, enemyPower);
+  const winChance = Math.min(0.85, ratio * 0.5); // cap at 85%
+
+  if(Math.random() < winChance){
+    // Won
+    const goldEarned = Math.floor(mission.gold * 0.6); // 60% of normal (they're followers)
+    const xpEarned = Math.floor(mission.xp * 0.4); // 40% XP
+    G.gold += goldEarned;
+    G.total_gold_earned += goldEarned;
+    addXp(xpEarned);
+    G.autoBattleEarnings.gold += goldEarned;
+    G.autoBattleEarnings.xp += xpEarned;
+    G.autoBattleEarnings.kills++;
+    G.total_kills++;
+    G.missions_completed++;
+
+    // Small gear drop chance
+    if(Math.random() < 0.08){
+      const gear = generateGear(G.level, false);
+      G.inventory.push(gear);
+      G.autoBattleEarnings.items++;
+    }
+
+    // Follower XP
+    combatFollowers.forEach(f => {
+      f.xp += 5;
+      const needed = f.level * 50;
+      if(f.xp >= needed && f.level < 50){
+        f.xp -= needed;
+        f.level++;
+        f.power += (f.rarity + 1);
+        f.defense += Math.floor((f.rarity + 1) * 0.7);
+      }
+    });
+  }
+
+  // Happiness drain from fighting
+  combatFollowers.forEach(f => {
+    if(Math.random() < 0.05) f.happiness = Math.max(0, f.happiness - 1);
+  });
+}
+
 // ==================== ACHIEVEMENTS ====================
 const ACHIEVEMENT_DEFS = [
   // Missions
@@ -1488,6 +1798,16 @@ const ACHIEVEMENT_DEFS = [
   // Enchanting
   {id:'enchant_1',name:'First Enchant',desc:'Enchant an item',check:()=>G.skillLevels[11]>=10},
   {id:'craft_mythic',name:'Mythic Crafter',desc:'Craft a Mythic item',check:()=>G.skillLevels[8]>=99},
+  // World boss
+  {id:'wb_1',name:'Giant Slayer',desc:'Kill your first world boss',check:()=>(G.worldBossKills||0)>=1},
+  {id:'wb_5',name:'Titan Hunter',desc:'Kill 5 world bosses',check:()=>(G.worldBossKills||0)>=5},
+  {id:'wb_10',name:'God Killer',desc:'Kill 10 world bosses',check:()=>(G.worldBossKills||0)>=10},
+  // Login streak
+  {id:'login_7',name:'Dedicated',desc:'7 day login streak',check:()=>(G.loginStreak||0)>=7},
+  {id:'login_30',name:'Devoted',desc:'30 day login streak',check:()=>(G.loginStreak||0)>=30},
+  // Synergies
+  {id:'synergy_1',name:'Synergy!',desc:'Activate your first building synergy',check:()=>G.cities.some((c,i)=>getBuildingSynergies(i).length>0)},
+  {id:'metropolis',name:'Metropolis',desc:'All buildings Lv.10+ in one city',check:()=>G.cities.some((c,i)=>getBuildingSynergies(i).some(s=>s.bonus==='all'))},
 ];
 
 function checkAchievements(){
@@ -1599,13 +1919,56 @@ function showTab(tab, extra){
 function renderMissions(c){
   let html = '<h2>Missions</h2>';
 
+  // Combat preview stats
+  html += '<div class="card text-sm">';
+  html += 'Your Power: <span style="color:#0ff">' + getCombatPower() + '</span> | Def: ' + getCombatDefense() + ' | Speed: ' + getCombatSpeed() + ' | Luck: ' + getLuck();
+  html += ' | HP: ' + (50 + G.level*10 + G.stats.defense*3);
+  const cls = CLASSES[G.class];
+  html += '<br>Class: <span style="color:'+cls.passiveColor+'">' + cls.passive + '</span> - ' + cls.passiveDesc;
+  if(G.activeBuff) html += '<br>Active buff: <span style="color:#ffd700">' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns)</span>';
+  html += '</div>';
+
+  // Quick potion bar
+  const hasPotions = Object.values(G.potions).some(v => v > 0);
+  if(hasPotions){
+    html += '<div class="card text-sm">';
+    html += '<b>Potions:</b> ';
+    for(const t in POTIONS){
+      if(G.potions[t] > 0){
+        html += '<button class="btn" style="padding:4px 8px;min-height:30px;border-color:'+POTIONS[t].color+';color:'+POTIONS[t].color+'" onclick="usePotion(\''+t+'\')">' + POTIONS[t].name + ' x' + G.potions[t] + '</button> ';
+      }
+    }
+    html += '</div>';
+  }
+
+  // Auto-battle status
+  if(G.autoBattle){
+    html += '<div class="card" style="border-color:#0f0">';
+    html += '<b style="color:#0f0">Auto-Battle Active</b><br>';
+    html += 'Zone: ' + G.autoBattle.zoneName + ' | Mission: ' + G.autoBattle.missionName + '<br>';
+    html += 'Earned: ' + G.autoBattleEarnings.gold + 'g | ' + G.autoBattleEarnings.kills + ' kills | ' + (G.autoBattleEarnings.items||0) + ' items<br>';
+    html += '<button class="btn btn-red" onclick="stopAutoBattle()">Stop Auto-Battle</button>';
+    html += '</div>';
+  }
+
+  // World Boss
+  const wb = getWorldBoss();
+  if(!G.worldBossHp || G.worldBossHp <= 0) G.worldBossHp = wb.maxHp;
+  html += '<div class="card" style="border-color:#f44">';
+  html += '<h3 style="color:#f44">World Boss: ' + wb.name + '</h3>';
+  const wbPct = Math.max(0, (G.worldBossHp / wb.maxHp) * 100);
+  html += '<div class="pbar" style="border-color:#f44"><div class="pbar-fill" style="width:'+wbPct+'%;background:#f44"></div>';
+  html += '<span class="pbar-text">' + G.worldBossHp + ' / ' + wb.maxHp + ' HP</span></div>';
+  html += '<div class="text-sm">Your damage dealt: ' + (G.worldBossDmgDealt||0) + ' | Kills: ' + (G.worldBossKills||0) + '</div>';
+  html += '<button class="btn btn-red" onclick="attackWorldBoss()">Attack! (15 EN)</button>';
+  html += '</div>';
+
   // Bounty Board
-  if(G.skillLevels[12] >= 50 || G.bounties.length > 0){
+  if(G.skillLevels[12] >= 50 || (G.bounties && G.bounties.length > 0)){
     if(!G.bounties || G.bounties.length === 0) refreshBounties();
-    // Auto refresh bounties every 30 min
     if(Date.now() - G.bountyRefreshTime > 30*60*1000) refreshBounties();
     html += '<div class="card"><h3 style="color:#ffd700">Bounty Board</h3>';
-    html += '<div class="text-sm text-dim">Refreshes every 30 min. Hacking Lv.50 required.</div>';
+    html += '<div class="text-sm text-dim">Refreshes every 30 min.</div>';
     G.bounties.forEach((b, i) => {
       const pct = Math.floor((b.progress/b.target)*100);
       const status = b.claimed ? '<span class="text-dim">CLAIMED</span>' : b.completed ? '<button class="btn btn-gold" onclick="claimBounty('+i+')">CLAIM</button>' : '<span class="text-sm">'+b.progress+'/'+b.target+'</span>';
@@ -1634,20 +1997,28 @@ function renderMissions(c){
     html += '</div>';
   });
 
-  // Regular Missions
+  // Regular Missions with combat preview & auto-battle
   html += '<h3 style="margin-top:12px">Missions</h3>';
+  const myPower = getCombatPower();
   ZONES.forEach((zone, zi) => {
     if(G.level < zone.minLv){
       html += '<div class="card text-dim">??? ' + zone.name + ' (Requires Lv.' + zone.minLv + ')</div>';
       return;
     }
     html += '<div class="card"><h3>' + zone.name + '</h3>';
-    zone.missions.forEach(m => {
+    zone.missions.forEach((m, mi) => {
+      const enemyPwr = Math.floor(m.enemyAtk * (1 + zi * 0.1));
+      const diff = myPower > enemyPwr * 3 ? '#0f0' : myPower > enemyPwr ? '#ffd700' : '#f44';
       const color = m.boss ? 'btn-gold' : 'btn-cyan';
       const tag = m.boss ? ' [BOSS]' : '';
       html += '<button class="btn ' + color + '" onclick=\'runCombat(' + JSON.stringify(m).replace(/'/g,"\\'") + ',' + zi + ')\'>';
       html += m.name + tag + ' (EN:' + m.energy + ' | +' + m.gold + 'g +' + m.xp + 'xp)';
-      html += '</button> ';
+      html += '</button>';
+      html += '<span class="text-sm" style="color:'+diff+'"> [Enemy:' + enemyPwr + ']</span>';
+      if(!G.autoBattle && !m.boss){
+        html += ' <button class="btn" style="padding:2px 6px;min-height:28px;font-size:10px;color:#0f0;border-color:#0f0" onclick="startAutoBattle('+zi+','+mi+')">AUTO</button>';
+      }
+      html += ' ';
     });
     html += '</div>';
   });
@@ -1716,6 +2087,17 @@ function renderGear(c){
     html += '<div class="card">';
     html += '<span class="' + RARITIES[item.rarity] + '">' + item.name + '</span>';
     html += ' [' + item.slot + '] PWR:' + item.power + ' DEF:' + item.defense + ' Lv.' + item.level;
+    // Gear comparison vs equipped
+    const equipped = G.gear[item.slot];
+    if(equipped){
+      const pwrDiff = item.power - equipped.power;
+      const defDiff = item.defense - equipped.defense;
+      const pwrColor = pwrDiff > 0 ? '#0f0' : pwrDiff < 0 ? '#f44' : '#888';
+      const defColor = defDiff > 0 ? '#0f0' : defDiff < 0 ? '#f44' : '#888';
+      html += ' <span class="text-sm">[vs equipped: <span style="color:'+pwrColor+'">'+(pwrDiff>0?'+':'')+pwrDiff+'P</span> <span style="color:'+defColor+'">'+(defDiff>0?'+':'')+defDiff+'D</span>]</span>';
+    } else {
+      html += ' <span class="text-sm" style="color:#0f0">[no gear in slot]</span>';
+    }
     // Skill requirement
     if(item.reqSkill >= 0 && item.reqLevel > 0){
       const met = G.skillLevels[item.reqSkill] >= item.reqLevel;
@@ -1861,6 +2243,17 @@ function renderTown(c){
   html += '</div>';
 
   // Specialty
+  // Building Synergies
+  const synergies = getBuildingSynergies(ci);
+  if(synergies.length > 0){
+    html += '<h3 style="color:#ffd700">Synergies Active</h3>';
+    html += '<div class="card">';
+    synergies.forEach(s => {
+      html += '<div style="color:#ffd700">* ' + s.name + ' - ' + s.desc + '</div>';
+    });
+    html += '</div>';
+  }
+
   html += '<h3>City Specialty</h3>';
   html += '<div class="card">';
   html += 'Current: <b>' + SPECIALTIES[city.specialty].name + '</b> - ' + SPECIALTIES[city.specialty].desc + '<br>';
@@ -1961,7 +2354,58 @@ function renderTown(c){
     });
   }
 
+  // Bulk actions
+  if(cityFollowers.length > 0){
+    html += '<h3>Bulk Actions</h3>';
+    html += '<div class="card">';
+    html += '<button class="btn btn-green" onclick="bulkFeed(' + ci + ')">Feed All (' + cityFollowers.length + ')</button> ';
+    html += '<button class="btn btn-purple" onclick="bulkTrain(' + ci + ')">Train All (' + cityFollowers.length + ')</button>';
+    html += '</div>';
+  }
+
   c.innerHTML = html;
+}
+
+function bulkFeed(cityIdx){
+  const followers = G.followers.filter(f => (f.cityIdx || 0) === cityIdx && f.happiness < 100);
+  if(followers.length === 0){ toast('All followers are happy!', '#0f0'); return; }
+  let totalCost = 0;
+  followers.forEach(f => { totalCost += 10 + f.level * 5; });
+  if(G.gold < totalCost){ toast('Need ' + totalCost + ' gold to feed all', '#f44'); return; }
+  G.gold -= totalCost;
+  let fed = 0;
+  followers.forEach(f => {
+    f.happiness = Math.min(100, f.happiness + 20);
+    f.loyalty = Math.min(100, f.loyalty + 5);
+    fed++;
+  });
+  toast('Fed ' + fed + ' followers for ' + totalCost + ' gold!', '#0f0');
+  save();
+  showTab('town');
+}
+
+function bulkTrain(cityIdx){
+  const followers = G.followers.filter(f => (f.cityIdx || 0) === cityIdx && f.level < 50);
+  if(followers.length === 0){ toast('All followers maxed!', '#0f0'); return; }
+  let totalCost = 0;
+  followers.forEach(f => { totalCost += 20 + f.level * 15; });
+  if(G.gold < totalCost){ toast('Need ' + totalCost + ' gold to train all', '#f44'); return; }
+  G.gold -= totalCost;
+  let leveled = 0;
+  followers.forEach(f => {
+    f.xp += 30 + f.level * 5;
+    const needed = f.level * 50;
+    if(f.xp >= needed && f.level < 50){
+      f.xp -= needed;
+      f.level++;
+      f.power += (f.rarity + 1);
+      f.defense += Math.floor((f.rarity + 1) * 0.7);
+      leveled++;
+    }
+  });
+  toast('Trained ' + followers.length + ' followers! ' + leveled + ' leveled up!', '#b026ff');
+  save();
+  showTab('town');
 }
 
 function renderFollowerDetail(c, fId){
@@ -2065,9 +2509,40 @@ function renderGacha(c){
 function renderProfile(c){
   let html = '<h2>Profile</h2>';
   html += '<div class="card">';
-  html += '<b>' + G.name + '</b> - ' + CLASSES[G.class].name + '<br>';
+  const clsData = CLASSES[G.class];
+  html += '<b>' + G.name + '</b> - ' + clsData.name + '<br>';
   html += 'Level: ' + G.level + '/100<br>';
   html += 'Prestige: ' + G.prestige + ' (+' + G.prestige_bonus + '% XP)<br>';
+  html += 'Login Streak: ' + (G.loginStreak || 0) + ' days<br>';
+  html += 'Class Passive: <span style="color:'+clsData.passiveColor+'">' + clsData.passive + '</span> - ' + clsData.passiveDesc + '<br>';
+  html += '</div>';
+
+  // Potions
+  html += '<h3>Alchemy</h3>';
+  html += '<div class="card">';
+  if(G.activeBuff){
+    html += 'Active: <span style="color:#ffd700">' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns left)</span><br>';
+  }
+  html += '<div class="text-sm mb">Inventory: ';
+  let hasPots = false;
+  for(const t in POTIONS){
+    if(G.potions[t] > 0){ html += POTIONS[t].name + ' x' + G.potions[t] + '  '; hasPots = true; }
+  }
+  if(!hasPots) html += 'None';
+  html += '</div>';
+  // Brew buttons
+  for(const t in POTIONS){
+    const p = POTIONS[t];
+    const canBrew = G.skillLevels[10] >= p.reqAlch && G.skillLevels[6] >= p.reqHarv;
+    let cost = p.cost;
+    if(G.skillLevels[10] >= 99) cost = Math.floor(cost * 0.5);
+    if(canBrew){
+      html += '<button class="btn" style="border-color:'+p.color+';color:'+p.color+'" onclick="brewPotion(\''+t+'\')">';
+      html += 'Brew ' + p.name + ' (' + cost + 'g)</button> ';
+    } else {
+      html += '<button class="btn" disabled>' + p.name + ' (Alch ' + p.reqAlch + '/Harv ' + p.reqHarv + ')</button> ';
+    }
+  }
   html += '</div>';
 
   // Stats
@@ -2208,6 +2683,11 @@ function gameLoop(){
     }
   }
 
+  // Auto-battle (every 10 seconds)
+  if(G.autoBattle && energyTimer % 10 === 0){
+    processAutoBattle();
+  }
+
   // Follower passive effects
   followerTimer++;
   if(followerTimer >= 120){ // every 2 min
@@ -2300,6 +2780,9 @@ function init(){
   if(load()){
     migrateOldSave();
     calcOfflineProgress();
+    checkDailyLogin();
+    // Init world boss if needed
+    if(!G.worldBossHp || G.worldBossHp <= 0){ G.worldBossHp = getWorldBoss().maxHp; }
     document.getElementById('top-bar').style.display = '';
     document.getElementById('nav').style.display = 'flex';
     save();
