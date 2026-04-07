@@ -2276,18 +2276,42 @@ function setWishList(cls){
 }
 
 function showPullResults(pulled){
-  let html = '<h2>Summon Results</h2>';
-  html += '<div class="text-sm text-dim mb">Banner: ' + getCurrentBanner().name + '</div>';
-  pulled.forEach(f => {
-    html += '<div class="card follower-card" style="border-color:' + (f.rarity >= 3 ? RARITIES[f.rarity] === 'mythic' ? '#ff2060' : '#b026ff' : '#333') + '">';
-    html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
-    html += ' <span class="text-sm">[' + RARITY_NAMES[f.rarity] + ' ' + f.class + ']</span>';
-    html += ' <span style="color:#ffd700">' + '★'.repeat(f.stars) + '☆'.repeat(5 - f.stars) + '</span><br>';
-    html += '<span class="text-sm">PWR:' + f.power + ' DEF:' + f.defense + ' | ' + f.ability + '</span>';
-    if(f._dupeShards) html += '<br><span class="text-sm" style="color:#0ff">DUPE! +' + f._dupeShards + ' shards</span>';
+  const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
+  const pullClasses = ['','','','pull-epic','pull-legendary','pull-mythic'];
+  let html = '<div style="text-align:center;margin-bottom:16px">';
+  html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;color:#888">Summon Results</div>';
+  html += '<div class="text-sm text-dim">' + getCurrentBanner().name + '</div>';
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:8px">';
+  pulled.forEach((f, idx) => {
+    const rc = rarityColors[f.rarity] || '#888';
+    const pullCls = pullClasses[f.rarity] || '';
+    html += '<div class="card ' + pullCls + '" style="border-color:'+rc+';border-width:2px;text-align:center;padding:14px 10px;animation-delay:' + (idx * 0.08) + 's">';
+    // Rarity label
+    html += '<div class="' + RARITIES[f.rarity] + '" style="font-size:10px;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px">' + RARITY_NAMES[f.rarity] + '</div>';
+    // Name
+    html += '<div class="' + RARITIES[f.rarity] + '" style="font-size:16px;font-weight:700;margin:4px 0">' + f.name + '</div>';
+    // Class
+    html += '<div class="text-sm text-dim">' + f.class + '</div>';
+    // Stars
+    html += '<div style="color:#ffd700;font-size:14px;margin:6px 0">' + '\u2605'.repeat(f.stars) + '\u2606'.repeat(5 - f.stars) + '</div>';
+    // Stats
+    html += '<div style="display:flex;justify-content:center;gap:12px;margin:6px 0">';
+    html += '<span><span style="color:#f44;font-weight:700;font-size:14px">' + f.power + '</span> <span class="text-sm text-dim">PWR</span></span>';
+    html += '<span><span style="color:#4af;font-weight:700;font-size:14px">' + f.defense + '</span> <span class="text-sm text-dim">DEF</span></span>';
+    html += '</div>';
+    // Ability
+    html += '<div style="color:#0ff;font-weight:700;font-size:13px;margin:4px 0">' + f.ability + '</div>';
+    // Dupe shards
+    if(f._dupeShards){
+      html += '<div style="margin-top:6px;padding:4px 8px;background:rgba(0,255,255,0.1);border:1px solid #0ff;border-radius:6px;display:inline-block">';
+      html += '<span style="color:#0ff;font-size:11px;font-weight:700">DUPE +' + f._dupeShards + ' shards</span>';
+      html += '</div>';
+    }
     html += '</div>';
   });
-  html += '<div class="mt"><button class="btn btn-cyan" onclick="showTab(\'gacha\')">Back</button></div>';
+  html += '</div>';
+  html += '<div style="text-align:center;margin-top:16px"><button class="btn btn-cyan" style="padding:10px 32px;font-size:14px" onclick="showTab(\'gacha\')">Continue</button></div>';
   document.getElementById('content').innerHTML = html;
 }
 
@@ -5879,11 +5903,19 @@ function renderMissions(c){
 }
 
 function renderSkills(c){
-  let html = '<h2>Skills (15)</h2>';
+  const catIcons = {Combat:'\u2694',Gathering:'\u26CF',Production:'\uD83D\uDD28',Utility:'\uD83D\uDD27'};
+  const catColors = {Combat:'#f44',Gathering:'#0f0',Production:'#ffd700',Utility:'#0ff'};
+  const catBarClass = {Combat:'pbar-red',Gathering:'pbar-green',Production:'pbar-gold',Utility:'pbar-cyan'};
+  let html = '<h2>Skills</h2>';
   html += '<div class="text-sm text-dim mb">Train skills to level them up. Higher levels unlock bonuses and gear requirements.</div>';
   for(const cat in SKILL_CATEGORIES){
-    const color = cat==='Combat'?'#f44':cat==='Gathering'?'#0f0':cat==='Production'?'#ffd700':'#0ff';
-    html += '<h3 style="color:'+color+'">-- ' + cat + ' --</h3>';
+    const color = catColors[cat];
+    const icon = catIcons[cat];
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:16px 0 8px">';
+    html += '<span style="font-size:20px">' + icon + '</span>';
+    html += '<h3 style="color:'+color+';margin:0">' + cat + '</h3>';
+    html += '</div>';
+    html += '<div class="grid2">';
     SKILL_CATEGORIES[cat].forEach(i => {
       const name = SKILL_NAMES[i];
       const lv = G.skillLevels[i];
@@ -5895,112 +5927,177 @@ function renderSkills(c){
       else if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.85);
       else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
       cost = Math.max(1, cost);
-      html += '<div class="card">';
       const hasBadge = G.masteryBadges && G.masteryBadges[i];
-      html += '<b>' + name + '</b> Lv.' + lv + '/99';
-      if(hasBadge) html += ' <span style="color:#ffd700" title="Mastered!">&#9733;</span>';
-      if(!G.compactMode) html += ' <span class="text-sm text-dim">- ' + SKILL_DESCS[i] + '</span>';
-      html += '<div class="pbar pbar-purple"><div class="pbar-fill" style="width:' + pct + '%"></div>';
-      html += '<span class="pbar-text">' + xp + '/' + needed + '</span></div>';
-      // Show unlocks
+      html += '<div class="card" style="position:relative;padding-left:70px;min-height:90px">';
+      // Circular level indicator
+      html += '<div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;border:3px solid '+color+';display:flex;align-items:center;justify-content:center;flex-direction:column;background:rgba(0,0,0,0.3)">';
+      html += '<span style="font-size:16px;font-weight:700;color:'+color+'">' + lv + '</span>';
+      if(hasBadge) html += '<span style="font-size:10px;color:#ffd700">\u2605</span>';
+      html += '</div>';
+      // Name and mastery
+      html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">';
+      html += '<b style="color:'+color+'">' + name + '</b>';
+      if(hasBadge) html += '<span class="badge" style="background:#ffd700;color:#000;font-size:9px;padding:1px 5px;border-radius:8px">\u2605 MASTERED</span>';
+      html += '</div>';
+      if(!G.compactMode) html += '<div class="text-sm text-dim" style="margin:2px 0">' + SKILL_DESCS[i] + '</div>';
+      // XP progress bar
+      html += '<div class="pbar ' + (catBarClass[cat]||'pbar-purple') + '" style="height:14px;margin:4px 0"><div class="pbar-fill" style="width:' + pct + '%"></div>';
+      html += '<span class="pbar-text" style="font-size:10px">' + fmtNum(xp) + ' / ' + fmtNum(needed) + '</span></div>';
+      // Unlock milestone dots
       const unlocks = getSkillUnlocks(i);
       if(unlocks.length > 0){
-        html += '<div class="text-sm">';
+        html += '<div style="display:flex;gap:4px;margin:4px 0;align-items:center">';
         unlocks.forEach(u => {
-          html += '<span style="color:' + (u.unlocked?'#0f0':'#444') + '">' + (u.unlocked?'*':'') + 'Lv.' + u.lv + ': ' + u.desc + '</span> ';
+          const dotColor = u.unlocked ? color : '#333';
+          const dotBorder = u.unlocked ? color : '#555';
+          html += '<span title="Lv.' + u.lv + ': ' + u.desc + '" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+dotColor+';border:2px solid '+dotBorder+';cursor:help;transition:all 0.2s"></span>';
         });
         html += '</div>';
       }
-      html += '<button class="btn btn-purple" onclick="trainSkill(' + i + ')">Train (EN:' + cost + ')</button>';
-      html += ' <button class="btn" style="color:#b026ff;border-color:#b026ff;padding:4px 8px;min-height:30px" onclick="trainSkillX10(' + i + ')">Train x10 (EN:' + (cost*10) + ')</button>';
+      // Train buttons
+      html += '<div style="display:flex;gap:6px;margin-top:4px">';
+      html += '<button class="btn btn-purple" style="flex:1;padding:4px 8px;min-height:28px;font-size:11px" onclick="trainSkill(' + i + ')">Train <span class="text-dim">EN:' + cost + '</span></button>';
+      html += '<button class="btn" style="flex:1;padding:4px 8px;min-height:28px;font-size:11px;color:#b026ff;border-color:#b026ff" onclick="trainSkillX10(' + i + ')">x10 <span class="text-dim">EN:' + (cost*10) + '</span></button>';
+      html += '</div>';
       html += '</div>';
     });
+    html += '</div>';
   }
   c.innerHTML = html;
 }
 
 function renderGear(c){
+  const slotIcons = {weapon:'\u2694',armor:'\uD83D\uDEE1',shield:'\uD83D\uDD30',implant:'\uD83D\uDC8E'};
+  const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
   let html = '<h2>Loadout</h2>';
-  html += '<div class="text-sm text-dim mb">Power: ' + getCombatPower() + ' | Defense: ' + getCombatDefense() + ' | Speed: ' + getCombatSpeed() + ' | Luck: ' + getLuck() + '</div>';
 
-  // Feature 11: Gear Loadout Presets
+  // Combat stats bar
+  html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+  html += '<div class="hud-stat" style="flex:1;text-align:center"><span style="color:#f44;font-size:18px;font-weight:700">' + fmtNum(getCombatPower()) + '</span><div class="text-sm text-dim">Power</div></div>';
+  html += '<div class="hud-stat" style="flex:1;text-align:center"><span style="color:#4af;font-size:18px;font-weight:700">' + fmtNum(getCombatDefense()) + '</span><div class="text-sm text-dim">Defense</div></div>';
+  html += '<div class="hud-stat" style="flex:1;text-align:center"><span style="color:#0f0;font-size:18px;font-weight:700">' + getCombatSpeed() + '</span><div class="text-sm text-dim">Speed</div></div>';
+  html += '<div class="hud-stat" style="flex:1;text-align:center"><span style="color:#ffd700;font-size:18px;font-weight:700">' + getLuck() + '</span><div class="text-sm text-dim">Luck</div></div>';
+  html += '</div>';
+
+  // Gear Presets as tabs
   if(!G.gearPresets) G.gearPresets = [];
-  html += '<div class="card"><b>Presets</b> ';
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">';
+  html += '<span class="text-sm text-dim">Presets:</span>';
   G.gearPresets.forEach((p, i) => {
-    html += '<button class="btn btn-cyan" style="padding:4px 8px;min-height:30px" onclick="loadGearPreset('+i+');showTab(\'gear\')">' + p.name + '</button> ';
+    html += '<button class="btn btn-cyan" style="padding:4px 10px;min-height:28px;font-size:11px" onclick="loadGearPreset('+i+');showTab(\'gear\')">' + p.name + '</button>';
   });
   if(G.gearPresets.length < 3){
-    html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="var n=prompt(\'Preset name:\');if(n)saveGearPreset(n);showTab(\'gear\')">Save Current</button>';
+    html += '<button class="btn btn-green" style="padding:4px 10px;min-height:28px;font-size:11px" onclick="var n=prompt(\'Preset name:\');if(n)saveGearPreset(n);showTab(\'gear\')">+ Save</button>';
   }
   if(G.gearPresets.length > 0){
-    html += ' <button class="btn btn-red" style="padding:4px 8px;min-height:24px" onclick="G.gearPresets=[];save();showTab(\'gear\')">Clear All</button>';
+    html += '<button class="btn btn-red" style="padding:4px 8px;min-height:24px;font-size:10px" onclick="G.gearPresets=[];save();showTab(\'gear\')">Clear</button>';
   }
   html += '</div>';
 
+  // Equipped gear as 2x2 grid
+  html += '<div class="grid2">';
   GEAR_SLOTS.forEach(slot => {
-    html += '<div class="card">';
-    html += '<b>' + slot.charAt(0).toUpperCase() + slot.slice(1) + ':</b> ';
-    if(G.gear[slot]){
-      const g = G.gear[slot];
-      html += '<span class="' + RARITIES[g.rarity] + '">' + g.name + '</span>';
-      html += ' (PWR:' + g.power + ' DEF:' + g.defense + ' Lv.' + g.level + ')';
-      html += ' <button class="btn btn-red" onclick="unequip(\'' + slot + '\')">Unequip</button>';
+    const g = G.gear[slot];
+    const icon = slotIcons[slot] || '\u2753';
+    if(g){
+      const rc = rarityColors[g.rarity] || '#888';
+      html += '<div class="card" style="border-color:'+rc+';border-width:2px;position:relative;min-height:100px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+      html += '<div>';
+      html += '<div style="font-size:20px;margin-bottom:4px">' + icon + ' <span class="text-sm text-dim" style="text-transform:uppercase">' + slot + '</span></div>';
+      html += '<div class="' + RARITIES[g.rarity] + '" style="font-weight:700;font-size:14px">' + g.name + '</div>';
+      html += '</div>';
+      html += '<span class="badge" style="background:'+rc+';color:#000;font-size:9px;padding:2px 6px;border-radius:8px">Lv.' + g.level + '</span>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:12px;margin:8px 0">';
+      html += '<div><span style="color:#f44;font-weight:700;font-size:16px">' + g.power + '</span> <span class="text-sm text-dim">PWR</span></div>';
+      html += '<div><span style="color:#4af;font-weight:700;font-size:16px">' + g.defense + '</span> <span class="text-sm text-dim">DEF</span></div>';
+      html += '</div>';
+      html += '<button class="btn btn-red" style="padding:3px 8px;min-height:24px;font-size:10px;position:absolute;bottom:8px;right:8px" onclick="unequip(\'' + slot + '\')">Unequip</button>';
+      html += '</div>';
     } else {
-      html += '<span class="text-dim">Empty</span>';
+      html += '<div class="card" style="border:2px dashed #333;min-height:100px;display:flex;align-items:center;justify-content:center;flex-direction:column;opacity:0.5">';
+      html += '<div style="font-size:28px;margin-bottom:4px">' + icon + '</div>';
+      html += '<div class="text-dim" style="text-transform:uppercase;font-size:11px">' + slot + '</div>';
+      html += '<div class="text-dim text-sm">Empty</div>';
+      html += '</div>';
     }
-    html += '</div>';
   });
+  html += '</div>';
+
+  // Set bonuses
+  const setBonuses = getSetBonus();
+  if(setBonuses.length > 0){
+    html += '<div class="card glow-gold" style="border-color:#ffd700;margin-top:8px">';
+    html += '<div style="font-weight:700;color:#ffd700;margin-bottom:4px">\u2728 Set Bonuses Active</div>';
+    setBonuses.forEach(b => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span class="text-sm" style="color:#ffd700">' + b.name + '</span>';
+      html += '<span class="text-sm" style="color:#0f0">' + b.desc + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Inventory
   html += '<h2>Inventory (' + G.inventory.length + ')</h2>';
   if(G.inventory.length === 0){
-    html += '<div class="text-dim">No items. Run missions to find gear!</div>';
+    html += '<div class="card text-dim" style="text-align:center;padding:20px">No items. Run missions to find gear!</div>';
   }
+  html += '<div style="max-height:500px;overflow-y:auto">';
   G.inventory.forEach((item, i) => {
-    html += '<div class="card">';
-    // Favorite star (#9)
-    const favIcon = item.favorited ? '&#9733;' : '&#9734;';
-    const favColor = item.favorited ? '#ffd700' : '#666';
-    html += '<span style="color:'+favColor+';cursor:pointer;font-size:16px" onclick="toggleFavorite('+i+')">' + favIcon + '</span> ';
-    html += '<span class="' + RARITIES[item.rarity] + '">' + item.name + '</span>';
-    html += (item.upgradeLevel ? ' <span style="color:#0f0">+' + item.upgradeLevel + '</span>' : '');
-    html += ' [' + item.slot + '] PWR:' + item.power + ' DEF:' + item.defense + ' Lv.' + item.level;
-    // Gear comparison vs equipped
+    const rc = rarityColors[item.rarity] || '#888';
+    const icon = slotIcons[item.slot] || '';
+    html += '<div class="card" style="border-left:3px solid '+rc+';padding:8px 10px;margin-bottom:4px">';
+    // Top row: fav star, name, slot icon, stats
+    html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+    const favIcon = item.favorited ? '\u2605' : '\u2606';
+    const favColor = item.favorited ? '#ffd700' : '#444';
+    html += '<span style="color:'+favColor+';cursor:pointer;font-size:18px" onclick="toggleFavorite('+i+')">' + favIcon + '</span>';
+    html += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+rc+'"></span>';
+    html += '<span class="' + RARITIES[item.rarity] + '" style="font-weight:700">' + item.name + '</span>';
+    html += (item.upgradeLevel ? '<span style="color:#0f0;font-size:12px">+' + item.upgradeLevel + '</span>' : '');
+    html += '<span class="text-sm text-dim">' + icon + ' ' + item.slot + '</span>';
+    html += '<span class="text-sm"><span style="color:#f44">' + item.power + 'P</span> <span style="color:#4af">' + item.defense + 'D</span></span>';
+    // Comparison arrows
     const equipped = G.gear[item.slot];
     if(equipped){
       const pwrDiff = item.power - equipped.power;
       const defDiff = item.defense - equipped.defense;
-      const pwrColor = pwrDiff > 0 ? '#0f0' : pwrDiff < 0 ? '#f44' : '#888';
-      const defColor = defDiff > 0 ? '#0f0' : defDiff < 0 ? '#f44' : '#888';
-      html += ' <span class="text-sm">[vs equipped: <span style="color:'+pwrColor+'">'+(pwrDiff>0?'+':'')+pwrDiff+'P</span> <span style="color:'+defColor+'">'+(defDiff>0?'+':'')+defDiff+'D</span>]</span>';
+      if(pwrDiff !== 0) html += '<span style="color:'+(pwrDiff>0?'#0f0':'#f44')+';font-size:12px">'+(pwrDiff>0?'\u25B2':'\u25BC')+Math.abs(pwrDiff)+'P</span>';
+      if(defDiff !== 0) html += '<span style="color:'+(defDiff>0?'#0f0':'#f44')+';font-size:12px">'+(defDiff>0?'\u25B2':'\u25BC')+Math.abs(defDiff)+'D</span>';
     } else {
-      html += ' <span class="text-sm" style="color:#0f0">[no gear in slot]</span>';
+      html += '<span style="color:#0f0;font-size:11px">[empty slot]</span>';
     }
+    html += '</div>';
     // Skill requirement
     if(item.reqSkill >= 0 && item.reqLevel > 0){
       const met = G.skillLevels[item.reqSkill] >= item.reqLevel;
-      html += ' <span style="color:' + (met?'#0f0':'#f44') + '">[Req: ' + SKILL_NAMES[item.reqSkill] + ' ' + item.reqLevel + ']</span>';
+      html += '<div class="text-sm" style="color:' + (met?'#0f0':'#f44') + ';margin:2px 0">Req: ' + SKILL_NAMES[item.reqSkill] + ' Lv.' + item.reqLevel + (met?' \u2713':' \u2717') + '</div>';
     }
-    html += '<br>';
-    html += '<button class="btn btn-green" onclick="equipItem(' + i + ')">Equip</button>';
+    // Action buttons row
+    html += '<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">';
+    html += '<button class="btn btn-green" style="padding:3px 8px;min-height:24px;font-size:11px" onclick="equipItem(' + i + ')">Equip</button>';
     if(!item.favorited){
-      html += ' <button class="btn btn-red" onclick="sellItem(' + i + ')">Sell(' + (item.level * (item.rarity+1) * 3) + 'g)</button>';
-      html += ' <button class="btn" style="padding:4px 8px;min-height:30px;color:#f80;border-color:#f80" onclick="salvageGear(' + i + ')">Salvage</button>';
+      html += '<button class="btn btn-red" style="padding:3px 8px;min-height:24px;font-size:11px" onclick="sellItem(' + i + ')">Sell ' + (item.level*(item.rarity+1)*3) + 'g</button>';
+      html += '<button class="btn" style="padding:3px 8px;min-height:24px;font-size:11px;color:#f80;border-color:#f80" onclick="salvageGear(' + i + ')">Salvage</button>';
     } else {
-      html += ' <span class="text-sm" style="color:#ffd700">[Favorited - protected]</span>';
+      html += '<span class="text-sm" style="color:#ffd700;padding:4px">\u2605 Protected</span>';
     }
-    // Gear upgrade (#2)
-    html += ' <button class="btn" style="padding:4px 8px;min-height:30px;color:#0f0;border-color:#0f0" onclick="upgradeGearLevel(' + i + ')">Upgrade +' + (item.upgradeLevel||0) + '/10</button>';
-    // Enchanting options
+    html += '<button class="btn" style="padding:3px 8px;min-height:24px;font-size:11px;color:#0f0;border-color:#0f0" onclick="upgradeGearLevel(' + i + ')">+' + (item.upgradeLevel||0) + '/10</button>';
     if(G.skillLevels[11] >= 10){
-      html += ' <button class="btn btn-purple" onclick="enchantReroll(' + i + ')">Reroll(' + getEnchantCost(item) + 'g)</button>';
+      html += '<button class="btn btn-purple" style="padding:3px 6px;min-height:24px;font-size:10px" onclick="enchantReroll(' + i + ')">Reroll</button>';
     }
     if(G.skillLevels[11] >= 25){
-      html += ' <button class="btn btn-purple" onclick="enchantBoost(' + i + ')">Boost(' + (getEnchantCost(item)*2) + 'g)</button>';
+      html += '<button class="btn btn-purple" style="padding:3px 6px;min-height:24px;font-size:10px" onclick="enchantBoost(' + i + ')">Boost</button>';
     }
     if(G.skillLevels[11] >= 50 && item.rarity < 5){
-      html += ' <button class="btn btn-gold" onclick="enchantUpgradeRarity(' + i + ')">Upgrade Rarity(' + (getEnchantCost(item)*5) + 'g)</button>';
+      html += '<button class="btn btn-gold" style="padding:3px 6px;min-height:24px;font-size:10px" onclick="enchantUpgradeRarity(' + i + ')">\u2191 Rarity</button>';
     }
     html += '</div>';
+    html += '</div>';
   });
+  html += '</div>';
 
   // Crafting section
   if(G.skillLevels[8] >= 10){
@@ -6011,44 +6108,50 @@ function renderGear(c){
     else if(G.skillLevels[8] >= 25) maxRarity = 2;
     else maxRarity = 1;
     const craftCost = Math.floor(100 * Math.pow(2.5, maxRarity));
-    html += '<h2>Crafting (Max: ' + RARITY_NAMES[maxRarity] + ')</h2>';
-    html += '<div class="text-sm text-dim mb">Craft gear at your max rarity. Cost: ' + craftCost + 'g</div>';
+    html += '<h3>\uD83D\uDD28 Crafting <span class="text-sm ' + RARITIES[maxRarity] + '">Max: ' + RARITY_NAMES[maxRarity] + '</span></h3>';
+    html += '<div class="card"><div class="text-sm text-dim mb">Cost: ' + fmtNum(craftCost) + 'g per item</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
     GEAR_SLOTS.forEach(slot => {
-      html += '<button class="btn btn-cyan" onclick="craftGear(\'' + slot + '\')">Craft ' + slot + '</button> ';
+      html += '<button class="btn btn-cyan" style="flex:1;min-width:80px" onclick="craftGear(\'' + slot + '\')">' + (slotIcons[slot]||'') + ' ' + slot + '</button>';
     });
+    html += '</div></div>';
   }
 
   // Enchanting info
   if(G.skillLevels[11] >= 10){
-    html += '<h2>Enchanting (Lv.' + G.skillLevels[11] + ')</h2>';
+    html += '<h3>\u2728 Enchanting <span class="text-sm text-dim">Lv.' + G.skillLevels[11] + '</span></h3>';
     html += '<div class="card text-sm">';
-    html += 'Lv.10: Reroll stats | Lv.25: Boost +10-20% | Lv.50: Upgrade rarity<br>';
-    html += 'Lv.75: Guaranteed boost | Lv.99: ENCHANTER - perfect rolls, high upgrade chance';
-    html += '</div>';
+    const enchLevels = [{lv:10,desc:'Reroll stats',active:G.skillLevels[11]>=10},{lv:25,desc:'Boost +10-20%',active:G.skillLevels[11]>=25},{lv:50,desc:'Upgrade rarity',active:G.skillLevels[11]>=50},{lv:75,desc:'Guaranteed boost',active:G.skillLevels[11]>=75},{lv:99,desc:'ENCHANTER',active:G.skillLevels[11]>=99}];
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    enchLevels.forEach(e => {
+      html += '<span style="color:'+(e.active?'#b026ff':'#444')+'">Lv.'+e.lv+': '+e.desc+'</span>';
+    });
+    html += '</div></div>';
   }
 
-  // Auto-Sell Threshold (#3)
-  html += '<h2>Auto-Sell</h2>';
+  // Bottom controls: Auto-Sell + Mass Salvage
+  html += '<div class="grid2" style="margin-top:12px">';
+  // Auto-Sell
   html += '<div class="card">';
+  html += '<div style="font-weight:700;margin-bottom:6px">\u2699 Auto-Sell</div>';
   const asr = G.autoSellRarity !== undefined ? G.autoSellRarity : -1;
-  html += '<span class="text-sm">Auto-sell gear below rarity: </span>';
-  html += '<select onchange="G.autoSellRarity=parseInt(this.value);save();">';
+  html += '<select style="width:100%;padding:4px;background:#1a1a2e;color:#eee;border:1px solid #333;border-radius:4px" onchange="G.autoSellRarity=parseInt(this.value);save();">';
   html += '<option value="-1"' + (asr===-1?' selected':'') + '>OFF</option>';
   for(let r=0;r<=4;r++){
     html += '<option value="'+r+'"' + (asr===r?' selected':'') + '>Below ' + RARITY_NAMES[r] + '</option>';
   }
   html += '</select>';
-  html += '<div class="text-sm text-dim">Favorited items are never auto-sold.</div>';
+  html += '<div class="text-sm text-dim" style="margin-top:4px">Favorited items are never auto-sold.</div>';
   html += '</div>';
-
-  // Mass Salvage (#19)
-  html += '<h2>Mass Salvage</h2>';
+  // Mass Salvage
   html += '<div class="card">';
-  html += '<div class="text-sm text-dim mb">Salvage all non-favorited items at or below a rarity.</div>';
+  html += '<div style="font-weight:700;margin-bottom:6px">\uD83D\uDDD1 Mass Salvage</div>';
+  html += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
   for(let r=0;r<=3;r++){
     const count = G.inventory.filter(item => item.rarity <= r && !item.favorited).length;
-    html += '<button class="btn btn-red" onclick="if(confirm(\'Salvage '+count+' items?\'))massSalvage('+r+')">Salvage all ' + RARITY_NAMES[r] + '- (' + count + ')</button> ';
+    html += '<button class="btn btn-red" style="padding:3px 8px;min-height:24px;font-size:10px;flex:1" onclick="if(confirm(\'Salvage '+count+' items?\'))massSalvage('+r+')">' + RARITY_NAMES[r] + '- ('+count+')</button>';
   }
+  html += '</div></div>';
   html += '</div>';
 
   c.innerHTML = html;
@@ -6110,189 +6213,198 @@ function renderTown(c){
   const ci = G.currentCity;
   const pop = getCityPopulation(ci);
   const maxPop = getCityMaxPop(ci);
+  const bldgIcons = {generator:'\u26A1',foundry:'\uD83C\uDFED',lab:'\uD83D\uDD2C',vault:'\uD83C\uDFE6',barracks:'\u2694',tavern:'\uD83C\uDF7A',workshop:'\uD83D\uDD27',shrine:'\u26E9',gemmine:'\uD83D\uDC8E'};
+  const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
 
-  let html = '<h2>Cities</h2>';
+  let html = '';
 
-  // City switcher
-  html += '<div class="card">';
+  // City switcher as pill tabs
+  html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">';
   G.cities.forEach((ct, i) => {
-    const active = i === ci ? 'btn-cyan' : '';
-    html += '<button class="btn ' + active + '" onclick="switchCity(' + i + ')">' + ct.name + '</button> ';
+    const active = i === ci;
+    html += '<button class="btn' + (active?' btn-cyan':'') + '" style="border-radius:20px;padding:6px 16px;min-height:32px;font-size:12px' + (active?';box-shadow:0 0 8px rgba(0,255,255,0.3)':'') + '" onclick="switchCity(' + i + ')">' + ct.name + '</button>';
   });
-  // Found new city button
   if(G.cities.length < 5){
     const nextIdx = G.cities.length;
     const nextCost = CITY_COSTS[nextIdx];
     const nextLv = CITY_LEVEL_REQ[nextIdx];
     const canFound = G.level >= nextLv && G.gold >= nextCost;
-    html += '<br><button class="btn btn-green" onclick="var n=prompt(\'Name your new city:\');if(n)foundCity(n)" ' + (canFound ? '' : 'disabled') + '>';
-    html += 'Found City (' + nextCost + 'g, Lv.' + nextLv + ')</button>';
+    html += '<button class="btn btn-green" style="border-radius:20px;padding:6px 14px;min-height:32px;font-size:11px" onclick="var n=prompt(\'Name your new city:\');if(n)foundCity(n)" ' + (canFound?'':'disabled') + '>+ Found (' + fmtNum(nextCost) + 'g, Lv.' + nextLv + ')</button>';
   }
   html += '</div>';
 
-  // Current city info
-  html += '<div class="card">';
-  html += '<h3 style="color:#0ff">' + city.name + '</h3>';
-  // ASCII layout
-  const wallChar = city.wallLevel > 0 ? '=' : '-';
-  const wallStr = wallChar.repeat(24);
-  html += '<pre style="color:#666;font-size:11px;line-height:1.2">';
-  html += '  ' + wallStr + '\n';
-  html += '  |' + '  ' + city.name.substring(0,20).padEnd(20) + '  |\n';
-  html += '  |  Pop: ' + (pop+'/'+maxPop).padEnd(7) + ' Def: ' + (city.defense+'').padEnd(5) + '  |\n';
-  html += '  |  Wall Lv.' + (city.wallLevel+'').padEnd(3) + ' ' + (SPECIALTIES[city.specialty].name).padEnd(10) + '|\n';
-  // Show buildings as grid
-  let bLine1 = '  |';
-  let bLine2 = '  |';
-  let count = 0;
-  BUILDINGS.forEach(b => {
-    const lv = city.buildings[b.id] || 0;
-    const abbr = b.name.substring(0,3).toUpperCase();
-    if(count < 4) bLine1 += ' ' + abbr + (lv > 9 ? lv : ' '+lv);
-    else bLine2 += ' ' + abbr + (lv > 9 ? lv : ' '+lv);
-    count++;
-  });
-  bLine1 += '      |'; bLine2 += '      |';
-  html += bLine1 + '\n' + bLine2 + '\n';
-  html += '  ' + wallStr + '\n';
-  html += '</pre>';
-  html += '<div class="text-sm">Gold/min (all cities): ' + getGoldPerMin() + ' | Total followers: ' + G.followers.length + '</div>';
+  // City header card
+  html += '<div class="card" style="border-color:#0ff">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">';
+  html += '<h3 style="color:#0ff;margin:0">' + city.name + '</h3>';
+  html += '<span class="badge" style="background:#0ff;color:#000;padding:2px 8px;border-radius:10px;font-size:10px">' + SPECIALTIES[city.specialty].name + '</span>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:16px;margin:8px 0;flex-wrap:wrap">';
+  html += '<div class="hud-stat"><span class="text-sm text-dim">Pop</span> <span style="color:#0ff">' + pop + '/' + maxPop + '</span></div>';
+  html += '<div class="hud-stat"><span class="text-sm text-dim">Defense</span> <span style="color:#f44">' + city.defense + '</span></div>';
+  html += '<div class="hud-stat"><span class="text-sm text-dim">Wall</span> <span style="color:#ffd700">Lv.' + city.wallLevel + '</span></div>';
+  html += '<div class="hud-stat"><span class="text-sm text-dim">Gold/min</span> <span style="color:#ffd700">' + getGoldPerMin() + '</span></div>';
+  html += '<div class="hud-stat"><span class="text-sm text-dim">Followers</span> <span style="color:#0f0">' + G.followers.length + '</span></div>';
+  html += '</div>';
   html += '</div>';
 
-  // Specialty
-  // Building Synergies
+  // Synergies
   const synergies = getBuildingSynergies(ci);
   if(synergies.length > 0){
-    html += '<h3 style="color:#ffd700">Synergies Active</h3>';
-    html += '<div class="card">';
+    html += '<div style="display:flex;gap:6px;margin:8px 0;flex-wrap:wrap">';
     synergies.forEach(s => {
-      html += '<div style="color:#ffd700">* ' + s.name + ' - ' + s.desc + '</div>';
+      html += '<div class="card glow-gold" style="border-color:#ffd700;padding:6px 10px;flex:1;min-width:140px">';
+      html += '<div style="color:#ffd700;font-weight:700;font-size:12px">\u2728 ' + s.name + '</div>';
+      html += '<div class="text-sm" style="color:#eee">' + s.desc + '</div>';
+      html += '</div>';
     });
     html += '</div>';
   }
 
-  html += '<h3>City Specialty</h3>';
+  // Specialty selector
+  html += collapseSection('town-spec', 'City Specialty', function(){
+    let h = '<div class="text-sm text-dim mb">Current: <b style="color:#0ff">' + SPECIALTIES[city.specialty].name + '</b> - ' + SPECIALTIES[city.specialty].desc + '</div>';
+    h += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
+    for(const sp in SPECIALTIES){
+      const active = city.specialty === sp ? 'btn-cyan' : '';
+      h += '<button class="btn ' + active + '" style="padding:5px 10px;min-height:30px;font-size:11px;border-radius:16px" onclick="setCitySpecialty(\'' + sp + '\')">' + SPECIALTIES[sp].name + '</button>';
+    }
+    h += '</div>';
+    return h;
+  }(), false);
+
+  // Wall & Garrison - visual defense meter
+  html += '<h3>\uD83C\uDFF0 Wall & Garrison</h3>';
   html += '<div class="card">';
-  html += 'Current: <b>' + SPECIALTIES[city.specialty].name + '</b> - ' + SPECIALTIES[city.specialty].desc + '<br>';
-  for(const sp in SPECIALTIES){
-    const active = city.specialty === sp ? 'btn-cyan' : '';
-    html += '<button class="btn ' + active + '" onclick="setCitySpecialty(\'' + sp + '\')" style="padding:6px 10px;min-height:36px">' + SPECIALTIES[sp].name + '</button> ';
+  const wallPct = Math.floor((city.wallLevel / 20) * 100);
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+  html += '<div style="flex:1">';
+  html += '<div class="text-sm text-dim">Wall Level ' + city.wallLevel + '/20</div>';
+  html += '<div class="pbar pbar-cyan" style="height:12px"><div class="pbar-fill" style="width:'+wallPct+'%"></div><span class="pbar-text" style="font-size:9px">DEF: ' + city.defense + '</span></div>';
+  html += '</div>';
+  if(city.wallLevel < 20){
+    const wallCost = Math.floor(80 * Math.pow(1.9, city.wallLevel));
+    html += '<button class="btn btn-cyan" style="padding:4px 10px;min-height:28px;font-size:11px" onclick="upgradeWall()">\u2191 ' + fmtNum(wallCost) + 'g</button>';
   }
   html += '</div>';
-
-  // Wall
-  // Wall & Garrison
-  html += '<h3>Wall & Garrison</h3>';
-  html += '<div class="card">';
-  html += 'Wall Lv.' + city.wallLevel + '/20 | Defense: ' + city.defense + '<br>';
+  // Garrison slots
   const garSlots = getGarrisonSlots(ci);
   const garrisoned = getWallGarrison(ci);
-  html += '<div class="text-sm">Garrison: ' + garrisoned.length + '/' + garSlots + ' slots</div>';
+  html += '<div class="text-sm" style="margin-bottom:6px">Garrison: ' + garrisoned.length + '/' + garSlots + '</div>';
+  html += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
   garrisoned.forEach(f => {
-    const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
-    html += '<div class="follower-card">';
-    html += '<span class="' + RARITIES[f.rarity] + '">' + getFollowerDisplayName(f) + '</span> Lv.' + f.level;
-    html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
-    html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
+    const rc = rarityColors[f.rarity];
+    html += '<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid '+rc+';border-radius:6px;cursor:pointer" onclick="showTab(\'followers_detail\',' + f.id + ')">';
+    html += '<span style="width:8px;height:8px;border-radius:50%;background:'+rc+';display:inline-block"></span>';
+    html += '<span class="text-sm" style="color:'+rc+'">' + f.name + '</span>';
+    html += '<span class="text-sm text-dim">Lv.' + f.level + '</span>';
     html += '</div>';
   });
   for(let s = garrisoned.length; s < garSlots; s++){
-    html += '<div class="follower-card text-dim">[Empty garrison slot]</div>';
+    html += '<div style="display:inline-flex;align-items:center;padding:4px 8px;border:1px dashed #333;border-radius:6px;color:#444">';
+    html += '<span class="text-sm">\u25CB Empty</span></div>';
   }
-  if(city.wallLevel < 20){
-    const wallCost = Math.floor(80 * Math.pow(1.9, city.wallLevel));
-    html += '<button class="btn btn-cyan" onclick="upgradeWall()">Upgrade Wall (' + wallCost + 'g)</button>';
-  }
-  html += '<br><span class="text-sm text-dim">Raids won: ' + city.raidWins + ' | lost: ' + city.raidLosses + '</span>';
+  html += '</div>';
+  html += '<div class="text-sm text-dim" style="margin-top:6px">Raids: <span style="color:#0f0">' + city.raidWins + 'W</span> / <span style="color:#f44">' + city.raidLosses + 'L</span></div>';
   html += '</div>';
 
-  // Buildings with unit slots
-  html += '<h3>Buildings</h3>';
+  // Buildings as 2-column grid
+  html += '<h3>\uD83C\uDFD7 Buildings</h3>';
+  html += '<div class="grid2">';
   BUILDINGS.forEach(b => {
     const lv = city.buildings[b.id] || 0;
     const cost = getBuildingCost(b.id);
     const maxed = lv >= 20;
     const slots = getBuildingSlots(b.id, ci);
     const assigned = getFollowersInSlot(b.id, ci);
-    html += '<div class="card">';
-    html += '<b>' + b.name + '</b> Lv.' + lv + '/20';
-    html += ' <span class="text-dim">- ' + b.desc + '</span>';
-    if(slots > 0) html += ' | Workers: ' + assigned.length + '/' + slots;
-    html += '<br>';
-    // Show slot bonus info
-    if(lv > 0) html += '<div class="text-sm" style="color:#888">Slot bonus: ' + b.slotBonus + '</div>';
-    // Show assigned followers
-    assigned.forEach(f => {
-      const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
-      html += '<div class="follower-card">';
-      html += '<span class="' + RARITIES[f.rarity] + '">' + getFollowerDisplayName(f) + '</span> Lv.' + f.level;
-      html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
-      html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
+    const icon = bldgIcons[b.id] || '\uD83C\uDFE0';
+    html += '<div class="card" style="position:relative">';
+    // Header with icon, name, level badge
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    html += '<span style="font-size:22px">' + icon + '</span>';
+    html += '<div style="flex:1">';
+    html += '<div style="font-weight:700">' + b.name + '</div>';
+    html += '<div class="text-sm text-dim">' + b.desc + '</div>';
+    html += '</div>';
+    html += '<span class="badge" style="background:'+(maxed?'#ffd700':'#0ff')+';color:#000;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:700">' + lv + '</span>';
+    html += '</div>';
+    // Worker icons
+    if(slots > 0){
+      html += '<div style="display:flex;gap:3px;margin:4px 0;align-items:center">';
+      html += '<span class="text-sm text-dim">Workers:</span>';
+      for(let w = 0; w < slots; w++){
+        const filled = w < assigned.length;
+        const worker = filled ? assigned[w] : null;
+        const wColor = worker ? rarityColors[worker.rarity] : '#333';
+        html += '<span title="'+(worker ? worker.name + ' Lv.' + worker.level : 'Empty')+'" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:'+(filled?wColor:'transparent')+';border:2px solid '+wColor+';cursor:'+(filled?'pointer':'default')+'"' + (filled?' onclick="showTab(\'followers_detail\','+worker.id+')"':'') + '></span>';
+      }
       html += '</div>';
-    });
-    // Show empty slots
-    for(let s = assigned.length; s < slots; s++){
-      html += '<div class="follower-card text-dim">[Empty slot]</div>';
     }
+    // Slot bonus info
+    if(lv > 0) html += '<div class="text-sm" style="color:#555;margin:2px 0">' + b.slotBonus + '</div>';
+    // Upgrade button
     if(!maxed){
-      html += '<button class="btn btn-cyan" onclick="upgradeBuilding(\'' + b.id + '\')">Upgrade (' + cost + 'g)</button>';
+      html += '<button class="btn btn-cyan" style="padding:3px 8px;min-height:24px;font-size:11px;width:100%;margin-top:4px" onclick="upgradeBuilding(\'' + b.id + '\')">\u2191 Upgrade (' + fmtNum(cost) + 'g)</button>';
     } else {
-      html += '<span class="legendary">MAXED</span>';
+      html += '<div style="text-align:center;margin-top:4px"><span class="legendary" style="font-size:11px">MAXED</span></div>';
     }
     html += '</div>';
   });
+  html += '</div>';
 
-  // Idle & Combat followers in this city
+  // Idle & Combat followers
   const cityFollowers = G.followers.filter(f => (f.cityIdx || 0) === ci);
   const idleFollowers = cityFollowers.filter(f => f.assigned === 'idle' || f.assigned === 'combat');
   if(idleFollowers.length > 0){
     html += '<h3>Idle & Combat (' + idleFollowers.length + ')</h3>';
-    // Sort options (#17)
-    html += '<div class="text-sm mb">Sort: ';
-    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'rarity\';showTab(\'town\')">Rarity</button> ';
-    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'level\';showTab(\'town\')">Level</button> ';
-    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'power\';showTab(\'town\')">Power</button> ';
-    html += '<button class="btn" style="padding:2px 6px;min-height:24px;font-size:10px" onclick="G._followerSort=\'happiness\';showTab(\'town\')">Happiness</button>';
+    html += '<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">';
+    ['rarity','level','power','happiness'].forEach(s => {
+      const active = G._followerSort === s;
+      html += '<button class="btn' + (active?' btn-cyan':'') + '" style="padding:2px 8px;min-height:22px;font-size:10px;border-radius:12px" onclick="G._followerSort=\''+s+'\';showTab(\'town\')">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>';
+    });
     html += '</div>';
-    // Apply sort
     if(G._followerSort === 'rarity') idleFollowers.sort((a,b) => b.rarity - a.rarity);
     else if(G._followerSort === 'level') idleFollowers.sort((a,b) => b.level - a.level);
     else if(G._followerSort === 'power') idleFollowers.sort((a,b) => b.power - a.power);
     else if(G._followerSort === 'happiness') idleFollowers.sort((a,b) => a.happiness - b.happiness);
     idleFollowers.forEach(f => {
+      const rc = rarityColors[f.rarity];
       const hColor = f.happiness > 60 ? '#0f0' : f.happiness > 30 ? '#ffd700' : '#f44';
-      html += '<div class="follower-card">';
-      html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
-      html += ' Lv.' + f.level + ' ' + f.class + ' [' + f.assigned + ']';
-      html += ' <span style="color:' + hColor + '">&#9829;' + f.happiness + '</span>';
-      html += ' <button class="btn" style="padding:4px 8px;min-height:30px" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
+      html += '<div class="follower-card" style="border-left:3px solid '+rc+';display:flex;align-items:center;gap:8px;padding:5px 8px">';
+      html += '<span class="' + RARITIES[f.rarity] + '" style="font-weight:700">' + f.name + '</span>';
+      html += '<span class="text-sm text-dim">Lv.' + f.level + '</span>';
+      html += '<span class="text-sm text-dim">' + f.class + '</span>';
+      html += '<span class="badge" style="background:' + (f.assigned==='combat'?'#f44':'#444') + ';color:#fff;font-size:8px;padding:1px 5px;border-radius:8px">' + f.assigned + '</span>';
+      html += '<span style="color:' + hColor + ';font-size:12px">\u2665' + f.happiness + '</span>';
+      html += '<button class="btn" style="padding:2px 6px;min-height:22px;font-size:10px;margin-left:auto" onclick="showTab(\'followers_detail\',' + f.id + ')">Manage</button>';
       html += '</div>';
     });
   }
 
-  // Unassigned followers (no city)
+  // Unassigned followers
   const unassigned = G.followers.filter(f => f.cityIdx === undefined || f.cityIdx === null);
   if(unassigned.length > 0){
-    html += '<div class="text-sm mt" style="color:#f44">[UNASSIGNED - No City] (' + unassigned.length + ')</div>';
+    html += '<div class="card" style="border-color:#f44;margin-top:8px">';
+    html += '<div style="color:#f44;font-weight:700;margin-bottom:6px">\u26A0 Unassigned (' + unassigned.length + ')</div>';
     unassigned.forEach(f => {
-      html += '<div class="follower-card">';
-      html += '<span class="name ' + RARITIES[f.rarity] + '">' + f.name + '</span>';
-      html += ' Lv.' + f.level + ' ';
-      html += '<button class="btn btn-green" style="padding:4px 8px;min-height:30px" onclick="moveFollowerToCity(' + f.id + ',' + ci + ')">Assign Here</button>';
+      const rc = rarityColors[f.rarity];
+      html += '<div style="display:flex;align-items:center;gap:8px;margin:4px 0">';
+      html += '<span style="width:8px;height:8px;border-radius:50%;background:'+rc+'"></span>';
+      html += '<span class="' + RARITIES[f.rarity] + '">' + f.name + '</span>';
+      html += '<span class="text-sm text-dim">Lv.' + f.level + '</span>';
+      html += '<button class="btn btn-green" style="padding:2px 8px;min-height:22px;font-size:10px;margin-left:auto" onclick="moveFollowerToCity(' + f.id + ',' + ci + ')">Assign</button>';
       html += '</div>';
     });
+    html += '</div>';
   }
 
   // Bulk actions
   if(cityFollowers.length > 0){
-    html += '<h3>Bulk Actions</h3>';
-    html += '<div class="card">';
-    html += '<button class="btn btn-green" onclick="bulkFeed(' + ci + ')">Feed All (' + cityFollowers.length + ')</button> ';
-    html += '<button class="btn btn-purple" onclick="bulkTrain(' + ci + ')">Train All (' + cityFollowers.length + ')</button> ';
-    // Auto-Assign (#7)
-    html += '<button class="btn btn-cyan" onclick="autoAssignFollowers()">Auto-Assign Idle</button> ';
-    // City Rename (#14)
-    html += '<button class="btn" style="padding:4px 8px;min-height:30px;color:#888;border-color:#888" onclick="renameCity(' + ci + ')">Rename City (100g)</button>';
+    html += '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">';
+    html += '<button class="btn btn-green" style="flex:1;min-width:120px;padding:8px;font-size:13px" onclick="bulkFeed(' + ci + ')">\uD83C\uDF56 Feed All (' + cityFollowers.length + ')</button>';
+    html += '<button class="btn btn-purple" style="flex:1;min-width:120px;padding:8px;font-size:13px" onclick="bulkTrain(' + ci + ')">\u2694 Train All</button>';
+    html += '<button class="btn btn-cyan" style="flex:1;min-width:120px;padding:8px;font-size:13px" onclick="autoAssignFollowers()">\u2699 Auto-Assign</button>';
+    html += '<button class="btn" style="flex:1;min-width:120px;padding:8px;font-size:13px;color:#888;border-color:#888" onclick="renameCity(' + ci + ')">\u270F Rename (100g)</button>';
     html += '</div>';
   }
 
@@ -6569,83 +6681,127 @@ function renderFollowerDetail(c, fId){
 
 function renderGacha(c){
   const banner = getCurrentBanner();
-  let html = '<h2>Void Summons</h2>';
+  let html = '';
 
-  // Banner
-  html += '<div class="card text-center" style="border-color:#b026ff">';
-  html += '<div style="font-size:18px;color:#b026ff;margin:6px">Banner: ' + banner.name + '</div>';
-  html += '<div class="text-sm">' + banner.desc + '</div>';
-  html += '<div class="text-sm text-dim mt">Rates: Common 56% | Uncommon 30% | Rare 10% | Epic 4% | <span class="legendary">Legendary 0.1%</span> | <span class="mythic">Mythic 0.01%</span></div>';
-  html += '<div class="text-sm text-dim">Pity: Rare+ @100 | Legendary @500 | <span class="mythic">Mythic @2000</span> | 10x guarantees Uncommon+</div>';
-  html += '<div class="text-sm mt">Total pulls: ' + G.total_gacha_pulls + '</div>';
-  html += '<div class="text-sm">Next pity (Rare+): ' + (100 - (G.total_gacha_pulls % 100)) + '</div>';
-  html += '<div class="text-sm">Next pity (Legendary): ' + (500 - (G.total_gacha_pulls % 500)) + '</div>';
-  html += '<div class="text-sm mythic">Next pity (MYTHIC): ' + (2000 - (G.total_gacha_pulls % 2000)) + '</div>';
-  // Pull buttons
-  html += '<div class="mt">';
-  html += '<button class="btn btn-purple" onclick="doPull(1,false)">1x Pull (3 Gems)</button> ';
-  html += '<button class="btn btn-gold" onclick="doPull(10,false)">10x Pull (25 Gems)</button> ';
-  html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="doPull(50,false)">50x Pull (100 Gems)</button>';
+  // Banner hero card
+  html += '<div class="card" style="border-color:#b026ff;border-width:2px;text-align:center;padding:20px;background:linear-gradient(180deg, rgba(176,38,255,0.1) 0%, transparent 100%)">';
+  html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;color:#888;margin-bottom:4px">Featured Banner</div>';
+  html += '<div style="font-size:24px;font-weight:700;color:#b026ff;margin:8px 0">' + banner.name + '</div>';
+  html += '<div class="text-sm" style="color:#ccc;margin-bottom:12px">' + banner.desc + '</div>';
+  // Pull buttons - large and centered
+  html += '<div style="display:flex;gap:8px;justify-content:center;margin:12px 0;flex-wrap:wrap">';
+  html += '<button class="btn btn-purple glow-purple" style="padding:12px 24px;font-size:15px;min-height:44px;font-weight:700" onclick="doPull(1,false)">\u2728 1x Pull<div class="text-sm" style="font-weight:400;opacity:0.7">3 Gems</div></button>';
+  html += '<button class="btn btn-gold glow-gold" style="padding:12px 24px;font-size:15px;min-height:44px;font-weight:700" onclick="doPull(10,false)">\u2728 10x Pull<div class="text-sm" style="font-weight:400;opacity:0.7">25 Gems</div></button>';
+  html += '<button class="btn" style="padding:12px 24px;font-size:15px;min-height:44px;font-weight:700;color:#ff2060;border-color:#ff2060;box-shadow:0 0 12px rgba(255,32,96,0.2)" onclick="doPull(50,false)">\uD83D\uDD25 50x Pull<div class="text-sm" style="font-weight:400;opacity:0.7">100 Gems</div></button>';
   html += '</div>';
-  // Ticket buttons
-  html += '<div class="mt">';
-  html += '<button class="btn" style="border-color:#0ff;color:#0ff" onclick="useTicket1x()" ' + ((G.tickets1x||0)>0?'':'disabled') + '>Use 1x Ticket (' + (G.tickets1x||0) + ')</button> ';
-  html += '<button class="btn" style="border-color:#ffd700;color:#ffd700" onclick="useTicket10x()" ' + ((G.tickets10x||0)>0?'':'disabled') + '>Use 10x Ticket (' + (G.tickets10x||0) + ')</button>';
+  // Ticket buttons - separate styled
+  html += '<div style="display:flex;gap:6px;justify-content:center;margin-top:6px">';
+  html += '<button class="btn" style="border-color:#0ff;color:#0ff;padding:6px 14px;min-height:32px;font-size:12px" onclick="useTicket1x()" ' + ((G.tickets1x||0)>0?'':'disabled') + '>\uD83C\uDFAB 1x Ticket (' + (G.tickets1x||0) + ')</button>';
+  html += '<button class="btn" style="border-color:#ffd700;color:#ffd700;padding:6px 14px;min-height:32px;font-size:12px" onclick="useTicket10x()" ' + ((G.tickets10x||0)>0?'':'disabled') + '>\uD83C\uDFAB 10x Ticket (' + (G.tickets10x||0) + ')</button>';
   html += '</div>';
   html += '</div>';
 
-  // Currency
+  // Currency bar
+  html += '<div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap">';
+  html += '<div class="card" style="flex:1;text-align:center;padding:8px;min-width:70px"><span style="font-size:16px">\uD83D\uDC8E</span><div style="color:#b026ff;font-weight:700;font-size:16px">' + G.gems + '</div><div class="text-sm text-dim">Gems</div></div>';
+  html += '<div class="card" style="flex:1;text-align:center;padding:8px;min-width:70px"><span style="font-size:16px">\u2728</span><div style="color:#0ff;font-weight:700;font-size:16px">' + (G.shards||0) + '</div><div class="text-sm text-dim">Shards</div></div>';
+  html += '<div class="card" style="flex:1;text-align:center;padding:8px;min-width:70px"><span style="font-size:16px">\uD83C\uDFAB</span><div style="color:#0ff;font-weight:700;font-size:16px">' + (G.tickets1x||0) + '</div><div class="text-sm text-dim">1x Tix</div></div>';
+  html += '<div class="card" style="flex:1;text-align:center;padding:8px;min-width:70px"><span style="font-size:16px">\uD83C\uDFAB</span><div style="color:#ffd700;font-weight:700;font-size:16px">' + (G.tickets10x||0) + '</div><div class="text-sm text-dim">10x Tix</div></div>';
+  html += '</div>';
+
+  // Pity trackers as progress bars
   html += '<div class="card">';
-  html += 'Gems: <span style="color:#b026ff">' + G.gems + '</span> | ';
-  html += 'Shards: <span style="color:#0ff">' + (G.shards||0) + '</span> | ';
-  html += '1x Tickets: <span style="color:#0ff">' + (G.tickets1x||0) + '</span> | ';
-  html += '10x Tickets: <span style="color:#ffd700">' + (G.tickets10x||0) + '</span>';
+  html += '<div style="font-weight:700;margin-bottom:8px">Pity Tracker <span class="text-sm text-dim">(' + G.total_gacha_pulls + ' total pulls)</span></div>';
+  const pityRare = G.total_gacha_pulls % 100;
+  const pityLeg = G.total_gacha_pulls % 500;
+  const pityMyth = G.total_gacha_pulls % 2000;
+  html += '<div style="margin:6px 0"><div class="text-sm" style="display:flex;justify-content:space-between"><span style="color:#4af">Rare+ Pity</span><span>' + pityRare + '/100</span></div>';
+  html += '<div class="pbar pbar-cyan" style="height:10px"><div class="pbar-fill" style="width:'+(pityRare)+'%"></div></div></div>';
+  html += '<div style="margin:6px 0"><div class="text-sm" style="display:flex;justify-content:space-between"><span style="color:#ffd700">Legendary Pity</span><span>' + pityLeg + '/500</span></div>';
+  html += '<div class="pbar pbar-gold" style="height:10px"><div class="pbar-fill" style="width:'+((pityLeg/500)*100)+'%"></div></div></div>';
+  html += '<div style="margin:6px 0"><div class="text-sm" style="display:flex;justify-content:space-between"><span class="mythic">Mythic Pity</span><span>' + pityMyth + '/2000</span></div>';
+  html += '<div class="pbar" style="height:10px"><div class="pbar-fill" style="width:'+((pityMyth/2000)*100)+'%;background:#ff2060"></div></div></div>';
   html += '</div>';
 
-  // Wish List
+  // Rates table
+  html += collapseSection('gacha-rates', 'Summon Rates', function(){
+    let h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">';
+    const rates = [{name:'Common',pct:'56%',cls:'common'},{name:'Uncommon',pct:'30%',cls:'uncommon'},{name:'Rare',pct:'10%',cls:'rare'},{name:'Epic',pct:'4%',cls:'epic'},{name:'Legendary',pct:'0.1%',cls:'legendary'},{name:'Mythic',pct:'0.01%',cls:'mythic'}];
+    rates.forEach(r => {
+      h += '<div style="display:flex;justify-content:space-between;padding:2px 0"><span class="'+r.cls+'">' + r.name + '</span><span class="text-sm">' + r.pct + '</span></div>';
+    });
+    h += '</div>';
+    h += '<div class="text-sm text-dim" style="margin-top:6px">10x pull guarantees at least Uncommon+</div>';
+    return h;
+  }(), false);
+
+  // Wish List as clickable pills
   html += '<div class="card">';
-  html += '<h3>Wish List (' + (G.wishList||[]).length + '/3)</h3>';
-  html += '<div class="text-sm text-dim mb">Selected classes get +15% summon chance.</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  html += '<span style="font-weight:700">Wish List</span>';
+  html += '<span class="text-sm text-dim">' + (G.wishList||[]).length + '/3 \u2022 +15% chance</span>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   FOLLOWER_CLASSES.forEach(cls => {
     const active = (G.wishList||[]).includes(cls);
-    html += '<button class="btn ' + (active?'btn-cyan':'') + '" style="padding:4px 8px;min-height:32px" onclick="setWishList(\''+cls+'\')">' + cls + (active?' ✓':'') + '</button> ';
+    const info = FOLLOWER_CLASS_BONUSES[cls];
+    html += '<button class="btn' + (active?' btn-cyan':'') + '" style="padding:5px 12px;min-height:30px;font-size:12px;border-radius:16px' + (active?';box-shadow:0 0 8px rgba(0,255,255,0.2)':'') + '" onclick="setWishList(\''+cls+'\')">';
+    html += cls + (active?' \u2713':'');
+    if(info.combatBonus > 0) html += ' <span class="text-sm text-dim">+'+Math.floor(info.combatBonus*100)+'%</span>';
+    html += '</button>';
   });
+  html += '</div>';
   html += '</div>';
 
-  // Follower class info
-  html += '<div class="card">';
-  html += '<h3>Follower Classes</h3>';
-  FOLLOWER_CLASSES.forEach(cls => {
-    const info = FOLLOWER_CLASS_BONUSES[cls];
-    html += '<div class="text-sm"><b>' + cls + '</b>: ' + info.desc;
-    if(info.combatBonus > 0) html += ', +' + Math.floor(info.combatBonus*100) + '% combat';
-    html += '</div>';
-  });
-  html += '</div>';
+  // Class info collapsible
+  html += collapseSection('gacha-classes', 'Follower Classes', function(){
+    let h = '<div class="grid2">';
+    FOLLOWER_CLASSES.forEach(cls => {
+      const info = FOLLOWER_CLASS_BONUSES[cls];
+      h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0">';
+      h += '<span style="font-weight:700;min-width:70px">' + cls + '</span>';
+      h += '<span class="text-sm text-dim">' + info.desc;
+      if(info.combatBonus > 0) h += ', +' + Math.floor(info.combatBonus*100) + '% combat';
+      h += '</span></div>';
+    });
+    h += '</div>';
+    return h;
+  }(), false);
 
   c.innerHTML = html;
 }
 
 function renderProfile(c){
-  let html = '<h2>Profile</h2>';
-  html += '<div class="card">';
   const clsData = CLASSES[G.class];
-  html += '<b>' + G.name + '</b> - ' + clsData.name + '<br>';
-  html += 'Level: ' + G.level + '/100<br>';
-  html += 'Prestige: ' + G.prestige + ' (+' + G.prestige_bonus + '% XP)<br>';
-  html += 'Login Streak: ' + (G.loginStreak || 0) + ' days<br>';
-  html += 'Class Passive: <span style="color:'+clsData.passiveColor+'">' + clsData.passive + '</span> - ' + clsData.passiveDesc + '<br>';
-  // Feature 20: Last Login Display
+  const classIcons = {striker:'\u2694',tank:'\uD83D\uDEE1',phantom:'\uD83D\uDC7B',berserker:'\uD83D\uDD25',engineer:'\u2699',necromancer:'\uD83D\uDC80',ranger:'\uD83C\uDFF9',paladin:'\u2728'};
+  const classIcon = classIcons[G.class] || '\u2B50';
+  const isGolden = G.luxuryPurchases && G.luxuryPurchases.goldenName > 0;
+  let html = '';
+
+  // Character header card
+  html += '<div class="card" style="border-color:'+clsData.passiveColor+';border-width:2px;padding:16px;background:linear-gradient(135deg, rgba(0,0,0,0.3) 0%, transparent 100%)">';
+  html += '<div style="display:flex;align-items:center;gap:14px">';
+  // Class icon circle
+  html += '<div style="width:56px;height:56px;border-radius:50%;border:3px solid '+clsData.passiveColor+';display:flex;align-items:center;justify-content:center;font-size:28px;background:rgba(0,0,0,0.4)">' + classIcon + '</div>';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:20px;font-weight:700;color:'+(isGolden?'#ffd700':'#eee')+'">' + G.name + '</div>';
+  html += '<div style="color:'+clsData.passiveColor+';font-size:13px">' + clsData.name + ' <span class="text-dim">Lv.' + G.level + '/100</span></div>';
+  if(G.prestige > 0) html += '<div class="text-sm" style="color:#ffd700">\u2B50 Prestige ' + G.prestige + ' (+' + G.prestige_bonus + '% XP)</div>';
+  html += '</div>';
+  html += '<div style="text-align:right">';
+  html += '<div class="text-sm text-dim">\uD83D\uDD25 Streak: ' + (G.loginStreak||0) + 'd</div>';
   if(G.lastOnline){
     const hoursAgo = Math.floor((Date.now() - G.lastOnline) / 3600000);
     const minsAgo = Math.floor((Date.now() - G.lastOnline) / 60000);
-    html += 'Last login: <span style="color:#888">' + (hoursAgo > 0 ? hoursAgo + ' hours ago' : minsAgo + ' min ago') + '</span><br>';
+    html += '<div class="text-sm text-dim">' + (hoursAgo > 0 ? hoursAgo + 'h ago' : minsAgo + 'm ago') + '</div>';
   }
-  // Feature 8: Golden Name display
-  if(G.luxuryPurchases && G.luxuryPurchases.goldenName > 0){
-    html = html.replace('<b>' + G.name + '</b>', '<b style="color:#ffd700">' + G.name + '</b>');
-  }
-  // Feature 6: Bounty Hunter Rank
+  html += '</div>';
+  html += '</div>';
+  // Passive
+  html += '<div style="margin-top:8px;padding:6px 10px;background:rgba(0,0,0,0.2);border-radius:6px;border-left:3px solid '+clsData.passiveColor+'">';
+  html += '<span style="color:'+clsData.passiveColor+';font-weight:700">' + clsData.passive + '</span> <span class="text-sm text-dim">' + clsData.passiveDesc + '</span>';
+  html += '</div>';
+  // Bounty rank + skill total
   const bhCount = G.bountiesCompleted || 0;
   let bhRank = 'Novice', bhColor = '#888';
   if(bhCount >= 100){ bhRank = 'Legendary'; bhColor = '#ffd700'; }
@@ -6653,111 +6809,147 @@ function renderProfile(c){
   else if(bhCount >= 25){ bhRank = 'Veteran'; bhColor = '#44f'; }
   else if(bhCount >= 10){ bhRank = 'Hunter'; bhColor = '#0f0'; }
   const bhBonus = Math.floor((bhCount >= 100 ? 5 : bhCount >= 50 ? 4 : bhCount >= 25 ? 3 : bhCount >= 10 ? 2 : 1) - 1) * 2;
-  html += 'Bounty Rank: <span style="color:'+bhColor+'">' + bhRank + '</span> (' + bhCount + ' kills, +' + bhBonus + '% bounty gold)<br>';
-  // Skill Total Level (#13)
   const totalSkillLevel = G.skillLevels.reduce((sum, lv) => sum + lv, 0);
-  html += 'Total Skill Level: <span style="color:#b026ff">' + totalSkillLevel + '</span>/1485<br>';
   let milestoneBonus = '';
   if(totalSkillLevel >= 1000) milestoneBonus = '+20% all stats';
   else if(totalSkillLevel >= 500) milestoneBonus = '+15% all stats';
   else if(totalSkillLevel >= 250) milestoneBonus = '+10% all stats';
   else if(totalSkillLevel >= 100) milestoneBonus = '+5% all stats';
-  if(milestoneBonus) html += '<span style="color:#ffd700">Skill Milestone: ' + milestoneBonus + '</span><br>';
+  html += '<div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">';
+  html += '<div class="text-sm">Bounty: <span style="color:'+bhColor+'">' + bhRank + '</span> <span class="text-dim">(' + bhCount + ', +' + bhBonus + '%)</span></div>';
+  html += '<div class="text-sm">Skills: <span style="color:#b026ff">' + totalSkillLevel + '</span>/1485' + (milestoneBonus ? ' <span style="color:#ffd700">' + milestoneBonus + '</span>' : '') + '</div>';
+  html += '</div>';
   html += '</div>';
 
-  // Passive Talents (#14)
-  html += '<h3>Talents (Points: ' + (G.talentPoints||0) + ')</h3>';
+  // Stats as horizontal bars
+  html += '<h3>Stats <span class="text-sm text-dim">(Points: ' + G.statPoints + ')</span></h3>';
   html += '<div class="card">';
-  TALENT_DEFS.forEach(t => {
-    const cur = getTalentLevel(t.id);
-    html += '<div>' + t.name + ': <b>' + cur + '/' + t.max + '</b> <span class="text-sm text-dim">' + t.desc + '</span>';
-    if((G.talentPoints||0) > 0 && cur < t.max){
-      html += ' <button class="btn btn-purple" style="padding:2px 8px;min-height:24px" onclick="buyTalent(\''+t.id+'\')">+</button>';
+  const statColors = {power:'#f44',defense:'#4af',speed:'#0f0',luck:'#ffd700'};
+  const statIcons = {power:'\u2694',defense:'\uD83D\uDEE1',speed:'\u26A1',luck:'\u2618'};
+  const maxStat = Math.max(30, ...['power','defense','speed','luck'].map(s => G.stats[s]));
+  ['power','defense','speed','luck'].forEach(s => {
+    const pct = Math.min(100, (G.stats[s] / maxStat) * 100);
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:4px 0">';
+    html += '<span style="width:20px;text-align:center">' + statIcons[s] + '</span>';
+    html += '<span style="min-width:55px;font-size:12px">' + s.charAt(0).toUpperCase()+s.slice(1) + '</span>';
+    html += '<div style="flex:1;height:16px;background:#111;border-radius:3px;position:relative;overflow:hidden">';
+    html += '<div style="width:'+pct+'%;height:100%;background:'+statColors[s]+';border-radius:3px;transition:width 0.3s"></div>';
+    html += '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:10px;font-weight:700;color:#fff;text-shadow:0 0 3px #000">' + G.stats[s] + '</span>';
+    html += '</div>';
+    if(G.statPoints > 0){
+      html += '<button class="btn btn-green" style="padding:0 8px;min-height:22px;font-size:14px;width:28px" onclick="allocStat(\'' + s + '\')">+</button>';
     }
     html += '</div>';
   });
   html += '</div>';
 
-  // Artifact Fragments & Artifacts (#23)
+  // Talents
+  html += '<h3>Talents <span class="text-sm text-dim">(Points: ' + (G.talentPoints||0) + ')</span></h3>';
+  html += '<div class="card">';
+  html += '<div class="grid2">';
+  TALENT_DEFS.forEach(t => {
+    const cur = getTalentLevel(t.id);
+    const pct = (cur / t.max) * 100;
+    html += '<div style="display:flex;align-items:center;gap:6px;margin:3px 0">';
+    html += '<div style="flex:1">';
+    html += '<div class="text-sm" style="display:flex;justify-content:space-between"><span>' + t.name + '</span><span class="text-dim">' + cur + '/' + t.max + '</span></div>';
+    html += '<div style="height:6px;background:#111;border-radius:3px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:#b026ff;border-radius:3px"></div></div>';
+    html += '</div>';
+    if((G.talentPoints||0) > 0 && cur < t.max){
+      html += '<button class="btn btn-purple" style="padding:0 6px;min-height:20px;font-size:12px;width:24px" onclick="buyTalent(\''+t.id+'\')">+</button>';
+    }
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // Artifacts
   html += '<h3>Artifacts</h3>';
   html += '<div class="card">';
-  html += 'Fragments: ' + (G.artifactFragments||0) + '/10 ';
-  if((G.artifactFragments||0) >= 10) html += '<button class="btn btn-gold" onclick="forgeArtifact();showTab(\'profile\')">Forge Artifact!</button>';
+  const frags = G.artifactFragments || 0;
+  const fragPct = (frags / 10) * 100;
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+  html += '<span class="text-sm">Fragments:</span>';
+  html += '<div class="pbar pbar-gold" style="flex:1;height:12px"><div class="pbar-fill" style="width:'+fragPct+'%"></div><span class="pbar-text" style="font-size:9px">' + frags + '/10</span></div>';
+  if(frags >= 10) html += '<button class="btn btn-gold" style="padding:3px 10px;min-height:24px;font-size:11px" onclick="forgeArtifact();showTab(\'profile\')">\u2728 Forge!</button>';
+  html += '</div>';
   if(G.artifacts && G.artifacts.length > 0){
-    html += '<br>';
     G.artifacts.forEach(a => {
-      html += '<div class="text-sm" style="color:#ff2060">' + a.name + ' - ' + a.desc + '</div>';
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-left:2px solid #ff2060;padding-left:8px;margin:3px 0">';
+      html += '<span style="color:#ff2060;font-weight:700;font-size:12px">' + a.name + '</span>';
+      html += '<span class="text-sm text-dim">' + a.desc + '</span>';
+      html += '</div>';
     });
   }
   html += '</div>';
 
-  // Blueprints (#24)
+  // Blueprints
   if(G.blueprints && G.blueprints.length > 0){
     html += '<h3>Blueprints</h3>';
-    html += '<div class="card">';
+    html += '<div class="card"><div style="display:flex;gap:6px;flex-wrap:wrap">';
     G.blueprints.forEach(bp => {
-      html += '<div class="text-sm" style="color:#ffd700">' + bp + '</div>';
+      html += '<span class="badge" style="background:#ffd700;color:#000;padding:3px 8px;border-radius:10px;font-size:10px">' + bp + '</span>';
     });
-    html += '</div>';
+    html += '</div></div>';
   }
 
-  // Faction War Result (#22)
+  // Faction War Result
   if(G.factionWarResult){
-    html += '<div class="card" style="border-color:#f80"><b>Faction War Result:</b> Rank #' + G.factionWarResult.rank + ' - ' + G.factionWarResult.bonus + '</div>';
+    html += '<div class="card glow-gold" style="border-color:#f80"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">\uD83C\uDFC6</span><div><b>Faction War</b> Rank #' + G.factionWarResult.rank + '<br><span class="text-sm" style="color:#ffd700">' + G.factionWarResult.bonus + '</span></div></div></div>';
   }
 
-  // Potions
-  html += '<h3>Alchemy</h3>';
+  // Potions as visual item slots
+  html += '<h3>\u2697 Alchemy</h3>';
   html += '<div class="card">';
   if(G.activeBuff){
-    html += 'Active: <span style="color:#ffd700">' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns left)</span><br>';
+    html += '<div style="padding:6px 10px;background:rgba(255,215,0,0.1);border:1px solid #ffd700;border-radius:6px;margin-bottom:8px">';
+    html += '<span style="color:#ffd700">\u2728 ' + POTIONS[G.activeBuff.type].name + '</span> <span class="text-sm text-dim">(' + G.activeBuff.turnsLeft + ' turns left)</span>';
+    html += '</div>';
   }
-  html += '<div class="text-sm mb">Inventory: ';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
   let hasPots = false;
   for(const t in POTIONS){
-    if(G.potions[t] > 0){ html += POTIONS[t].name + ' x' + G.potions[t] + '  '; hasPots = true; }
+    const p = POTIONS[t];
+    const count = G.potions[t] || 0;
+    if(count > 0){
+      html += '<div style="text-align:center;padding:6px 10px;border:1px solid '+p.color+';border-radius:6px;min-width:60px">';
+      html += '<div style="font-size:18px">\uD83E\uDDEA</div>';
+      html += '<div style="color:'+p.color+';font-weight:700;font-size:14px">' + count + '</div>';
+      html += '<div class="text-sm" style="color:'+p.color+'">' + p.name.split(' ')[0] + '</div>';
+      html += '</div>';
+      hasPots = true;
+    }
   }
-  if(!hasPots) html += 'None';
+  if(!hasPots) html += '<span class="text-dim">No potions</span>';
   html += '</div>';
-  // Brew buttons
+  html += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
   for(const t in POTIONS){
     const p = POTIONS[t];
     const canBrew = G.skillLevels[10] >= p.reqAlch && G.skillLevels[6] >= p.reqHarv;
     let cost = p.cost;
     if(G.skillLevels[10] >= 99) cost = Math.floor(cost * 0.5);
     if(canBrew){
-      html += '<button class="btn" style="border-color:'+p.color+';color:'+p.color+'" onclick="brewPotion(\''+t+'\')">';
-      html += 'Brew ' + p.name + ' (' + cost + 'g)</button> ';
+      html += '<button class="btn" style="border-color:'+p.color+';color:'+p.color+';padding:3px 8px;min-height:24px;font-size:11px" onclick="brewPotion(\''+t+'\')">';
+      html += 'Brew ' + p.name.split(' ')[0] + ' ' + cost + 'g</button>';
     } else {
-      html += '<button class="btn" disabled>' + p.name + ' (Alch ' + p.reqAlch + '/Harv ' + p.reqHarv + ')</button> ';
+      html += '<button class="btn" style="padding:3px 8px;min-height:24px;font-size:10px" disabled>' + p.name.split(' ')[0] + ' (A'+p.reqAlch+'/H'+p.reqHarv+')</button>';
     }
   }
-  html += '</div>';
+  html += '</div></div>';
 
-  // Stats
-  html += '<h3>Stats (Points: ' + G.statPoints + ')</h3>';
-  html += '<div class="card">';
-  ['power','defense','speed','luck'].forEach(s => {
-    html += s.charAt(0).toUpperCase() + s.slice(1) + ': ' + G.stats[s];
-    if(G.statPoints > 0){
-      html += ' <button class="btn" style="padding:2px 8px;min-height:30px" onclick="allocStat(\'' + s + '\')">+</button>';
-    }
-    html += '<br>';
-  });
-  html += '</div>';
-
-  // Combat stats
+  // Combat stats as icon grid
   html += '<h3>Combat Stats</h3>';
   html += '<div class="card">';
-  html += 'Total Power: ' + getCombatPower() + '<br>';
-  html += 'Total Defense: ' + getCombatDefense() + '<br>';
-  html += 'Speed: ' + getCombatSpeed() + '<br>';
-  html += 'Luck: ' + getLuck() + '<br>';
-  html += 'Max HP: ' + (50 + G.level * 10 + G.stats.defense * 3) + '<br>';
-  html += 'XP Boost: ' + Math.floor(getXpBoost() * 100) + '%<br>';
-  // XP Multiplier Breakdown (#18)
-  html += '<div class="text-sm mt" style="color:#888">';
-  html += 'XP Breakdown: Base 100%';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html += '<div class="stat-row"><span class="text-sm text-dim">\u2694 Power</span><span style="color:#f44;font-weight:700">' + fmtNum(getCombatPower()) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">\uD83D\uDEE1 Defense</span><span style="color:#4af;font-weight:700">' + fmtNum(getCombatDefense()) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">\u26A1 Speed</span><span style="color:#0f0;font-weight:700">' + getCombatSpeed() + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">\u2618 Luck</span><span style="color:#ffd700;font-weight:700">' + getLuck() + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">\u2764 Max HP</span><span style="color:#f44;font-weight:700">' + (50 + G.level * 10 + G.stats.defense * 3) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">\u2B50 XP Boost</span><span style="color:#0ff;font-weight:700">' + Math.floor(getXpBoost() * 100) + '%</span></div>';
+  html += '</div>';
+  // XP Breakdown
+  html += '<div class="text-sm mt" style="color:#555;padding-top:6px;border-top:1px solid #222">';
+  html += 'XP: Base 100%';
   if(G.prestige_bonus > 0) html += ' + Prestige ' + G.prestige_bonus + '%';
   const labBoost = getAllBuildingLevel('lab') * 5;
   if(labBoost > 0) html += ' + Lab ' + labBoost + '%';
@@ -6778,60 +6970,79 @@ function renderProfile(c){
   html += '</div>';
   html += '</div>';
 
-  // Lifetime stats
+  // Lifetime stats as icon grid
   html += '<h3>Lifetime</h3>';
-  html += '<div class="card">';
-  html += 'Missions: ' + G.missions_completed + '<br>';
-  html += 'Bosses Killed: ' + G.bosses_killed + '<br>';
-  html += 'Total Kills: ' + G.total_kills + '<br>';
-  html += 'Gold Earned: ' + G.total_gold_earned + '<br>';
-  html += 'Gacha Pulls: ' + G.total_gacha_pulls + '<br>';
-  html += 'Followers: ' + G.followers.length + '<br>';
-  html += '</div>';
+  html += '<div class="card"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">';
+  const lifeStats = [
+    {icon:'\u2694',val:fmtNum(G.missions_completed),label:'Missions'},
+    {icon:'\uD83D\uDC80',val:fmtNum(G.bosses_killed),label:'Bosses'},
+    {icon:'\uD83D\uDDE1',val:fmtNum(G.total_kills),label:'Kills'},
+    {icon:'\uD83D\uDCB0',val:fmtNum(G.total_gold_earned),label:'Gold'},
+    {icon:'\uD83D\uDC8E',val:G.total_gacha_pulls,label:'Pulls'},
+    {icon:'\uD83D\uDC65',val:G.followers.length,label:'Followers'}
+  ];
+  lifeStats.forEach(ls => {
+    html += '<div><span style="font-size:16px">' + ls.icon + '</span><div style="font-weight:700;font-size:14px;color:#eee">' + ls.val + '</div><div class="text-sm text-dim">' + ls.label + '</div></div>';
+  });
+  html += '</div></div>';
 
-  // Achievements
+  // Achievements with progress ring
   const visibleAchievements = ACHIEVEMENT_DEFS.filter(a => !a.secret || G.achievements.includes(a.id));
   const secretCount = ACHIEVEMENT_DEFS.filter(a => a.secret).length;
   const secretUnlocked = ACHIEVEMENT_DEFS.filter(a => a.secret && G.achievements.includes(a.id)).length;
-  html += '<h3>Achievements (' + G.achievements.length + '/' + ACHIEVEMENT_DEFS.length + ')</h3>';
+  const achPct = Math.floor((G.achievements.length / ACHIEVEMENT_DEFS.length) * 100);
+  html += '<h3>Achievements</h3>';
   html += '<div class="card">';
+  // Progress ring (CSS circle)
+  html += '<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">';
+  html += '<div style="width:50px;height:50px;border-radius:50%;border:4px solid #333;position:relative;display:flex;align-items:center;justify-content:center;background:conic-gradient(#ffd700 '+achPct+'%, #222 '+achPct+'%)">';
+  html += '<div style="width:38px;height:38px;border-radius:50%;background:#1a1a2e;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#ffd700">' + achPct + '%</div>';
+  html += '</div>';
+  html += '<div><span style="font-weight:700;color:#ffd700">' + G.achievements.length + '</span><span class="text-dim"> / ' + ACHIEVEMENT_DEFS.length + '</span></div>';
+  html += '</div>';
   visibleAchievements.forEach(a => {
     const done = G.achievements.includes(a.id);
-    const color = done ? (a.secret ? '#ff2060' : '#ffd700') : '#444';
-    html += '<div style="color:' + color + '">';
-    html += (done ? '* ' : '  ') + (a.secret && done ? '[SECRET] ' : '') + a.name + ' - ' + a.desc;
+    const color = done ? (a.secret ? '#ff2060' : '#ffd700') : '#333';
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 0;color:' + color + '">';
+    html += '<span style="font-size:12px">' + (done ? '\u2605' : '\u2606') + '</span>';
+    html += '<span class="text-sm">' + (a.secret && done ? '[SECRET] ' : '') + a.name + '</span>';
+    if(!done) html += '<span class="text-sm text-dim"> - ' + a.desc + '</span>';
     html += '</div>';
   });
   if(secretUnlocked < secretCount){
-    html += '<div style="color:#444">  ...and ' + (secretCount - secretUnlocked) + ' hidden achievement(s) to discover</div>';
+    html += '<div class="text-sm" style="color:#333;margin-top:4px">...and ' + (secretCount - secretUnlocked) + ' hidden achievement(s)</div>';
   }
   html += '</div>';
 
-  // Feature 5: War Chest Interest Display
-  html += '<h3>War Chest</h3>';
+  // War Chest
+  html += '<h3>\uD83C\uDFE6 War Chest</h3>';
   html += '<div class="card">';
   const wcP = G.warChest || {amount:0,depositTime:0};
   if(wcP.amount > 0){
     const wcHours = (Date.now() - wcP.depositTime) / 3600000;
     const wcInterest = Math.floor(wcP.amount * 0.02 * wcHours);
-    html += 'Balance: <span style="color:#ffd700">' + wcP.amount + 'g</span> | Interest: <span style="color:#0f0">+' + wcInterest + 'g</span> | Total: ' + (wcP.amount + wcInterest) + 'g<br>';
-    html += '<button class="btn btn-green" onclick="withdrawWarChest();showTab(\'profile\')">Withdraw All</button>';
+    html += '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">';
+    html += '<div><span class="text-sm text-dim">Balance</span><div style="color:#ffd700;font-weight:700;font-size:16px">' + fmtNum(wcP.amount) + 'g</div></div>';
+    html += '<div><span class="text-sm text-dim">Interest</span><div style="color:#0f0;font-weight:700;font-size:16px">+' + fmtNum(wcInterest) + 'g</div></div>';
+    html += '<div><span class="text-sm text-dim">Total</span><div style="color:#eee;font-weight:700;font-size:16px">' + fmtNum(wcP.amount + wcInterest) + 'g</div></div>';
+    html += '<button class="btn btn-green" style="margin-left:auto" onclick="withdrawWarChest();showTab(\'profile\')">Withdraw</button>';
+    html += '</div>';
   } else {
-    html += 'No gold deposited. <span class="text-dim">Deposit from missions page.</span>';
+    html += '<span class="text-dim">No gold deposited. Deposit from missions page.</span>';
   }
   html += '</div>';
 
-  // Feature 12: Battle Statistics
+  // Battle Statistics
   html += '<h3>Battle Statistics</h3>';
-  html += '<div class="card">';
+  html += '<div class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">';
   const cs = G.combatStats || {};
-  html += 'Total Damage Dealt: <span style="color:#f44">' + (cs.totalDmgDealt||0) + '</span><br>';
-  html += 'Average Damage/Hit: ' + (cs.totalHits > 0 ? Math.floor((cs.totalDmgDealt||0)/(cs.totalHits||1)) : 0) + '<br>';
-  html += 'Total Crits: <span style="color:#ffd700">' + (cs.totalCrits||0) + '</span><br>';
-  html += 'Dodge Count: ' + (cs.dodgeCount||0) + '<br>';
-  html += 'Potions Used: ' + (cs.potionsUsed||0) + '<br>';
-  html += 'Highest Combo: <span style="color:#0ff">' + (cs.highestCombo||0) + '</span>';
-  html += '</div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">Damage Dealt</span><span style="color:#f44">' + fmtNum(cs.totalDmgDealt||0) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">Avg Damage</span><span>' + (cs.totalHits > 0 ? Math.floor((cs.totalDmgDealt||0)/(cs.totalHits||1)) : 0) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">Crits</span><span style="color:#ffd700">' + (cs.totalCrits||0) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">Dodges</span><span>' + (cs.dodgeCount||0) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">Potions Used</span><span>' + (cs.potionsUsed||0) + '</span></div>';
+  html += '<div class="stat-row"><span class="text-sm text-dim">Max Combo</span><span style="color:#0ff">' + (cs.highestCombo||0) + '</span></div>';
+  html += '</div></div>';
 
   // Feature 16: Session Stats
   html += '<h3>Session Stats</h3>';
