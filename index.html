@@ -19,7 +19,8 @@ body { background:#0a0a1a; color:#d0d0d0; font-family:-apple-system,BlinkMacSyst
 #content { flex:1; overflow-y:auto; padding:12px; padding-bottom:75px; scroll-behavior:smooth; }
 /* Bottom Nav */
 #nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; display:flex; background:linear-gradient(180deg,#0d0d1f,#141428); border-top:1px solid #2a2a4a; z-index:10; padding-bottom:env(safe-area-inset-bottom); }
-#nav button { flex:1; padding:10px 4px 8px; background:none; border:none; border-top:2px solid transparent; color:#556; font-family:inherit; font-size:10px; font-weight:600; cursor:pointer; transition:all 0.2s; text-transform:uppercase; letter-spacing:0.3px; }
+#nav button { flex:1; padding:6px 4px 6px; background:none; border:none; border-top:2px solid transparent; color:#445; font-family:inherit; font-size:9px; font-weight:600; cursor:pointer; transition:all 0.2s; text-transform:uppercase; letter-spacing:0.3px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+#nav button .nav-icon { font-size:18px; line-height:1; }
 #nav button.active { color:#0ff; border-top-color:#0ff; background:rgba(0,255,255,0.03); }
 #nav button:active { background:rgba(0,255,255,0.08); }
 /* Buttons */
@@ -98,11 +99,30 @@ select:focus { border-color:#0ff; outline:none; }
 .hud-stat { background:#0c0c20; border:1px solid #1e1e3a; border-radius:6px; padding:4px 8px; text-align:center; min-width:60px; }
 /* Loading/Splash */
 #splash { position:fixed; top:0; left:0; width:100%; height:100%; background:#0a0a1a; z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; animation:fadeIn 0.5s; }
-#splash .title { font-size:28px; font-weight:900; color:#0ff; text-shadow:0 0 20px rgba(0,255,255,0.3); letter-spacing:3px; margin-bottom:8px; }
-#splash .subtitle { font-size:13px; color:#556; margin-bottom:30px; letter-spacing:2px; }
-#splash .loading-bar { width:200px; height:4px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
-#splash .loading-fill { height:100%; background:linear-gradient(90deg,#066,#0ff); width:0%; animation:loadFill 1.5s ease-out forwards; }
+#splash .logo { font-size:48px; margin-bottom:10px; animation:splashPulse 2s infinite; }
+@keyframes splashPulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+#splash .title { font-size:28px; font-weight:900; color:#0ff; text-shadow:0 0 30px rgba(0,255,255,0.4),0 0 60px rgba(0,255,255,0.1); letter-spacing:4px; margin-bottom:6px; }
+#splash .subtitle { font-size:11px; color:#445; margin-bottom:30px; letter-spacing:3px; text-transform:uppercase; }
+#splash .loading-bar { width:220px; height:3px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
+#splash .loading-fill { height:100%; background:linear-gradient(90deg,#066,#0ff,#066); background-size:200%; width:0%; animation:loadFill 1.5s ease-out forwards, loadShimmer 1s infinite; }
 @keyframes loadFill { to { width:100% } }
+@keyframes loadShimmer { from{background-position:200% 0} to{background-position:-200% 0} }
+/* Section icons */
+.section-icon { font-size:16px; margin-right:6px; vertical-align:middle; }
+/* Glow effects for important elements */
+.glow-cyan { box-shadow:0 0 12px rgba(0,255,255,0.15); }
+.glow-gold { box-shadow:0 0 12px rgba(255,215,0,0.15); }
+.glow-red { box-shadow:0 0 12px rgba(255,68,68,0.15); }
+.glow-purple { box-shadow:0 0 12px rgba(176,38,255,0.15); }
+/* Animated borders for active content */
+@keyframes borderPulse { 0%,100%{border-color:rgba(0,255,255,0.3)} 50%{border-color:rgba(0,255,255,0.7)} }
+.pulse-border { animation:borderPulse 2s infinite; }
+/* Pull result animations */
+.pull-result { animation:pullReveal 0.4s ease-out; }
+@keyframes pullReveal { from{opacity:0;transform:scale(0.8) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.pull-epic { animation:pullReveal 0.4s ease-out; border-color:#b026ff; box-shadow:0 0 20px rgba(176,38,255,0.2); }
+.pull-legendary { animation:pullReveal 0.5s ease-out; border-color:#ffd700; box-shadow:0 0 25px rgba(255,215,0,0.25); }
+.pull-mythic { animation:pullReveal 0.6s ease-out; border-color:#ff2060; box-shadow:0 0 30px rgba(255,32,96,0.3); }
 /* Character creation */
 .class-card { background:linear-gradient(135deg,#111128,#0e0e20); border:2px solid #1e1e3a; border-radius:10px; padding:14px; margin:8px 0; cursor:pointer; transition:all 0.2s; }
 .class-card:active, .class-card.selected { border-color:#0ff; background:linear-gradient(135deg,#151530,#101025); }
@@ -135,25 +155,28 @@ select:focus { border-color:#0ff; outline:none; }
   <div id="top-bar">
     <div class="row">
       <div class="hud-stat"><span class="stat-label">LVL</span><br><span class="stat-val" id="hud-level">1</span></div>
-      <div class="hud-stat"><span class="stat-label">EN</span><br><span class="energy-val" id="hud-energy">100</span></div>
-      <div class="hud-stat"><span class="stat-label">GOLD</span><br><span class="gold-val" id="hud-gold">0</span></div>
-      <div class="hud-stat"><span class="stat-label">GEMS</span><br><span class="stat-val" style="color:#b026ff" id="hud-gems">10</span></div>
+      <div class="hud-stat" style="flex:1"><span class="stat-label">ENERGY</span><br>
+        <div class="pbar pbar-green" style="height:14px;margin:2px 0"><div class="pbar-fill" id="hud-energy-fill" style="width:100%"></div><span class="pbar-text" style="font-size:9px;line-height:14px" id="hud-energy">100/100</span></div>
+      </div>
+      <div class="hud-stat"><span style="font-size:12px">&#11044;</span><br><span class="gold-val" id="hud-gold">0</span></div>
+      <div class="hud-stat"><span style="font-size:12px;color:#b026ff">&#9670;</span><br><span style="color:#b026ff;font-family:'Courier New',monospace;font-weight:700;font-size:14px" id="hud-gems">10</span></div>
     </div>
-    <div class="pbar pbar-cyan" style="margin-top:6px"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" id="hud-xp-text">0 / 100 XP</span></div>
+    <div class="pbar pbar-cyan" style="margin-top:4px;height:14px"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" style="font-size:9px;line-height:14px" id="hud-xp-text">0 / 100 XP</span></div>
     <div id="hud-title" style="color:#ffd700;text-align:center;font-size:10px;margin-top:2px;letter-spacing:1px"></div>
+    <div id="hud-tickets" style="display:flex;justify-content:center;gap:12px;margin-top:2px;font-size:9px;color:#556"></div>
   </div>
   <div id="content"></div>
   <div id="nav">
-    <button onclick="showTab('missions')" id="tab-missions">Missions</button>
-    <button onclick="showTab('skills')" id="tab-skills">Skills</button>
-    <button onclick="showTab('gear')" id="tab-gear">Gear</button>
-    <button onclick="showTab('town')" id="tab-town">Town</button>
-    <button onclick="showTab('gacha')" id="tab-gacha">Summon</button>
-    <button onclick="showTab('more')" id="tab-more">More</button>
+    <button onclick="showTab('missions')" id="tab-missions"><span class="nav-icon">&#9876;</span>Fight</button>
+    <button onclick="showTab('skills')" id="tab-skills"><span class="nav-icon">&#9733;</span>Skills</button>
+    <button onclick="showTab('gear')" id="tab-gear"><span class="nav-icon">&#9881;</span>Gear</button>
+    <button onclick="showTab('town')" id="tab-town"><span class="nav-icon">&#9960;</span>Town</button>
+    <button onclick="showTab('gacha')" id="tab-gacha"><span class="nav-icon">&#10026;</span>Summon</button>
+    <button onclick="showTab('more')" id="tab-more"><span class="nav-icon">&#8942;</span>More</button>
   </div>
 </div>
 <div id="toast-container"></div>
-<div id="splash"><div class="title">VOID RAIDERS</div><div class="subtitle">LOADING</div><div class="loading-bar"><div class="loading-fill"></div></div></div>
+<div id="splash"><div class="logo">&#9764;</div><div class="title">VOID RAIDERS</div><div class="subtitle">Enter the Wasteland</div><div class="loading-bar"><div class="loading-fill"></div></div></div>
 <script>
 // ==================== GAME DATA ====================
 const CLASSES = {
@@ -5233,21 +5256,33 @@ let currentTab = 'missions';
 function updateHUD(){
   if(!G) return;
   document.getElementById('hud-level').textContent = G.level;
-  document.getElementById('hud-energy').textContent = G.energy + '/' + getMaxEnergy();
+  const maxEn = getMaxEnergy();
+  document.getElementById('hud-energy').textContent = G.energy + '/' + maxEn;
+  const enFill = document.getElementById('hud-energy-fill');
+  if(enFill) enFill.style.width = Math.min(100, (G.energy/maxEn)*100) + '%';
   document.getElementById('hud-gold').textContent = fmtNum(G.gold);
   document.getElementById('hud-gems').textContent = G.gems;
   const needed = xpForLevel(G.level);
   const pct = Math.min(100, (G.xp / needed) * 100);
   document.getElementById('hud-xp-fill').style.width = pct + '%';
-  document.getElementById('hud-xp-text').textContent = G.xp + ' / ' + needed + ' XP';
+  document.getElementById('hud-xp-text').textContent = fmtNum(G.xp) + ' / ' + fmtNum(needed) + ' XP';
   document.getElementById('hud-title').textContent = G.activeTitle ? '[ ' + G.activeTitle + ' ]' : '';
-  // Notification Badge (#15)
+  // Ticket display
+  const ticketEl = document.getElementById('hud-tickets');
+  if(ticketEl){
+    let tHtml = '';
+    if((G.tickets1x||0) > 0) tHtml += '<span>&#127915; ' + G.tickets1x + '</span>';
+    if((G.tickets10x||0) > 0) tHtml += '<span style="color:#ffd700">&#127915;x10 ' + G.tickets10x + '</span>';
+    if((G.winStreak||0) >= 3) tHtml += '<span style="color:#f80">&#128293; x' + G.winStreak + '</span>';
+    ticketEl.innerHTML = tHtml;
+  }
+  // Notification Badge
   let badgeCount = 0;
   if(G.expeditions) G.expeditions.forEach(exp => { if(Date.now() >= exp.endTime && !exp.collected) badgeCount++; });
   if(G.bounties) G.bounties.forEach(b => { if(b.completed && !b.claimed) badgeCount++; });
   if(G.notificationLog && G.notificationLog.length > 0) badgeCount += Math.min(3, G.notificationLog.filter(n => Date.now() - n.time < 300000).length);
   const moreBtn = document.getElementById('tab-more');
-  if(moreBtn) moreBtn.textContent = badgeCount > 0 ? 'More (' + badgeCount + ')' : 'More';
+  if(moreBtn) moreBtn.innerHTML = '<span class="nav-icon">&#8942;</span>More' + (badgeCount > 0 ? ' <span class="badge">' + badgeCount + '</span>' : '');
 }
 
 function showTab(tab, extra){
