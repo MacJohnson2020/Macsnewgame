@@ -221,7 +221,11 @@ const SKILL_DESCS = [
 ];
 
 function xpForSkillLevel(lv){ return Math.floor(80 * Math.pow(1.18, lv-1)); }
-function xpForLevel(lv){ return Math.floor(150 * Math.pow(1.25, lv-1)); }
+function xpForLevel(lv){
+  let base = Math.floor(150 * Math.pow(1.25, lv-1));
+  if(lv <= 3) base = Math.floor(base * 0.7); // Early levels require 30% less XP
+  return base;
+}
 
 const ZONES = [
   { name:'Rust Flats', minLv:1, missions:[
@@ -425,7 +429,7 @@ function newGame(name, cls){
     name: name,
     class: cls,
     level: 1, xp: 0,
-    gold: 0, gems: 15,
+    gold: 100, gems: 15,
     energy: 100, maxEnergy: 100,
     stats: { power:5, defense:5, speed:5, luck:5 },
     statPoints: 0,
@@ -625,7 +629,15 @@ function newGame(name, cls){
     // 24. Memory Match high score
     memoryMatchWins: 0,
     // 25. Prestige Shop
-    prestigeShopPurchases: {}
+    prestigeShopPurchases: {},
+    // Transient state fields
+    _followerSort: '',
+    _lastCombatMission: null,
+    _lastCombatStats: null,
+    lastDamageRecap: null,
+    talentPointsAwarded: 0,
+    awakenedDmgBonus: 0,
+    challengesClaimed: 0
   };
 }
 
@@ -1468,6 +1480,8 @@ function runCombat(mission, zoneIdx){
 
     // XP potion & synergy bonuses
     let xpMult = 1;
+    // First zone (Rust Flats) gives 50% more XP to help early game
+    if(zoneIdx === 0) xpMult += 0.5;
     if(G.activeBuff && G.activeBuff.type === 'xp') xpMult += 0.25;
     if(hasSynergy('skillxp')) xpMult += 0.08;
 
@@ -3380,6 +3394,7 @@ function doAscension(){
   const newTier = newAscension + 1;
   // Prestige but keep more
   const name = G.name, cls = G.class;
+  const elem = G.element || 'physical';
   const gems = G.gems + 30;
   const achievements = G.achievements;
   const totalPulls = G.total_gacha_pulls;
@@ -3387,8 +3402,13 @@ function doAscension(){
   const clanName = G.clanName;
   const clanPerks = G.clanPerks;
   const oldPrestige = G.prestige;
+  const psp = JSON.parse(JSON.stringify(G.prestigeShopPurchases || {}));
+  const luxP = JSON.parse(JSON.stringify(G.luxuryPurchases || {}));
+  const cStats = JSON.parse(JSON.stringify(G.combatStats || {}));
+  const bComp = G.bountiesCompleted || 0;
 
   G = newGame(name, cls);
+  G.element = elem;
   G.ascension = newAscension;
   G.worldTier = newTier;
   G.prestige = oldPrestige;
@@ -3399,6 +3419,18 @@ function doAscension(){
   G.research = research;
   G.clanName = clanName;
   G.clanPerks = clanPerks;
+  G.prestigeShopPurchases = psp;
+  G.luxuryPurchases = luxP;
+  G.combatStats = cStats;
+  G.bountiesCompleted = bComp;
+  // Apply class starting stats
+  const clData = CLASSES[cls];
+  if(clData){
+    G.stats.power += clData.power;
+    G.stats.defense += clData.defense;
+    G.stats.speed += clData.speed;
+    G.stats.luck += clData.luck;
+  }
   toast('ASCENSION ' + newAscension + '! World Tier ' + newTier + '! Enemies stronger, loot better!', '#ff2060');
   save();
 }
@@ -5294,9 +5326,12 @@ function doPrestige(){
   const newBonus = newPrestige * 10; // 10% per prestige
   const name = G.name;
   const cls = G.class;
+  const elem = G.element || 'physical';
   const gems = G.gems + 20; // bonus gems
   const achievements = G.achievements;
   const totalPulls = G.total_gacha_pulls;
+  const ascension = G.ascension || 0;
+  const worldTier = G.worldTier || 1;
   // Feature 25: Preserve prestige shop and luxury upgrades
   const psp = JSON.parse(JSON.stringify(G.prestigeShopPurchases || {}));
   const luxP = JSON.parse(JSON.stringify(G.luxuryPurchases || {}));
@@ -5308,15 +5343,26 @@ function doPrestige(){
   }
 
   G = newGame(name, cls);
+  G.element = elem;
   G.prestige = newPrestige;
   G.prestige_bonus = newBonus;
   G.gems = gems;
   G.achievements = achievements;
   G.total_gacha_pulls = totalPulls;
+  G.ascension = ascension;
+  G.worldTier = worldTier;
   G.prestigeShopPurchases = psp;
   G.luxuryPurchases = luxP;
   G.combatStats = cStats;
   G.bountiesCompleted = bComp;
+  // Apply class starting stats
+  const clData = CLASSES[cls];
+  if(clData){
+    G.stats.power += clData.power;
+    G.stats.defense += clData.defense;
+    G.stats.speed += clData.speed;
+    G.stats.luck += clData.luck;
+  }
   if(psp.startingLevel){
     for(let i = 0; i < psp.startingLevel; i++){
       if(G.level < 100){ G.xp = 0; G.level++; G.statPoints += 3; }
@@ -5547,7 +5593,8 @@ function renderMissions(c){
     html += '<div class="text-sm" style="color:#ffd700">Win Streak: ' + G.winStreak + ' (x' + getStreakMult().toFixed(2) + ' gold) | Best: ' + (G.bestWinStreak||0) + '</div>';
   }
 
-  // Daily Dungeon
+  // Daily Dungeon (Level 20+)
+  if(G.level >= 20){
   const ddToday = getDailyDungeonSeed();
   const ddDone = G.dailyDungeonDate === ddToday && G.dailyDungeonCleared;
   html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:'+(ddDone?'#333':'#ffd700')+'">';
@@ -5559,9 +5606,10 @@ function renderMissions(c){
   html += '</div>';
   if(!ddDone) html += '<button class="btn btn-gold" style="padding:8px 14px;min-height:36px" onclick="runDailyDungeon()">GO</button>';
   html += '</div>';
+  }
 
-  // Feature 23: World Events display
-  if(G.worldEvent && Date.now() < (G.worldEventEnd||0)){
+  // Feature 23: World Events display (Level 60+)
+  if(G.level >= 60 && G.worldEvent && Date.now() < (G.worldEventEnd||0)){
     const weTimeLeft = Math.floor((G.worldEventEnd - Date.now()) / 60000);
     html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:#ff2060;background:#1a0520">';
     html += '<div style="font-size:24px">🌀</div>';
@@ -5572,8 +5620,8 @@ function renderMissions(c){
     html += '</div></div>';
   }
 
-  // Feature 22: Seasonal Boss
-  (function(){
+  // Feature 22: Seasonal Boss (Level 50+)
+  if(G.level >= 50) (function(){
     const month = new Date().getMonth();
     let sbName, sbColor, sbHp, sbAtk;
     if(month <= 2){ sbName='Frost Wyrm'; sbColor='#4af'; sbHp=3000+G.level*80; sbAtk=80+G.level*3; }
@@ -5593,7 +5641,8 @@ function renderMissions(c){
     html += '</div>';
   })();
 
-  // Feature 21: Challenge Dungeons
+  // Feature 21: Challenge Dungeons (Level 40+)
+  if(G.level >= 40){
   html += '<div class="card" style="border-color:#ff2060">';
   html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:20px">🏰</span><h3 style="color:#ff2060;margin:0">Challenge Dungeons</h3></div>';
   const cdTypes = [
@@ -5614,8 +5663,10 @@ function renderMissions(c){
     html += '</div>';
   });
   html += '</div>';
+  } // end Challenge Dungeons level gate
 
-  // Wanted Board
+  // Wanted Board (Level 15+)
+  if(G.level >= 15){
   if(!G.wantedTargets || G.wantedTargets.length === 0) refreshWanted();
   const activeWanted = (G.wantedTargets||[]).filter(t => !t.killed && Date.now() < t.timeLimit);
   if(activeWanted.length > 0){
@@ -5638,9 +5689,10 @@ function renderMissions(c){
     });
     html += '</div>';
   }
+  } // end Wanted Board level gate
 
-  // Void Rift
-  if(G.activeRift){
+  // Void Rift (Level 20+)
+  if(G.level >= 20 && G.activeRift){
     const riftTime = Math.max(0, Math.floor((G.activeRift.timeLimit - Date.now()) / 1000));
     html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:#b026ff;background:#0a0520">';
     html += '<div style="font-size:28px">🌀</div>';
@@ -5653,8 +5705,8 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // Tournament
-  if(G.followers.length >= 8){
+  // Tournament (Level 40+)
+  if(G.level >= 40 && G.followers.length >= 8){
     const cooldownLeft = Math.max(0, 3600000 - (Date.now() - (G.lastTournament||0)));
     html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:#ffd700">';
     html += '<div style="font-size:24px">🏆</div>';
@@ -5670,7 +5722,8 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // Arena Tower
+  // Arena Tower (Level 5+)
+  if(G.level >= 5){
   html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:#af0">';
   html += '<div style="font-size:24px">🗼</div>';
   html += '<div style="flex:1">';
@@ -5681,8 +5734,10 @@ function renderMissions(c){
   html += '</div>';
   html += '<button class="btn btn-green" style="padding:8px 14px;min-height:36px" onclick="fightArenaFloor()">FIGHT</button>';
   html += '</div>';
+  } // end Arena Tower level gate
 
-  // Daily & Weekly Boss
+  // Daily & Weekly Boss (Level 30+)
+  if(G.level >= 30){
   const dBoss = getDailyBoss();
   const wBoss = getWeeklyBoss();
   html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:#f80">';
@@ -5701,6 +5756,7 @@ function renderMissions(c){
   html += '</div>';
   html += '<button class="btn" style="color:#ff2060;border-color:#ff2060;padding:8px 14px;min-height:36px" onclick="fightScheduledBoss(\'weekly\')">FIGHT</button>';
   html += '</div>';
+  } // end Daily & Weekly Boss level gate
 
   // Skill combos display
   const activeCombos = getActiveSkillCombos();
@@ -5718,9 +5774,9 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // Roaming Enemies
-  spawnRoamingEnemies();
-  if(G.roamingEnemies && G.roamingEnemies.length > 0){
+  // Roaming Enemies (Level 10+)
+  if(G.level >= 10) spawnRoamingEnemies();
+  if(G.level >= 10 && G.roamingEnemies && G.roamingEnemies.length > 0){
     html += '<div class="card" style="border-color:#f80">';
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:20px">👻</span><h3 style="color:#f80;margin:0">Roaming Enemies (' + G.roamingEnemies.length + ')</h3></div>';
     html += '<div class="text-sm text-dim" style="margin-bottom:6px">Enemies wandering the wasteland. Some target your cities! (5 EN to fight)</div>';
@@ -5743,7 +5799,8 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // World Boss
+  // World Boss (Level 30+)
+  if(G.level >= 30){
   const wb = getWorldBoss();
   if(!G.worldBossHp || G.worldBossHp <= 0) G.worldBossHp = wb.maxHp;
   html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:#f44">';
@@ -5757,6 +5814,7 @@ function renderMissions(c){
   html += '</div>';
   html += '<button class="btn btn-red" style="padding:8px 14px;min-height:36px" onclick="attackWorldBoss()">ATTACK</button>';
   html += '</div>';
+  } // end World Boss level gate
 
   // Bounty Board
   if(G.skillLevels[12] >= 50 || (G.bounties && G.bounties.length > 0)){
@@ -5777,7 +5835,8 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // Dungeons
+  // Dungeons (Level 20+)
+  if(G.level >= 20){
   var dungeonContent = '';
   // Key inventory
   dungeonContent += '<div class="text-sm mb">Keys: Basic:' + (G.dungeonKeys?.basic||0) + ' Adv:' + (G.dungeonKeys?.advanced||0) + ' NM:' + (G.dungeonKeys?.nightmare||0);
@@ -5810,6 +5869,7 @@ function renderMissions(c){
     dungeonContent += '</div></div>';
   });
   html += collapseSection('dungeons', '🏰 Dungeons (Multi-Wave)', dungeonContent, false);
+  } // end Dungeons level gate
 
   // Regular Missions with combat preview & auto-battle
   // Endless Void mode (#18) & Boss Rush (#19)
@@ -5823,8 +5883,8 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // Secret Shop (#20)
-  if(G.secretShop && Date.now() < (G.secretShopExpiry||0)){
+  // Secret Shop (#20, Level 60+)
+  if(G.level >= 60 && G.secretShop && Date.now() < (G.secretShopExpiry||0)){
     const shopTimeLeft = Math.floor((G.secretShopExpiry - Date.now()) / 1000);
     html += '<div class="card" style="border-color:#ff2060;background:#1a0a2a">';
     html += '<h3 style="color:#ff2060">SECRET SHOP!</h3>';
@@ -5844,7 +5904,8 @@ function renderMissions(c){
     html += '</div>';
   }
 
-  // War Chest (#25)
+  // War Chest (#25, Level 60+)
+  if(G.level >= 60){
   html += '<div class="card">';
   html += '<b>War Chest</b> ';
   const wc = G.warChest || {amount:0,depositTime:0};
@@ -5856,6 +5917,7 @@ function renderMissions(c){
   }
   html += '<button class="btn" onclick="var a=prompt(\'Deposit gold (max 10000):\');if(a)depositWarChest(parseInt(a))">Deposit</button>';
   html += '</div>';
+  } // end War Chest level gate
 
   html += '<h3 style="margin-top:12px">Missions</h3>';
   const myPower = getCombatPower();
@@ -5963,6 +6025,29 @@ function renderSkills(c){
     });
     html += '</div>';
   }
+  c.innerHTML = html;
+}
+
+function renderInventory(c){
+  const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
+  let html = '<h2>Inventory</h2>';
+  html += '<div class="text-sm text-dim mb">Items: ' + G.inventory.length + '</div>';
+  if(G.inventory.length === 0){
+    html += '<div class="card text-dim">Your inventory is empty.</div>';
+  } else {
+    G.inventory.forEach((item, i) => {
+      const rc = rarityColors[item.rarity] || '#888';
+      html += '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:'+rc+'">';
+      html += '<div style="flex:1">';
+      html += '<div style="font-weight:700;color:'+rc+'">' + item.name + '</div>';
+      html += '<div class="text-sm text-dim">Lv.' + item.level + ' ' + (item.slot||'') + ' | PWR:' + (item.power||0) + ' DEF:' + (item.defense||0) + '</div>';
+      html += '</div>';
+      html += '<button class="btn btn-cyan" style="padding:4px 8px;min-height:30px" onclick="equipItem('+i+')">Equip</button>';
+      html += '<button class="btn btn-red" style="padding:4px 8px;min-height:30px" onclick="sellItem('+i+')">Sell</button>';
+      html += '</div>';
+    });
+  }
+  html += '<button class="btn" onclick="showTab(\'gear\')">Back to Gear</button>';
   c.innerHTML = html;
 }
 
@@ -7913,11 +7998,15 @@ function startGame(){
   G.stats.defense += clData.defense;
   G.stats.speed += clData.speed;
   G.stats.luck += clData.luck;
+  // Give 1 free uncommon follower on game start
+  const starterFollower = generateFollower(1);
+  G.followers.push(starterFollower);
   save();
   document.getElementById('top-bar').style.display = '';
   document.getElementById('nav').style.display = 'flex';
   showTab('missions');
   toast('Welcome to the Void, ' + name + '!', '#0ff');
+  toast('A follower has joined you: ' + starterFollower.name + '!', '#0f0');
 }
 
 // ==================== GAME LOOP ====================
@@ -9071,6 +9160,43 @@ function migrateOldSave(){
   if(!G.worldEventEnd) G.worldEventEnd = 0;
   if(!G.memoryMatchWins) G.memoryMatchWins = 0;
   if(!G.prestigeShopPurchases) G.prestigeShopPurchases = {};
+  // Transient state fields migration
+  if(!G._followerSort) G._followerSort = '';
+  if(!G._lastCombatMission) G._lastCombatMission = null;
+  if(!G._lastCombatStats) G._lastCombatStats = null;
+  if(!G.lastDamageRecap) G.lastDamageRecap = null;
+  if(G.talentPointsAwarded === undefined) G.talentPointsAwarded = 0;
+  if(G.awakenedDmgBonus === undefined) G.awakenedDmgBonus = G.awakenedCount || 0;
+  if(G.challengesClaimed === undefined) G.challengesClaimed = 0;
+  // Migration for fields that might be missing from very old saves
+  if(G.winStreak === undefined) G.winStreak = 0;
+  if(G.bestWinStreak === undefined) G.bestWinStreak = 0;
+  if(!G.element) G.element = 'physical';
+  if(!G.faction) G.faction = '';
+  if(G.factionRep === undefined) G.factionRep = 0;
+  if(!G.factionPower) G.factionPower = {};
+  if(G.riftsCompleted === undefined) G.riftsCompleted = 0;
+  if(G.lastTournament === undefined) G.lastTournament = 0;
+  if(G.tournamentsWon === undefined) G.tournamentsWon = 0;
+  if(!G.activeTitle) G.activeTitle = '';
+  if(!G.unlockedTitles) G.unlockedTitles = [];
+  if(!G.loreFragments) G.loreFragments = [];
+  if(!G.notificationLog) G.notificationLog = [];
+  if(!G.quickActions) G.quickActions = [];
+  if(!G.capturedCities) G.capturedCities = [];
+  if(G.tributeGold === undefined) G.tributeGold = 0;
+  if(!G.corruptedZones) G.corruptedZones = {};
+  if(!G.followerContracts) G.followerContracts = [];
+  if(!G.wantedTargets) G.wantedTargets = [];
+  if(G.wantedRefreshTime === undefined) G.wantedRefreshTime = 0;
+  if(G.awakenedCount === undefined) G.awakenedCount = 0;
+  if(G.nightmareClears === undefined) G.nightmareClears = 0;
+  if(!G.challengeMonth) G.challengeMonth = '';
+  if(G.marketRefreshTime === undefined) G.marketRefreshTime = 0;
+  if(G.gamblingWins === undefined) G.gamblingWins = 0;
+  if(G.gamblingLosses === undefined) G.gamblingLosses = 0;
+  if(!G.dailyDungeonDate) G.dailyDungeonDate = '';
+  if(G.dailyDungeonCleared === undefined) G.dailyDungeonCleared = false;
   // Reset session stats on load (new session)
   G.sessionStart = Date.now();
   G.sessionStats = {gold:0,xp:0,kills:0};
