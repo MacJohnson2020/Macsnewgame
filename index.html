@@ -5589,6 +5589,125 @@ function calcOfflineProgress(){
   G.lastOnline = now;
 }
 
+// ==================== WELCOME BACK MODAL ====================
+function showWelcomeBack(data){
+  const hrs = Math.floor(data.minutes / 60);
+  const mins = data.minutes % 60;
+  const timeStr = hrs > 0 ? hrs + 'h ' + mins + 'm' : data.minutes + ' min';
+  const foundryGold = data.goldGained;
+  let html = '<div class="modal-overlay" onclick="this.remove()">';
+  html += '<div class="modal" style="text-align:center;min-width:280px" onclick="event.stopPropagation()">';
+  html += '<div style="font-size:24px;font-weight:900;color:#0ff;margin-bottom:12px">WELCOME BACK!</div>';
+  html += '<div style="margin:8px 0;font-size:14px;color:#aaa">\u23F1 Away for <span style="color:#eee">' + timeStr + '</span></div>';
+  if(data.energyGained > 0) html += '<div style="margin:4px 0">\u26A1 <span style="color:#0f0">+' + data.energyGained + ' Energy</span></div>';
+  if(data.goldGained > 0 || data.autoBattleGold > 0){
+    html += '<div style="margin:4px 0">\uD83D\uDCB0 <span style="color:#ffd700">+' + (data.goldGained + (data.autoBattleGold||0)) + ' Gold</span>';
+    const parts = [];
+    if(foundryGold > 0) parts.push('Foundry: ' + foundryGold);
+    if(data.autoBattleGold > 0) parts.push('Auto-battle: ' + data.autoBattleGold);
+    if(parts.length > 0) html += ' <span class="text-sm text-dim">(' + parts.join(', ') + ')</span>';
+    html += '</div>';
+  }
+  if(data.levelsGained > 0) html += '<div style="margin:4px 0">\u2B06 <span style="color:#b026ff">+' + data.levelsGained + ' Level' + (data.levelsGained>1?'s':'') + ' gained</span></div>';
+  if(data.autoBattleKills > 0) html += '<div style="margin:4px 0">\u2694 Auto-battle: <span style="color:#f44">' + data.autoBattleKills + ' kills</span></div>';
+  html += '<div style="margin-top:16px"><button class="btn btn-cyan" style="padding:10px 32px;font-size:15px" onclick="this.closest(\'.modal-overlay\').remove()">Continue</button></div>';
+  html += '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+// ==================== AMBIENT FLAVOR TEXT ====================
+const AMBIENT_TEXT = [
+  'The void stirs in the distance...','Scouts report movement near the Abyss.',
+  'A cold wind blows from the Nexus.','The stars flicker with strange light.',
+  'Your followers sharpen their weapons.','Radio chatter: "Something big is coming."',
+  'The ground trembles beneath your feet.','A distant explosion echoes across the wasteland.',
+  'Your scouts found tracks leading into the void.','The air crackles with void energy.',
+  'Ravens circle overhead.','The silence is unsettling.',
+  'A faint glow emanates from the east.','Your base hums with activity.',
+  'The wasteland stretches endlessly before you.','Storm clouds gather on the horizon.'
+];
+
+// ==================== TUTORIAL SYSTEM ====================
+function showTutorial(){
+  if(!G || G.tutorialStep === -1) return;
+  if(G.tutorialStep === 0){
+    let html = '<div class="modal-overlay">';
+    html += '<div class="modal" style="text-align:center;min-width:280px">';
+    html += '<div style="font-size:28px;margin-bottom:8px">\u2728</div>';
+    html += '<div style="font-size:20px;font-weight:700;color:#0ff;margin-bottom:12px">Welcome, ' + G.name + '!</div>';
+    html += '<div style="color:#ccc;margin-bottom:16px">Let\'s get started. You have <span style="color:#ffd700">100 gold</span> and a <span style="color:#0f0">follower</span>. First, let\'s fight!</div>';
+    html += '<button class="btn btn-cyan" style="padding:12px 32px;font-size:16px;font-weight:700" onclick="G.tutorialStep=1;save();this.closest(\'.modal-overlay\').remove();showTab(\'missions\')">Got it!</button>';
+    html += '</div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+// ==================== FOLLOWER DIALOGUE ====================
+function getFollowerDialogue(f){
+  if(f.happiness >= 90) return ['Ready for action!','Let\'s crush them!','I feel unstoppable!','For glory!'][Math.floor(Math.random()*4)];
+  if(f.happiness >= 60) return ['Standing by.','Awaiting orders.','I\'m here.','What\'s the plan?'][Math.floor(Math.random()*4)];
+  if(f.happiness >= 30) return ['I\'m tired...','Could use some food.','How much longer?','*yawns*'][Math.floor(Math.random()*4)];
+  return ['I want to leave.','This isn\'t worth it.','Feed me or I\'m gone.','...'][Math.floor(Math.random()*4)];
+}
+
+// ==================== FOLLOWER RENAME ====================
+function renameFollower(fId){
+  const f = G.followers.find(x=>x.id===fId);
+  if(!f) return;
+  const newName = prompt('Rename ' + f.name + ':');
+  if(newName && newName.trim()){
+    f.customName = newName.trim().substring(0, 20);
+    toast(f.name + ' renamed to ' + f.customName, '#0ff');
+    save();
+    showTab('followers_detail', f.id);
+  }
+}
+
+// ==================== CUSTOM NAME POOL ====================
+function addCustomName(){
+  const name = prompt('Add a follower name to the summon pool:');
+  if(name && name.trim()){
+    if(!G.customNames) G.customNames = [];
+    G.customNames.push(name.trim().substring(0,15));
+    toast(name.trim() + ' added to name pool!', '#0ff');
+    save();
+  }
+}
+
+// ==================== ACCENT COLOR ====================
+function setAccentColor(color){
+  G.accentColor = color;
+  const colors = {cyan:'#0ff',purple:'#b026ff',gold:'#ffd700',red:'#f44',green:'#0f0'};
+  document.documentElement.style.setProperty('--accent', colors[color] || '#0ff');
+  save();
+}
+
+// ==================== WORLD STATE TICKER ====================
+function getTickerMessages(){
+  const msgs = [];
+  const leader = getLeadingFaction();
+  if(leader && FACTIONS[leader]) msgs.push(FACTIONS[leader].name + ' leads the faction war!');
+  if(G.activeEvent) msgs.push('EVENT: ' + G.activeEvent.name);
+  if(G.activeRift) msgs.push('VOID RIFT is open!');
+  if((G.winStreak||0)>=5) msgs.push('You\'re on a ' + G.winStreak + ' win streak!');
+  if(G.autoBattle) msgs.push('Auto-battle running: ' + G.autoBattleEarnings.kills + ' kills');
+  msgs.push(AMBIENT_TEXT[Math.floor(Date.now()/30000) % AMBIENT_TEXT.length]);
+  return msgs;
+}
+
+// ==================== INVENTORY SORT & FILTER ====================
+let inventorySort = 'rarity';
+let inventoryFilter = 'all';
+
+function sortInventory(by){
+  inventorySort = by;
+  showTab('gear');
+}
+function filterInventory(slot){
+  inventoryFilter = slot;
+  showTab('gear');
+}
+
 // ==================== UI RENDERING ====================
 let currentTab = 'missions';
 
@@ -5729,7 +5848,24 @@ function renderSmartHint(){
 }
 
 function renderMissions(c){
-  let html = '<h2>Missions</h2>';
+  let html = '';
+  // World State Ticker
+  const tickerMsgs = getTickerMessages();
+  const tickerIdx = Math.floor(Date.now()/5000) % tickerMsgs.length;
+  html += '<div style="overflow:hidden;white-space:nowrap;padding:6px 0;color:#556;font-size:11px;text-align:center;border-bottom:1px solid #1a1a2a;margin-bottom:8px">';
+  html += '<span id="ticker-text">' + tickerMsgs[tickerIdx] + '</span>';
+  html += '</div>';
+
+  // Tutorial hint step 1
+  if(G.tutorialStep === 1){
+    html += '<div class="tutorial-hint">\uD83D\uDC46 Tap \'Scavenge Wreckage\' below to fight your first battle!</div>';
+  }
+  // Tutorial hint step 2
+  if(G.tutorialStep === 2){
+    html += '<div class="tutorial-hint">Great job! Now visit the Summon tab to pull more followers!</div>';
+  }
+
+  html += '<h2>Missions</h2>';
   // Contextual hint
   const hint = getHint();
   if(hint) html += '<div class="hint">' + hint + '</div>';
@@ -6146,6 +6282,10 @@ function renderMissions(c){
     html += collapseSection('zone-'+zi, zoneTitle, zoneContent, firstOpenZone);
     firstOpenZone = false;
   });
+
+  // Ambient flavor text
+  html += '<div style="text-align:center;padding:12px 0;font-style:italic;color:#445;font-size:12px">' + AMBIENT_TEXT[Math.floor(Math.random()*AMBIENT_TEXT.length)] + '</div>';
+
   c.innerHTML = html;
 }
 
@@ -6154,6 +6294,11 @@ function renderSkills(c){
   const catColors = {Combat:'#f44',Gathering:'#0f0',Production:'#ffd700',Utility:'#0ff'};
   const catBarClass = {Combat:'pbar-red',Gathering:'pbar-green',Production:'pbar-gold',Utility:'pbar-cyan'};
   let html = '<h2>Skills</h2>';
+  // Tutorial hint step 5
+  if(G.tutorialStep === 5){
+    html += '<div class="tutorial-hint">Train skills to get stronger. You\'re on your own now, Raider!</div>';
+    G.tutorialStep = -1; save();
+  }
   html += renderSmartHint();
   html += '<div class="text-sm text-dim mb">Train skills to level them up. Higher levels unlock bonuses and gear requirements.</div>';
   for(const cat in SKILL_CATEGORIES){
@@ -6313,11 +6458,37 @@ function renderGear(c){
 
   // Inventory
   html += '<h2>Inventory (' + G.inventory.length + ')</h2>';
+  // Sort & Filter controls
+  html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">';
+  html += '<span class="text-sm text-dim" style="line-height:28px">Sort:</span>';
+  ['power','defense','rarity','level','slot'].forEach(s => {
+    const label = {power:'PWR',defense:'DEF',rarity:'Rarity',level:'Level',slot:'Slot'}[s];
+    const active = inventorySort === s ? 'btn-cyan' : '';
+    html += '<button class="btn '+active+'" style="padding:2px 8px;min-height:28px;font-size:11px" onclick="sortInventory(\''+s+'\')">' + label + '</button>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">';
+  html += '<span class="text-sm text-dim" style="line-height:28px">Filter:</span>';
+  ['all','weapon','armor','shield','implant'].forEach(s => {
+    const label = s.charAt(0).toUpperCase() + s.slice(1);
+    const active = inventoryFilter === s ? 'btn-cyan' : '';
+    html += '<button class="btn '+active+'" style="padding:2px 8px;min-height:28px;font-size:11px" onclick="filterInventory(\''+s+'\')">' + label + '</button>';
+  });
+  html += '</div>';
   if(G.inventory.length === 0){
     html += '<div class="card text-dim" style="text-align:center;padding:20px">No items. Run missions to find gear!</div>';
   }
+  // Apply sort
+  let sortedInventory = G.inventory.map((item, idx) => ({item, idx}));
+  if(inventorySort === 'power') sortedInventory.sort((a,b) => b.item.power - a.item.power);
+  else if(inventorySort === 'defense') sortedInventory.sort((a,b) => b.item.defense - a.item.defense);
+  else if(inventorySort === 'rarity') sortedInventory.sort((a,b) => b.item.rarity - a.item.rarity);
+  else if(inventorySort === 'level') sortedInventory.sort((a,b) => b.item.level - a.item.level);
+  else if(inventorySort === 'slot') sortedInventory.sort((a,b) => a.item.slot.localeCompare(b.item.slot));
+  // Apply filter
+  if(inventoryFilter !== 'all') sortedInventory = sortedInventory.filter(x => x.item.slot === inventoryFilter);
   html += '<div style="max-height:500px;overflow-y:auto">';
-  G.inventory.forEach((item, i) => {
+  sortedInventory.forEach(({item, idx: i}) => {
     const rc = rarityColors[item.rarity] || '#888';
     const icon = slotIcons[item.slot] || '';
     html += '<div class="card" style="border-left:3px solid '+rc+';padding:8px 10px;margin-bottom:4px">';
@@ -6498,6 +6669,11 @@ function renderTown(c){
   const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
 
   let html = '';
+  // Tutorial hint step 4
+  if(G.tutorialStep === 4){
+    html += '<div class="tutorial-hint">Assign your followers to buildings for bonuses! Check Skills tab too!</div>';
+    G.tutorialStep = 5; save();
+  }
   html += renderSmartHint();
 
   // City switcher as pill tabs
@@ -6807,10 +6983,17 @@ function renderFollowerDetail(c, fId){
   const trainCost = 20 + f.level * 15;
 
   const classInfo = FOLLOWER_CLASS_BONUSES[f.class] || {};
-  let html = '<h2>' + getFollowerDisplayName(f) + '</h2>';
+  let html = '<h2>' + getFollowerDisplayName(f) + ' <button class="btn btn-cyan" style="padding:2px 10px;min-height:24px;font-size:11px;vertical-align:middle" onclick="renameFollower(' + f.id + ')">Rename</button></h2>';
+
+  // Follower dialogue speech bubble
+  html += '<div style="background:#16162e;border-radius:12px;padding:8px 14px;margin:8px 0;font-style:italic;color:#8aa;position:relative">';
+  html += '"' + getFollowerDialogue(f) + '"';
+  html += '<div style="position:absolute;top:-6px;left:20px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:6px solid #16162e"></div>';
+  html += '</div>';
+
   html += '<div class="card">';
   html += '<span class="' + RARITIES[f.rarity] + '">[' + RARITY_NAMES[f.rarity] + ']</span> ' + f.class + '<br>';
-  html += '<span style="color:#ffd700">' + '★'.repeat(f.stars||1) + '☆'.repeat(5-(f.stars||1)) + '</span> Stars<br>';
+  html += '<span style="color:#ffd700">' + '\u2605'.repeat(f.stars||1) + '\u2606'.repeat(5-(f.stars||1)) + '</span> Stars<br>';
   html += 'Level: ' + f.level + '/50<br>';
   html += '<div class="pbar pbar-cyan"><div class="pbar-fill" style="width:' + ((f.xp/xpNeeded)*100) + '%"></div>';
   html += '<span class="pbar-text">' + f.xp + '/' + xpNeeded + ' XP</span></div>';
@@ -6822,6 +7005,27 @@ function renderFollowerDetail(c, fId){
   html += 'City: ' + (G.cities[f.cityIdx || 0]?.name || 'Unassigned') + '<br>';
   const roleLabel = BUILDINGS.find(b => b.id === f.assigned)?.name || f.assigned;
   html += 'Role: ' + roleLabel + '<br>';
+  html += '</div>';
+
+  // Follower Power Contribution
+  html += '<h3>Contribution</h3>';
+  html += '<div class="card">';
+  const fPower = getFollowerTotalPower(f);
+  const totalPower = getCombatPower();
+  const pctContrib = totalPower > 0 ? Math.floor((fPower / totalPower) * 100) : 0;
+  html += 'Combat Power: <span style="color:#0ff">+' + fPower + '</span> <span class="text-dim">(of your total ' + totalPower + ', ' + pctContrib + '%)</span><br>';
+  // Building bonus
+  const buildingAssign = BUILDINGS.find(b => b.id === f.assigned);
+  if(buildingAssign){
+    html += 'Building Bonus: <span style="color:#0f0">Active in ' + buildingAssign.name + '</span> (' + f.class + ' class)<br>';
+  }
+  // Bond combos
+  const bondPartnersList = G.followers.filter(x => x.id !== f.id && f.bonds && f.bonds[x.id] && f.bonds[x.id] >= 3);
+  bondPartnersList.forEach(p => {
+    const combo = getBondCombo(f, p);
+    if(combo) html += 'Bond Combo: <span style="color:#ffd700">' + combo.name + '</span> with ' + getFollowerDisplayName(p) + ' <span class="text-dim">(' + combo.desc + ')</span><br>';
+  });
+  if(!buildingAssign && bondPartnersList.length === 0) html += '<span class="text-dim">Assign to combat or buildings to contribute.</span>';
   html += '</div>';
 
   html += '<h3>Actions</h3>';
@@ -6964,6 +7168,16 @@ function renderFollowerDetail(c, fId){
 function renderGacha(c){
   const banner = getCurrentBanner();
   let html = '';
+
+  // Tutorial hint step 3
+  if(G.tutorialStep === 3){
+    html += '<div class="tutorial-hint">Nice pull! Head to Town to build your base!</div>';
+  }
+
+  // Add Custom Name button
+  html += '<div style="text-align:right;margin-bottom:6px"><button class="btn" style="padding:4px 10px;min-height:28px;font-size:11px;color:#0ff;border-color:#0ff" onclick="addCustomName()">+ Add Custom Name</button>';
+  if(G.customNames && G.customNames.length > 0) html += ' <span class="text-sm text-dim">(' + G.customNames.length + ' custom names)</span>';
+  html += '</div>';
 
   // Banner hero card
   html += '<div class="card" style="border-color:#b026ff;border-width:2px;text-align:center;padding:20px;background:linear-gradient(180deg, rgba(176,38,255,0.1) 0%, transparent 100%)">';
@@ -7394,6 +7608,14 @@ function renderProfile(c){
   html += '<div class="card">';
   html += '<button class="btn' + (G.compactMode?' btn-green':'') + '" onclick="G.compactMode=!G.compactMode;save();showTab(\'profile\')">Compact Mode: ' + (G.compactMode?'ON':'OFF') + '</button>';
   html += ' <span class="text-sm text-dim">Hides descriptions on skills/buildings</span>';
+  // Accent Color Picker
+  html += '<div style="margin-top:10px"><span class="text-sm text-dim">Accent Color:</span> ';
+  const accentOptions = {cyan:'#0ff',purple:'#b026ff',gold:'#ffd700',red:'#f44',green:'#0f0'};
+  for(const c2 in accentOptions){
+    const selected = (G.accentColor||'cyan') === c2;
+    html += '<span onclick="setAccentColor(\'' + c2 + '\');showTab(\'profile\')" style="display:inline-block;width:28px;height:28px;border-radius:50%;background:' + accentOptions[c2] + ';margin:0 4px;cursor:pointer;vertical-align:middle;border:3px solid ' + (selected?'#fff':'#333') + ';box-shadow:' + (selected?'0 0 8px '+accentOptions[c2]:'none') + '"></span>';
+  }
+  html += '</div>';
   html += '</div>';
 
   // Feature 7: Material Quality Display
@@ -8204,6 +8426,7 @@ function startGame(){
   showTab('missions');
   toast('Welcome to the Void, ' + name + '!', '#0ff');
   toast('A follower has joined you: ' + starterFollower.name + '!', '#0f0');
+  showTutorial();
 }
 
 // ==================== GAME LOOP ====================
@@ -9427,6 +9650,7 @@ function init(){
     if(!G.worldBossHp || G.worldBossHp <= 0){ G.worldBossHp = getWorldBoss().maxHp; }
     document.getElementById('top-bar').style.display = '';
     document.getElementById('nav').style.display = 'flex';
+    setAccentColor(G.accentColor || 'cyan');
     save();
     showTab('missions');
   } else {
