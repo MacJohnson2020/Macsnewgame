@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Void Raiders</title>
 <style>
+html { --accent: #0ff; }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 body { background:#0a0a1a; color:#d0d0d0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:14px; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
 #app { max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
@@ -22,9 +23,9 @@ body { background:#0a0a1a; color:#d0d0d0; font-family:-apple-system,BlinkMacSyst
 #nav::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,#0ff,#b026ff,#ffd700,#0ff,transparent); opacity:0.3; }
 #nav button { flex:1; padding:8px 4px 6px; background:none; border:none; border-radius:10px 10px 0 0; color:#334; font-family:inherit; font-size:9px; font-weight:600; cursor:pointer; transition:all 0.25s; text-transform:uppercase; letter-spacing:0.5px; display:flex; flex-direction:column; align-items:center; gap:3px; margin:0 1px; position:relative; }
 #nav button .nav-icon { font-size:20px; line-height:1; transition:transform 0.2s; }
-#nav button.active { color:#0ff; background:linear-gradient(180deg,rgba(0,255,255,0.08),transparent); }
+#nav button.active { color:var(--accent); background:linear-gradient(180deg,rgba(0,255,255,0.08),transparent); }
 #nav button.active .nav-icon { transform:scale(1.15); }
-#nav button.active::after { content:''; position:absolute; top:0; left:20%; right:20%; height:2px; background:#0ff; border-radius:0 0 2px 2px; box-shadow:0 0 8px rgba(0,255,255,0.5); }
+#nav button.active::after { content:''; position:absolute; top:0; left:20%; right:20%; height:2px; background:var(--accent); border-radius:0 0 2px 2px; box-shadow:0 0 8px rgba(0,255,255,0.5); }
 #nav button:active { background:rgba(0,255,255,0.06); }
 #nav button:active .nav-icon { transform:scale(0.9); }
 /* Buttons */
@@ -53,7 +54,7 @@ body { background:#0a0a1a; color:#d0d0d0; font-family:-apple-system,BlinkMacSyst
 .pbar-purple .pbar-fill { background:linear-gradient(90deg,#408,#b026ff); }
 .pbar-gold .pbar-fill { background:linear-gradient(90deg,#860,#ffd700); }
 /* Sections */
-h2 { color:#0ff; font-size:17px; margin:16px 0 8px; border-bottom:1px solid #1a1a3a; padding-bottom:6px; font-weight:700; letter-spacing:0.3px; }
+h2 { color:var(--accent); font-size:17px; margin:16px 0 8px; border-bottom:1px solid #1a1a3a; padding-bottom:6px; font-weight:700; letter-spacing:0.3px; }
 h3 { color:#b026ff; font-size:13px; margin:10px 0 6px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
 .card { background:linear-gradient(135deg,#111122,#0e0e1e); border:1px solid #1e1e3a; border-radius:8px; padding:12px; margin:8px 0; transition:border-color 0.2s; }
 .card:active { border-color:#333; }
@@ -147,6 +148,12 @@ select:focus { border-color:#0ff; outline:none; }
 .rarity-border-legendary { border-color:#ffd700 !important; box-shadow:0 0 8px rgba(255,215,0,0.1); }
 .rarity-border-mythic { border-color:#ff2060 !important; box-shadow:0 0 12px rgba(255,32,96,0.15); animation:mythicPulse 2s infinite; }
 @keyframes mythicPulse { 0%,100%{box-shadow:0 0 8px rgba(255,32,96,0.1)} 50%{box-shadow:0 0 16px rgba(255,32,96,0.25)} }
+/* Tutorial hint */
+.tutorial-hint { border:2px solid #0ff; border-radius:10px; padding:14px; margin:10px 0; font-size:15px; color:#eee; background:rgba(0,255,255,0.06); animation:tutorialPulse 1.5s infinite; }
+@keyframes tutorialPulse { 0%,100%{border-color:rgba(0,255,255,0.4);box-shadow:0 0 6px rgba(0,255,255,0.1)} 50%{border-color:rgba(0,255,255,1);box-shadow:0 0 18px rgba(0,255,255,0.3)} }
+/* Ticker */
+#ticker-text { animation: tickerFade 5s infinite; }
+@keyframes tickerFade { 0%,90%{opacity:1} 95%,100%{opacity:0} }
 /* Hint text */
 .hint { background:rgba(0,255,255,0.05); border-left:3px solid #0ff; padding:8px 12px; margin:8px 0; border-radius:0 6px 6px 0; font-size:12px; color:#8aa; }
 /* Stat row */
@@ -278,11 +285,36 @@ const ZONES = [
     {name:'Final Approach',energy:40,enemyHp:4000,enemyAtk:180,gold:350,xp:500,skillXp:{0:60,1:60}},
     {name:'Void Legion',energy:55,enemyHp:6500,enemyAtk:250,gold:600,xp:800,skillXp:{0:80,2:50,3:50}},
     {name:'THE VOID ITSELF',energy:75,enemyHp:15000,enemyAtk:400,gold:2500,xp:2000,skillXp:{2:200,0:100,3:100},boss:true}
+  ]},
+  { name:'Ascended Wastes', minLv:100, missions:[
+    {name:'Void Patrol',energy:30,enemyHp:5000,enemyAtk:200,gold:400,xp:600,skillXp:{0:100,2:80}},
+    {name:'Corrupted Siege',energy:45,enemyHp:8000,enemyAtk:300,gold:700,xp:1000,skillXp:{1:120,3:80}},
+    {name:'Ascended Warden',energy:65,enemyHp:18000,enemyAtk:450,gold:1500,xp:1800,skillXp:{2:200,0:150},boss:true}
+  ]},
+  { name:'Shattered Cosmos', minLv:100, missions:[
+    {name:'Star Fragment Hunt',energy:35,enemyHp:7000,enemyAtk:250,gold:500,xp:800,skillXp:{4:100,7:80}},
+    {name:'Cosmic Anomaly',energy:50,enemyHp:12000,enemyAtk:350,gold:900,xp:1200,skillXp:{2:150,12:100}},
+    {name:'Cosmic Titan',energy:75,enemyHp:25000,enemyAtk:500,gold:2000,xp:2500,skillXp:{0:250,2:200},boss:true}
+  ]},
+  { name:'The Eternal Void', minLv:100, missions:[
+    {name:'Void Echo',energy:40,enemyHp:10000,enemyAtk:300,gold:600,xp:1000,skillXp:{2:130,14:80}},
+    {name:'Reality Tear',energy:55,enemyHp:15000,enemyAtk:400,gold:1100,xp:1500,skillXp:{0:180,3:120}},
+    {name:'The Forgotten',energy:80,enemyHp:30000,enemyAtk:600,gold:3000,xp:3000,skillXp:{2:300,0:200},boss:true}
+  ]},
+  { name:'Titan\'s Graveyard', minLv:100, missions:[
+    {name:'Bone Fields',energy:45,enemyHp:12000,enemyAtk:350,gold:700,xp:1100,skillXp:{7:150,5:100}},
+    {name:'Ancient War Machine',energy:60,enemyHp:20000,enemyAtk:450,gold:1300,xp:1800,skillXp:{9:180,0:150}},
+    {name:'Dead Titan',energy:90,enemyHp:40000,enemyAtk:700,gold:4000,xp:4000,skillXp:{0:350,2:250},boss:true}
+  ]},
+  { name:'THE FINAL GATE', minLv:100, missions:[
+    {name:'Gate Keeper',energy:50,enemyHp:15000,enemyAtk:400,gold:800,xp:1500,skillXp:{0:200,1:150}},
+    {name:'Void Armada',energy:70,enemyHp:25000,enemyAtk:550,gold:1800,xp:2500,skillXp:{0:250,2:200,3:150}},
+    {name:'THE FINAL GATE BOSS',energy:100,enemyHp:60000,enemyAtk:900,gold:8000,xp:6000,skillXp:{0:500,2:400,3:300},boss:true}
   ]}
 ];
 
 // Zone elemental weaknesses (#2)
-const ZONE_ELEMENTS = ['fire','ice','fire','void','ice','void','fire','ice','void','physical'];
+const ZONE_ELEMENTS = ['fire','ice','fire','void','ice','void','fire','ice','void','physical','void','ice','void','fire','void'];
 const ELEMENT_NAMES = {physical:'Physical',fire:'Fire',ice:'Ice',void:'Void'};
 const ELEMENT_COLORS = {physical:'#aaa',fire:'#f80',ice:'#4af',void:'#b026ff'};
 
@@ -347,7 +379,7 @@ const RARITIES = ['common','uncommon','rare','epic','legendary','mythic'];
 const RARITY_MULT = [1, 1.5, 2.2, 3.5, 5, 8];
 const RARITY_NAMES = ['Common','Uncommon','Rare','Epic','Legendary','Mythic'];
 
-const FOLLOWER_NAMES = ['Kira','Rex','Nova','Bolt','Shade','Ember','Frost','Nyx','Axel','Vex','Luna','Drift','Scar','Echo','Blitz','Rune','Cipher','Jinx','Havoc','Onyx','Zara','Pike','Ash','Wraith','Pulse','Viper','Storm','Cinder','Glitch','Haze','Torque','Flux','Aegis','Riven','Sable'];
+const FOLLOWER_NAMES = ['Kira','Rex','Nova','Bolt','Shade','Ember','Frost','Nyx','Axel','Vex','Luna','Drift','Scar','Echo','Blitz','Rune','Cipher','Jinx','Havoc','Onyx','Zara','Pike','Ash','Wraith','Pulse','Viper','Storm','Cinder','Glitch','Haze','Torque','Flux','Aegis','Riven','Sable','Zephyr','Talon','Crow','Slate','Neon','Venom','Siren','Blaze','Thorn','Wren','Dusk','Fang','Riot','Husk','Kael','Lyra','Orion','Solace','Veil','Aero','Bane','Coil','Dread','Edge','Grim','Hex','Indigo','Jade','Knox','Maven','Null','Oxide','Prism','Quake','Rasp','Turret','Ultra','Volta','Warp','Xeno','Yarn','Zenith','Apex','Brink','Clave','Dex','Forge','Mako','Vesper','Crag'];
 const FOLLOWER_CLASSES = ['Fighter','Miner','Crafter','Hacker','Scout','Medic','Guardian','Assassin'];
 const FOLLOWER_CLASS_BONUSES = {
   Fighter: {bestBuilding:'barracks',bonus:0.5,desc:'+50% in Barracks',combatBonus:0.1},
@@ -640,7 +672,13 @@ function newGame(name, cls){
     lastDamageRecap: null,
     talentPointsAwarded: 0,
     awakenedDmgBonus: 0,
-    challengesClaimed: 0
+    challengesClaimed: 0,
+    // Tutorial
+    tutorialStep: 0,
+    // Accent color
+    accentColor: 'cyan',
+    // Custom follower names
+    customNames: []
   };
 }
 
@@ -765,7 +803,7 @@ function getFollowerDisplayName(f){
     const idx = Math.abs(Math.floor(f.id * 7)) % titles.length;
     prefix = titles[idx] + ' ';
   }
-  return prefix + f.name;
+  return prefix + (f.customName || f.name);
 }
 
 // ==================== MYSTERY BOX ====================
@@ -2185,7 +2223,12 @@ function generateFollower(guaranteed_rarity){
     // else ~56% common
   }
 
-  const name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
+  let name;
+  if(G.customNames && G.customNames.length > 0 && Math.random() < 0.3){
+    name = G.customNames[Math.floor(Math.random()*G.customNames.length)];
+  } else {
+    name = FOLLOWER_NAMES[Math.floor(Math.random()*FOLLOWER_NAMES.length)];
+  }
   // Banner and wish list affect class selection
   let cls;
   const banner = getCurrentBanner();
@@ -2242,6 +2285,8 @@ function doPull(count, useTicket){
     G.gems -= cost;
   }
   G.total_gacha_pulls += count;
+  // Tutorial: after first pull, advance step
+  if(G.tutorialStep === 2) G.tutorialStep = 3;
 
   let pulled = [];
   let hasUncommonPlus = false;
@@ -2568,6 +2613,8 @@ function upgradeBuilding(bId){
   const b = BUILDINGS.find(x => x.id === bId);
   toast(b.name + ' in ' + city.name + ' upgraded to Lv.' + city.buildings[bId] + '!', '#0ff');
   if(checkFirstTime('building')){ G.gems += 2; toast('\uD83C\uDFC6 FIRST BUILDING! +2 bonus gems!', '#ffd700'); }
+  // Tutorial: after first building, advance step
+  if(G.tutorialStep === 3) G.tutorialStep = 4;
   updateCityDefense(G.currentCity);
   updateChallengeProgress('builds', 1);
   checkAchievements();
@@ -3036,7 +3083,9 @@ const EXPEDITION_TYPES = [
   {name:'Quick Scout',duration:1800,energy:10,goldMin:30,goldMax:80,xpMin:20,xpMax:50,gearChance:0.1,gemChance:0.05,desc:'30 min'},
   {name:'Resource Run',duration:7200,energy:25,goldMin:150,goldMax:400,xpMin:100,xpMax:250,gearChance:0.25,gemChance:0.1,desc:'2 hours'},
   {name:'Deep Recon',duration:28800,energy:50,goldMin:500,goldMax:1500,xpMin:400,xpMax:800,gearChance:0.5,gemChance:0.2,desc:'8 hours'},
-  {name:'Void Expedition',duration:86400,energy:80,goldMin:2000,goldMax:5000,xpMin:1000,xpMax:3000,gearChance:0.8,gemChance:0.4,desc:'24 hours'}
+  {name:'Void Expedition',duration:86400,energy:80,goldMin:2000,goldMax:5000,xpMin:1000,xpMax:3000,gearChance:0.8,gemChance:0.4,desc:'24 hours'},
+  {name:'Void Reconnaissance',duration:172800,energy:120,goldMin:5000,goldMax:15000,xpMin:3000,xpMax:8000,gearChance:0.9,gemChance:0.5,desc:'48 hours'},
+  {name:'Dimension Rift Probe',duration:604800,energy:200,goldMin:20000,goldMax:50000,xpMin:10000,xpMax:25000,gearChance:1.0,gemChance:0.8,desc:'7 days'}
 ];
 
 function startExpedition(typeIdx, followerIds){
@@ -3723,7 +3772,17 @@ const RELIC_POOL = [
   {id:'r_follower',name:'Commander\'s Seal',desc:'+10% follower power',effect:{followerPow:0.1}},
   {id:'r_building',name:'Architect\'s Compass',desc:'-5% building costs',effect:{buildCost:-0.05}},
   {id:'r_shards',name:'Prism Core',desc:'+50% shard gain from dupes',effect:{shardMult:0.5}},
-  {id:'r_stars',name:'Star Fragment',desc:'-15% star upgrade cost',effect:{starCost:-0.15}}
+  {id:'r_stars',name:'Star Fragment',desc:'-15% star upgrade cost',effect:{starCost:-0.15}},
+  {id:'r_rage',name:'Berserker\'s Heart',desc:'+5% damage when below 50% HP',effect:{lowHpDmg:0.05}},
+  {id:'r_shield',name:'Guardian\'s Oath',desc:'5% chance to block all damage',effect:{blockChance:0.05}},
+  {id:'r_exp_gold',name:'Explorer\'s Compass',desc:'+20% exploration rewards',effect:{exploreGold:0.2}},
+  {id:'r_bond',name:'Bond Crystal',desc:'+50% bond gain rate',effect:{bondRate:0.5}},
+  {id:'r_faction',name:'Faction Banner',desc:'+25% faction rep gain',effect:{factionRep:0.25}},
+  {id:'r_streak',name:'Victory Chain',desc:'Win streak decays by 1 instead of reset',effect:{streakProtect:1}},
+  {id:'r_salvage',name:'Refinery Core',desc:'+50% resources from salvaging',effect:{salvageBonus:0.5}},
+  {id:'r_tribute',name:'Conqueror\'s Crown',desc:'+30% tribute from captured cities',effect:{tributeBonus:0.3}},
+  {id:'r_potion',name:'Alchemist\'s Stone',desc:'Potions last 2 extra turns',effect:{potionDuration:2}},
+  {id:'r_awakening',name:'Soul Ember',desc:'-20% awakening cost',effect:{awakenCost:-0.2}}
 ];
 
 function dropRelic(){
@@ -3809,6 +3868,8 @@ function getIdleSummary(){
 
 // ==================== WIN STREAK ====================
 function addWinStreak(){
+  // Tutorial: after first mission win, advance step
+  if(G.tutorialStep === 1) G.tutorialStep = 2;
   G.winStreak = (G.winStreak||0) + 1;
   G.bestWinStreak = Math.max(G.bestWinStreak||0, G.winStreak);
   if(G.winStreak === 50) toast('\uD83D\uDC51 LEGENDARY STREAK! x50!', '#ff2060');
@@ -3908,8 +3969,8 @@ function runDailyDungeon(){
 }
 
 // ==================== WANTED BOARD ====================
-const WANTED_PREFIXES = ['Corrupted','Rogue','Void-Touched','Shadow','Crimson','Iron','Nexus','Abyssal'];
-const WANTED_TITLES = ['the Butcher','the Silent','Deathbringer','Soulstealer','the Undying','Ironhide','Voidborn','the Cursed'];
+const WANTED_PREFIXES = ['Corrupted','Rogue','Void-Touched','Shadow','Crimson','Iron','Nexus','Abyssal','Bloodstained','Forsaken','Spectral','Venomous','Berserking','Cursed','Phantom','Ironclad'];
+const WANTED_TITLES = ['the Butcher','the Silent','Deathbringer','Soulstealer','the Undying','Ironhide','Voidborn','the Cursed','the Destroyer','Plaguebearer','Nightstalker','the Merciless','Doomhammer','Mindbreaker','the Ravager','Worldender'];
 
 function generateWantedTargets(){
   const targets = [];
@@ -4586,7 +4647,11 @@ const LORE_SETS = {
   'Void Origins':{pieces:['The First Breach','Corruption Spreads','The Fallen Cities','The Void Heart Awakens','Echoes of the Lost'],bonus:{xp:0.03},desc:'+3% XP'},
   'Iron Legacy':{pieces:['The Founders','Rise of the Order','The Great War','Iron Hearts','Steel and Blood'],bonus:{combat:0.03},desc:'+3% combat'},
   'Lost Civilizations':{pieces:['Before the Void','The Golden Age','The Collapse','Remnants','Hope in Ashes'],bonus:{luck:3},desc:'+3 luck'},
-  'Void Bestiary':{pieces:['Lesser Void','Corrupted Beasts','Abyssal Horrors','Void Lords','The Eternal'],bonus:{lootRate:0.03},desc:'+3% loot'}
+  'Void Bestiary':{pieces:['Lesser Void','Corrupted Beasts','Abyssal Horrors','Void Lords','The Eternal'],bonus:{lootRate:0.03},desc:'+3% loot'},
+  'Faction Wars':{pieces:['The First Alliance','Betrayal at Nexus','Iron Order Rising','Void Cult Manifesto','The Syndicate Files'],bonus:{combat:0.02,goldMin:2},desc:'+2% combat +2 gold/min'},
+  'Wasteland Survival':{pieces:['Water Sources','Shelter Building','Scavenging 101','Danger Signs','The Survivor\'s Code'],bonus:{defense:0.03,energy:5},desc:'+3% defense +5 energy'},
+  'Void Science':{pieces:['Void Particles','Corruption Theory','Energy Matrices','Dimensional Rifts','The Grand Equation'],bonus:{skillXp:0.05,crit:2},desc:'+5% skill XP +2 crit'},
+  'Heroes of Old':{pieces:['The First Raider','Commander Kael','The Phantom Queen','Engineer Prime','The Last Paladin'],bonus:{followerPow:0.05,luck:3},desc:'+5% follower power +3 luck'}
 };
 
 function findLoreFragment(){
@@ -4650,7 +4715,14 @@ const DAILY_BOSSES = [
   {name:'Iron Titan',hp:25000,atk:100,gold:450,xp:350,desc:'Armored. Reduce damage taken'},
   {name:'Corrupted Wyrm',hp:35000,atk:90,gold:600,xp:500,desc:'Poisons you each turn'},
   {name:'Nexus Sentinel',hp:40000,atk:110,gold:700,xp:600,desc:'Adapts to your attacks'},
-  {name:'Abyssal Emperor',hp:50000,atk:130,gold:1000,xp:800,desc:'The ultimate daily challenge'}
+  {name:'Abyssal Emperor',hp:50000,atk:130,gold:1000,xp:800,desc:'The ultimate daily challenge'},
+  {name:'Void Wraith',hp:35000,atk:95,gold:550,xp:450,desc:'Phases through attacks'},
+  {name:'Toxin Behemoth',hp:45000,atk:85,gold:650,xp:550,desc:'Poison AoE'},
+  {name:'Chrono Shifter',hp:28000,atk:140,gold:500,xp:500,desc:'Attacks twice some turns'},
+  {name:'Crystal Golem',hp:55000,atk:70,gold:600,xp:500,desc:'Massive HP, weak attacks'},
+  {name:'Shadow Assassin',hp:20000,atk:160,gold:550,xp:550,desc:'Deadly but fragile'},
+  {name:'Void Hydra Mk2',hp:60000,atk:100,gold:800,xp:700,desc:'Regenerates, multi-head'},
+  {name:'Mech Overlord',hp:50000,atk:120,gold:750,xp:650,desc:'Armored war machine'}
 ];
 const WEEKLY_BOSS = {name:'THE VOID GOD',hp:200000,atk:200,gold:5000,xp:3000,desc:'Weekly mega boss. Bring everything.'};
 
@@ -5503,16 +5575,16 @@ function calcOfflineProgress(){
 
   if(energyGained > 0 || goldGained > 0 || abGold > 0){
     const mins = Math.floor(elapsed / 60);
-    const hrs = Math.floor(mins / 60);
-    const timeStr = hrs > 0 ? hrs + 'h ' + (mins % 60) + 'm' : mins + ' min';
-    let msg = 'Welcome back! (' + timeStr + ' offline)\n';
-    if(energyGained > 0) msg += '+' + energyGained + ' Energy\n';
-    if(goldGained > 0) msg += '+' + goldGained + ' Gold\n';
-    if(abGold > 0) msg += 'Auto-battle: +' + abGold + 'g, ' + abKills + ' kills, +' + abXp + ' XP\n';
     const levelsBefore = G._offlineLevelBefore || G.level;
     const levelsGained = G.level - levelsBefore;
-    if(levelsGained > 0) msg += '+' + levelsGained + ' Level' + (levelsGained>1?'s':'') + ' gained!\n';
-    setTimeout(() => toast(msg, '#0ff'), 500);
+    setTimeout(() => showWelcomeBack({
+      minutes: mins,
+      energyGained: energyGained,
+      goldGained: goldGained,
+      levelsGained: levelsGained,
+      autoBattleGold: abGold,
+      autoBattleKills: abKills
+    }), 500);
   }
   G.lastOnline = now;
 }
@@ -9333,6 +9405,12 @@ function migrateOldSave(){
     if(!f.permBonusPower) f.permBonusPower = 0;
     if(!f.permBonusDef) f.permBonusDef = 0;
   });
+  // Tutorial: -1 means completed/skipped for old saves
+  if(G.tutorialStep === undefined) G.tutorialStep = -1;
+  // Accent color
+  if(!G.accentColor) G.accentColor = 'cyan';
+  // Custom follower names
+  if(!G.customNames) G.customNames = [];
   // Update defense for all cities
   G.cities.forEach((c, i) => updateCityDefense(i));
 }
