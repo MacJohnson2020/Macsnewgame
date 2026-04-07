@@ -161,6 +161,7 @@ select:focus { border-color:#0ff; outline:none; }
       <div class="hud-stat"><span class="stat-label">LVL</span><br><span class="stat-val" id="hud-level">1</span></div>
       <div class="hud-stat" style="flex:1"><span class="stat-label">ENERGY</span><br>
         <div class="pbar pbar-green" style="height:14px;margin:2px 0"><div class="pbar-fill" id="hud-energy-fill" style="width:100%"></div><span class="pbar-text" style="font-size:9px;line-height:14px" id="hud-energy">100/100</span></div>
+        <span id="hud-energy-timer" style="font-size:9px;color:#888;display:block;text-align:center;height:12px"></span>
       </div>
       <div class="hud-stat"><span style="font-size:12px">&#11044;</span><br><span class="gold-val" id="hud-gold">0</span></div>
       <div class="hud-stat"><span style="font-size:12px;color:#b026ff">&#9670;</span><br><span style="color:#b026ff;font-family:'Courier New',monospace;font-weight:700;font-size:14px" id="hud-gems">10</span></div>
@@ -546,6 +547,8 @@ function newGame(name, cls){
     gamblingWins: 0, gamblingLosses: 0,
     // Win streak
     winStreak: 0, bestWinStreak: 0,
+    firsts: {},
+    milestones: {},
     // Daily dungeon
     dailyDungeonDate: '', dailyDungeonCleared: false,
     // Wanted board
@@ -666,14 +669,38 @@ function load(){
   return false;
 }
 
-function toast(msg, color){
+function toast(msg, color, duration){
   const c = document.getElementById('toast-container');
   const d = document.createElement('div');
   d.className = 'toast';
   if(color) d.style.borderColor = color;
   d.textContent = msg;
   c.appendChild(d);
-  setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity 0.3s'; setTimeout(()=>d.remove(),300); }, 2500);
+  setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity 0.3s'; setTimeout(()=>d.remove(),300); }, duration||2500);
+}
+
+function showLevelUp(level){
+  const LEVEL_GATES = {5:'Arena',10:'Roaming Enemies',15:'Wanted Board',20:'Dungeons',30:'World Boss',40:'Tournament',50:'Seasonal Boss'};
+  const unlocked = LEVEL_GATES[level] || '';
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,20,40,0.9);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:fadeIn 0.3s;cursor:pointer';
+  let inner = '<div style="font-size:64px;color:#0ff;text-shadow:0 0 20px #0ff,0 0 40px #0ff;font-weight:900">' + level + '</div>';
+  inner += '<div style="font-size:32px;color:#ffd700;text-shadow:0 0 12px rgba(255,215,0,0.5);margin:12px 0;font-weight:700">LEVEL UP!</div>';
+  inner += '<div style="font-size:18px;color:#0f0;margin:8px 0">+3 Stat Points</div>';
+  if(unlocked) inner += '<div style="font-size:20px;color:#ff2060;margin:12px 0;text-shadow:0 0 10px rgba(255,32,96,0.5)">NEW UNLOCK: ' + unlocked + '!</div>';
+  inner += '<div style="font-size:12px;color:#888;margin-top:20px">Tap to dismiss</div>';
+  overlay.innerHTML = inner;
+  document.body.appendChild(overlay);
+  const dismiss = () => { overlay.style.opacity='0'; overlay.style.transition='opacity 0.3s'; setTimeout(()=>overlay.remove(),300); };
+  overlay.addEventListener('click', dismiss);
+  setTimeout(dismiss, 2500);
+}
+
+function checkFirstTime(type){
+  if(!G.firsts) G.firsts = {};
+  if(G.firsts[type]) return false;
+  G.firsts[type] = true;
+  return true;
 }
 
 // Format large numbers: 1200 -> "1.2K", 1500000 -> "1.5M"
@@ -978,7 +1005,7 @@ function addXp(amount){
     G.xp -= needed;
     G.level++;
     G.statPoints += 3;
-    toast('LEVEL UP! You are now level ' + G.level, '#0ff');
+    showLevelUp(G.level);
     updateChallengeProgress('levels', 1);
     // Level milestone gems (front-loaded)
     if(G.level <= 10) G.gems += 3; // 3 gems per level early
@@ -1418,6 +1445,7 @@ function runCombat(mission, zoneIdx){
     log.push('Turns: ' + turn + ' | Crits: ' + critsLanded);
     G.total_kills++;
     G.missions_completed++;
+    if(checkFirstTime('mission_win')){ G.gems += 3; toast('\uD83C\uDFC6 FIRST VICTORY! +3 bonus gems!', '#ffd700'); }
     // Feature 12: Battle Statistics
     if(!G.combatStats) G.combatStats = {totalDmgDealt:0,totalHits:0,totalCrits:0,dodgeCount:0,potionsUsed:0,highestCombo:0};
     G.combatStats.totalDmgDealt = (G.combatStats.totalDmgDealt||0) + totalDmgDealt;
@@ -1436,6 +1464,7 @@ function runCombat(mission, zoneIdx){
     G.bossKillCounts[mission.name] = (G.bossKillCounts[mission.name]||0) + 1;
     if(mission.boss){
       G.bosses_killed++; updateBountyProgress('boss', 1);
+      if(checkFirstTime('boss_kill')){ G.gems += 5; toast('\uD83C\uDFC6 FIRST BOSS KILL! +5 bonus gems!', '#ffd700'); }
       if(Math.random() < 0.04){ G.tickets1x = (G.tickets1x||0) + 1; toast('+1 Summon Ticket!','#0ff'); }
       // Blueprint drop (#24): 1% from boss kills
       if(Math.random() < 0.01){
@@ -1682,8 +1711,10 @@ function showCombatResult(log, won, rewards){
 
   // Action buttons
   if(won && G._lastCombatMission){
-    html += '<div class="mt" style="text-align:center"><button class="btn btn-green" onclick=\'runCombat(' + JSON.stringify(G._lastCombatMission.mission).replace(/'/g,"\\'") + ',' + G._lastCombatMission.zoneIdx + ')\'>⚔ Run Again</button> ';
-    html += '<button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
+    html += '<div class="mt" style="text-align:center">';
+    html += '<button class="btn btn-green" style="width:100%;padding:14px;font-size:16px;margin-bottom:8px" onclick=\'runCombat(' + JSON.stringify(G._lastCombatMission.mission).replace(/'/g,"\\'") + ',' + G._lastCombatMission.zoneIdx + ')\'>⚔ Run Again</button>';
+    html += '<button class="btn" style="padding:8px 20px;font-size:12px;opacity:0.7" onclick="showTab(\'missions\')">Continue</button>';
+    html += '</div>';
   } else {
     html += '<div class="mt" style="text-align:center"><button class="btn btn-cyan" onclick="showTab(\'missions\')">Continue</button></div>';
   }
@@ -1801,6 +1832,7 @@ function runDungeon(dungeonIdx, nightmare){
     log.push('=== ' + (nightmare?'NIGHTMARE ':'') + 'DUNGEON COMPLETE! ===');
     G.bosses_killed++;
     G.dungeons_cleared++;
+    if(checkFirstTime('dungeon_clear')){ G.gems += 5; G.tickets1x = (G.tickets1x||0) + 1; toast('\uD83C\uDFC6 FIRST DUNGEON CLEAR! +5 gems, +1 ticket!', '#ffd700'); }
     if(!G.bossKillCounts) G.bossKillCounts = {};
     G.bossKillCounts[dg.name] = (G.bossKillCounts[dg.name]||0) + 1;
     if(nightmare){
@@ -2227,6 +2259,8 @@ function doPull(count, useTicket){
     if(f.rarity >= 1) hasUncommonPlus = true;
     // Track legendary+ pulls for secret achievement
     if(f.rarity >= 4) G.legendaryPullCount = (G.legendaryPullCount||0) + 1;
+    if(f.rarity >= 2 && checkFirstTime('rare_pull')){ G.gems += 3; toast('\uD83C\uDFC6 FIRST RARE+ PULL! +3 bonus gems!', '#ffd700'); }
+    if(checkFirstTime('follower')){ G.gems += 2; toast('\uD83C\uDFC6 FIRST FOLLOWER SUMMONED! +2 bonus gems!', '#ffd700'); }
     G.followers.push(f);
     pulled.push(f);
   }
@@ -2533,6 +2567,7 @@ function upgradeBuilding(bId){
   G.maxEnergy = getMaxEnergy();
   const b = BUILDINGS.find(x => x.id === bId);
   toast(b.name + ' in ' + city.name + ' upgraded to Lv.' + city.buildings[bId] + '!', '#0ff');
+  if(checkFirstTime('building')){ G.gems += 2; toast('\uD83C\uDFC6 FIRST BUILDING! +2 bonus gems!', '#ffd700'); }
   updateCityDefense(G.currentCity);
   updateChallengeProgress('builds', 1);
   checkAchievements();
@@ -3776,7 +3811,11 @@ function getIdleSummary(){
 function addWinStreak(){
   G.winStreak = (G.winStreak||0) + 1;
   G.bestWinStreak = Math.max(G.bestWinStreak||0, G.winStreak);
-  if(G.winStreak >= 5) addNotification('Win streak: ' + G.winStreak + '!');
+  if(G.winStreak === 50) toast('\uD83D\uDC51 LEGENDARY STREAK! x50!', '#ff2060');
+  else if(G.winStreak === 20) toast('\u26A1 GODLIKE! x20 streak!', '#ffd700');
+  else if(G.winStreak === 10) toast('\uD83D\uDC80 UNSTOPPABLE! x10 streak!', '#f44');
+  else if(G.winStreak === 5) toast('\uD83D\uDD25 ON FIRE! x5 streak!', '#f80');
+  else if(G.winStreak >= 5) addNotification('Win streak: ' + G.winStreak + '!');
 }
 function resetWinStreak(){ G.winStreak = 0; }
 function getStreakMult(){
@@ -5287,6 +5326,7 @@ const ACHIEVEMENT_DEFS = [
 ];
 
 function checkAchievements(){
+  checkMilestones();
   ACHIEVEMENT_DEFS.forEach(a => {
     if(!G.achievements.includes(a.id) && a.check()){
       G.achievements.push(a.id);
@@ -5312,6 +5352,32 @@ function checkAchievements(){
           G.tickets1x = (G.tickets1x||0) + 1;
         }
       }
+    }
+  });
+}
+
+// ==================== MILESTONES ====================
+function checkMilestones(){
+  if(!G.milestones) G.milestones = {};
+  const MILESTONES = [
+    {id:'kills_100',desc:'100 Kills',check:()=>G.total_kills>=100,reward:{gems:2}},
+    {id:'kills_500',desc:'500 Kills',check:()=>G.total_kills>=500,reward:{gems:3}},
+    {id:'kills_1000',desc:'1000 Kills',check:()=>G.total_kills>=1000,reward:{gems:5,tickets:1}},
+    {id:'gold_1k',desc:'1,000 Gold Earned',check:()=>G.total_gold_earned>=1000,reward:{gems:2}},
+    {id:'gold_10k',desc:'10,000 Gold Earned',check:()=>G.total_gold_earned>=10000,reward:{gems:3}},
+    {id:'gold_100k',desc:'100,000 Gold Earned',check:()=>G.total_gold_earned>=100000,reward:{gems:5,tickets:1}},
+    {id:'bosses_10',desc:'10 Bosses Slain',check:()=>G.bosses_killed>=10,reward:{gems:3}},
+    {id:'bosses_50',desc:'50 Bosses Slain',check:()=>G.bosses_killed>=50,reward:{gems:5}},
+    {id:'bosses_100',desc:'100 Bosses Slain',check:()=>G.bosses_killed>=100,reward:{gems:5,tickets:1}},
+    {id:'mythic_follower',desc:'First Mythic Follower',check:()=>G.followers.some(f=>f.rarity>=5),reward:{gems:10}},
+    {id:'mythic_gear',desc:'First Mythic Gear',check:()=>Object.values(G.gear).some(g=>g&&g.rarity>=5),reward:{gems:10}},
+  ];
+  MILESTONES.forEach(m => {
+    if(!G.milestones[m.id] && m.check()){
+      G.milestones[m.id] = true;
+      toast('\uD83C\uDFAF MILESTONE: ' + m.desc, '#ffd700', 4000);
+      if(m.reward.gems) G.gems += m.reward.gems;
+      if(m.reward.tickets) G.tickets1x = (G.tickets1x||0) + m.reward.tickets;
     }
   });
 }
@@ -5384,6 +5450,7 @@ function calcOfflineProgress(){
   const now = Date.now();
   const elapsed = (now - G.lastOnline) / 1000; // seconds
   if(elapsed < 60) return; // less than a minute
+  G._offlineLevelBefore = G.level;
 
   // Energy regen
   const regenRate = getEnergyRegenRate();
@@ -5436,10 +5503,15 @@ function calcOfflineProgress(){
 
   if(energyGained > 0 || goldGained > 0 || abGold > 0){
     const mins = Math.floor(elapsed / 60);
-    let msg = 'Welcome back! (' + mins + ' min offline)\n';
+    const hrs = Math.floor(mins / 60);
+    const timeStr = hrs > 0 ? hrs + 'h ' + (mins % 60) + 'm' : mins + ' min';
+    let msg = 'Welcome back! (' + timeStr + ' offline)\n';
     if(energyGained > 0) msg += '+' + energyGained + ' Energy\n';
     if(goldGained > 0) msg += '+' + goldGained + ' Gold\n';
-    if(abGold > 0) msg += 'Auto-battle: +' + abGold + 'g, ' + abKills + ' kills\n';
+    if(abGold > 0) msg += 'Auto-battle: +' + abGold + 'g, ' + abKills + ' kills, +' + abXp + ' XP\n';
+    const levelsBefore = G._offlineLevelBefore || G.level;
+    const levelsGained = G.level - levelsBefore;
+    if(levelsGained > 0) msg += '+' + levelsGained + ' Level' + (levelsGained>1?'s':'') + ' gained!\n';
     setTimeout(() => toast(msg, '#0ff'), 500);
   }
   G.lastOnline = now;
@@ -5455,6 +5527,15 @@ function updateHUD(){
   document.getElementById('hud-energy').textContent = G.energy + '/' + maxEn;
   const enFill = document.getElementById('hud-energy-fill');
   if(enFill) enFill.style.width = Math.min(100, (G.energy/maxEn)*100) + '%';
+  const enTimerEl = document.getElementById('hud-energy-timer');
+  if(enTimerEl){
+    if(G.energy < maxEn){
+      const secsToNext = Math.max(0, getEnergyRegenRate() - energyTimer);
+      enTimerEl.textContent = 'Next: ' + secsToNext + 's';
+    } else {
+      enTimerEl.textContent = '';
+    }
+  }
   document.getElementById('hud-gold').textContent = fmtNum(G.gold);
   document.getElementById('hud-gems').textContent = G.gems;
   const needed = xpForLevel(G.level);
@@ -5544,11 +5625,43 @@ function getHint(){
   return '';
 }
 
+function getSmartSuggestions(){
+  if(!G) return [];
+  var s = [];
+  if(G.energy >= getMaxEnergy()) s.push('Your energy is full! Go fight!');
+  if(G.followers.some(f => f.happiness < 30)) s.push('\u26A0 Followers need feeding!');
+  // Check affordable building upgrades
+  var city = getCity();
+  BUILDINGS.forEach(function(b){
+    var lv = city.buildings[b.id] || 0;
+    var cost = getBuildingCost(b.id);
+    if(G.gold >= cost && lv < 20) s.push('You can afford to upgrade ' + b.name + '!');
+  });
+  // Check for better gear in inventory
+  ['weapon','armor','shield','implant'].forEach(function(slot){
+    var equipped = G.gear[slot];
+    var eqPwr = equipped ? (equipped.power||0) + (equipped.defense||0) : 0;
+    G.inventory.forEach(function(it){
+      if(it.slot === slot && ((it.power||0) + (it.defense||0)) > eqPwr) s.push('You have better gear to equip!');
+    });
+  });
+  if(G.statPoints > 0) s.push('You have stat points to spend!');
+  if(G.expeditions && G.expeditions.some(function(e){ return Date.now() >= e.endTime && !e.collected; })) s.push('Expedition ready to collect!');
+  return s;
+}
+
+function renderSmartHint(){
+  var suggestions = getSmartSuggestions();
+  if(suggestions.length > 0) return '<div class="hint">' + suggestions[0] + '</div>';
+  return '';
+}
+
 function renderMissions(c){
   let html = '<h2>Missions</h2>';
   // Contextual hint
   const hint = getHint();
   if(hint) html += '<div class="hint">' + hint + '</div>';
+  else html += renderSmartHint();
 
   // Combat preview stats
   html += '<div class="card text-sm">';
@@ -5969,6 +6082,7 @@ function renderSkills(c){
   const catColors = {Combat:'#f44',Gathering:'#0f0',Production:'#ffd700',Utility:'#0ff'};
   const catBarClass = {Combat:'pbar-red',Gathering:'pbar-green',Production:'pbar-gold',Utility:'pbar-cyan'};
   let html = '<h2>Skills</h2>';
+  html += renderSmartHint();
   html += '<div class="text-sm text-dim mb">Train skills to level them up. Higher levels unlock bonuses and gear requirements.</div>';
   for(const cat in SKILL_CATEGORIES){
     const color = catColors[cat];
@@ -6055,6 +6169,7 @@ function renderGear(c){
   const slotIcons = {weapon:'\u2694',armor:'\uD83D\uDEE1',shield:'\uD83D\uDD30',implant:'\uD83D\uDC8E'};
   const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
   let html = '<h2>Loadout</h2>';
+  html += renderSmartHint();
 
   // Combat stats bar
   html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
@@ -6252,21 +6367,30 @@ function equipItem(idx){
       return;
     }
   }
+  const oldPower = getCombatPower();
   // Swap if something equipped
   if(G.gear[item.slot]){
     G.inventory.push(G.gear[item.slot]);
   }
   G.gear[item.slot] = item;
   G.inventory.splice(idx, 1);
-  toast('Equipped ' + item.name, '#0ff');
+  const newPower = getCombatPower();
+  const diff = newPower - oldPower;
+  if(diff > 0) toast('\u2B06 +' + diff + ' Power!', '#0f0');
+  else if(diff < 0) toast('\u2B07 ' + diff + ' Power', '#f44');
+  else toast('Equipped ' + item.name, '#0ff');
   save();
   showTab('gear');
 }
 
 function unequip(slot){
   if(!G.gear[slot]) return;
+  const oldPower = getCombatPower();
   G.inventory.push(G.gear[slot]);
   G.gear[slot] = null;
+  const newPower = getCombatPower();
+  const diff = newPower - oldPower;
+  if(diff < 0) toast('\u2B07 ' + diff + ' Power', '#f44');
   save();
   showTab('gear');
 }
@@ -6302,6 +6426,7 @@ function renderTown(c){
   const rarityColors = ['#888','#0f0','#4af','#b026ff','#ffd700','#ff2060'];
 
   let html = '';
+  html += renderSmartHint();
 
   // City switcher as pill tabs
   html += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">';
@@ -9160,6 +9285,8 @@ function migrateOldSave(){
   if(!G.worldEventEnd) G.worldEventEnd = 0;
   if(!G.memoryMatchWins) G.memoryMatchWins = 0;
   if(!G.prestigeShopPurchases) G.prestigeShopPurchases = {};
+  if(!G.firsts) G.firsts = {};
+  if(!G.milestones) G.milestones = {};
   // Transient state fields migration
   if(!G._followerSort) G._followerSort = '';
   if(!G._lastCombatMission) G._lastCombatMission = null;
