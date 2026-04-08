@@ -451,6 +451,7 @@ function newGame(name, cls){
     class: cls,
     level: 1, xp: 0,
     gold: 100, gems: 15,
+    steps: 0, stepMilestones: 0,
     energy: 100, maxEnergy: 100,
     stats: { power:5, defense:5, speed:5, luck:5 },
     statPoints: 0,
@@ -2477,17 +2478,7 @@ function dismissFollower(id){
 
 // ==================== SKILL TRAINING ====================
 function trainSkill(idx){
-  let cost = 3 + Math.floor(G.skillLevels[idx] * 0.5);
-  // Survival reduces energy cost
-  if(G.skillLevels[14] >= 99) cost = Math.floor(cost * 0.8);
-  else if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.85);
-  else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
-  cost = Math.max(1, cost);
-  if(G.energy < cost){
-    toast('Need ' + cost + ' energy', '#f44');
-    return;
-  }
-  G.energy -= cost;
+  addStep(1);
   const xpGain = 15 + G.skillLevels[idx] * 2;
   addSkillXp(idx, xpGain);
   updateBountyProgress('train', 1);
@@ -2553,8 +2544,7 @@ function trainSkillX10(idx){
     else if(G.skillLevels[14] >= 75) cost = Math.floor(cost * 0.85);
     else if(G.skillLevels[14] >= 25) cost = Math.floor(cost * 0.92);
     cost = Math.max(1, cost);
-    if(G.energy < cost) break;
-    G.energy -= cost;
+    // free step
     const xpGain = 15 + G.skillLevels[idx] * 2;
     addSkillXp(idx, xpGain);
     updateBountyProgress('train', 1);
@@ -2929,8 +2919,7 @@ function fightRoamer(roamerId){
   if(idx === -1){ toast('Enemy fled!','#f44'); showTab('missions'); return; }
   const enemy = G.roamingEnemies[idx];
 
-  if(G.energy < 5){ toast('Need 5 energy','#f44'); return; }
-  G.energy -= 5;
+  addStep(1);
 
   const power = getCombatPower();
   const def = getCombatDefense();
@@ -3322,8 +3311,7 @@ function exploreTile(tileIdx){
   generateMap();
   if(tileIdx > (G.mapPosition||0) + 1){ toast('Explore tiles in order!','#f44'); return; }
   if(G.exploredTiles && G.exploredTiles.includes(tileIdx)){ toast('Already explored!','#f44'); return; }
-  if(G.energy < 8){ toast('Need 8 energy','#f44'); return; }
-  G.energy -= 8;
+  addStep(1);
 
   const tile = MAP_TILES[tileIdx];
   if(!G.exploredTiles) G.exploredTiles = [];
@@ -3855,6 +3843,30 @@ function getIdleSummary(){
 }
 
 // ==================== WIN STREAK ====================
+function addStep(count){
+  if(!count) count = 1;
+  G.steps = (G.steps||0) + count;
+  // Check milestones every 100 steps
+  const milestone = Math.floor(G.steps / 100);
+  if(milestone > (G.stepMilestones||0)){
+    G.stepMilestones = milestone;
+    const totalSteps = milestone * 100;
+    // Rewards scale with milestone
+    if(totalSteps % 1000 === 0){
+      G.tickets1x = (G.tickets1x||0) + 1;
+      G.gems += 3;
+      toast('🏃 ' + totalSteps + ' steps! +1 Ticket +3 gems!', '#ffd700');
+    } else if(totalSteps % 500 === 0){
+      G.gems += 2;
+      toast('🏃 ' + totalSteps + ' steps! +2 gems!', '#0ff');
+    } else {
+      const goldReward = 50 + milestone * 10;
+      G.gold += goldReward; G.total_gold_earned += goldReward;
+      toast('🏃 ' + totalSteps + ' steps! +' + goldReward + 'g', '#0ff');
+    }
+  }
+}
+
 function addWinStreak(){
   // Tutorial: after first mission win, advance step
   if(G.tutorialStep === 1) G.tutorialStep = 2;
@@ -3995,8 +4007,7 @@ function fightWanted(idx){
   const target = G.wantedTargets[idx];
   if(!target || target.killed){ toast('Target already dead!','#f44'); return; }
   if(Date.now() > target.timeLimit){ toast('Target fled!','#f44'); G.wantedTargets.splice(idx,1); save(); return; }
-  if(G.energy < 15){ toast('Need 15 energy','#f44'); return; }
-  G.energy -= 15;
+  addStep(1);
 
   const power = getCombatPower();
   const def = getCombatDefense();
@@ -4356,8 +4367,7 @@ function spawnRift(){
 function enterRift(){
   if(!G.activeRift){ toast('No active rift!','#f44'); return; }
   if(Date.now() > G.activeRift.timeLimit){ G.activeRift = null; toast('Rift expired!','#f44'); return; }
-  if(G.energy < 30){ toast('Need 30 energy','#f44'); return; }
-  G.energy -= 30;
+  addStep(1);
   const rift = G.activeRift;
   const mods = rift.mods;
   const hasMod = (eff) => mods.some(m => m.effect === eff);
@@ -4433,7 +4443,7 @@ function enterRift(){
 // ==================== FOLLOWER TOURNAMENTS ====================
 function runTournament(){
   if(G.followers.length < 8){ toast('Need 8+ followers!','#f44'); return; }
-  if(G.energy < 40){ toast('Need 40 energy','#f44'); return; }
+  addStep(1);
   const cooldown = 3600000; // 1 hour
   if(Date.now() - (G.lastTournament||0) < cooldown){ toast('Tournament on cooldown! Wait '+Math.floor((cooldown-(Date.now()-G.lastTournament))/60000)+' min','#f44'); return; }
   G.energy -= 40;
@@ -4720,8 +4730,7 @@ function getWeeklyBoss(){ return WEEKLY_BOSS; }
 function fightScheduledBoss(type){
   const boss = type === 'weekly' ? getWeeklyBoss() : getDailyBoss();
   const tierMult = getWorldTierMult();
-  if(G.energy < 20){ toast('Need 20 energy','#f44'); return; }
-  G.energy -= 20;
+  addStep(1);
 
   const power = getCombatPower();
   const def = getCombatDefense();
@@ -4851,8 +4860,7 @@ function getArenaFloorEnemy(floor){
 
 function fightArenaFloor(){
   if(!G.arenaFloor) G.arenaFloor = 1;
-  if(G.energy < 8){ toast('Need 8 energy','#f44'); return; }
-  G.energy -= 8;
+  addStep(1);
   const floor = G.arenaFloor;
   const enemy = getArenaFloorEnemy(floor);
   const power = getCombatPower();
@@ -5106,8 +5114,7 @@ function getWorldBoss(){
 }
 
 function attackWorldBoss(){
-  if(G.energy < 15){ toast('Need 15 energy', '#f44'); return; }
-  G.energy -= 15;
+  addStep(1);
 
   const boss = getWorldBoss();
   if(!G.worldBossHp || G.worldBossHp <= 0) G.worldBossHp = boss.maxHp;
@@ -6020,7 +6027,7 @@ function renderMissions(c){
   html += '<div class="text-sm text-dim">Next: ' + arenaEnemy.name + ' (HP:' + arenaEnemy.hp + ' ATK:' + arenaEnemy.atk + ')</div>';
   html += '<div class="text-sm text-dim">Milestones every 10 floors. Tickets at 10/20/30...</div>';
   html += '</div>';
-  html += '<button class="btn btn-green" style="padding:8px 14px;min-height:36px" onclick="fightArenaFloor()">FIGHT</button>';
+  html += '<button class="btn btn-green" style="padding:8px 14px;min-height:36px" onclick="fightArenaFloor()">FIGHT (Free)</button>';
   html += '</div>';
   } // end Arena Tower level gate
 
@@ -6087,7 +6094,7 @@ function renderMissions(c){
   html += '<span class="pbar-text">' + G.worldBossHp + ' / ' + wb.maxHp + ' HP</span></div>';
   html += '<div class="text-sm text-dim">Your damage: ' + (G.worldBossDmgDealt||0) + ' | Kills: ' + (G.worldBossKills||0) + '</div>';
   html += '</div>';
-  html += '<button class="btn btn-red" style="padding:8px 14px;min-height:36px" onclick="attackWorldBoss()">ATTACK</button>';
+  html += '<button class="btn btn-red" style="padding:8px 14px;min-height:36px" onclick="attackWorldBoss()">ATTACK (Free)</button>';
   html += '</div>';
   } // end World Boss level gate
   } // end special sub-tab
@@ -8052,7 +8059,7 @@ function renderHallOfFame(c){
   html += 'Login Streak Record: <span style="color:#0f0">' + Math.max(G.records?.longestStreak||0, G.loginStreak||0) + ' days</span><br>';
   html += 'Missions Completed: ' + G.missions_completed + '<br>';
   html += 'Bosses Killed: ' + G.bosses_killed + '<br>';
-  html += 'Total Kills: ' + G.total_kills + '<br>';
+  html += 'Total Steps: ' + (G.steps||0) + '<br>Total Kills: ' + G.total_kills + '<br>';
   html += 'Total Gold Earned: ' + G.total_gold_earned + '<br>';
   html += 'Dungeons Cleared: ' + G.dungeons_cleared + '<br>';
   html += 'Nightmare Clears: ' + (G.nightmareClears||0) + '<br>';
@@ -9290,8 +9297,7 @@ function runChallengeDungeon(type){
 
 // Feature 22: Seasonal Boss
 function fightSeasonalBoss(){
-  if(G.energy < 40){ toast('Need 40 energy!','#f44'); return; }
-  G.energy -= 40;
+  addStep(1);
   var month = new Date().getMonth();
   var sbName, sbHp, sbAtk, sbDrop;
   if(month <= 2){ sbName='Frost Wyrm'; sbHp=3000+G.level*80; sbAtk=80+G.level*3; sbDrop='Frost Crown'; }
@@ -9514,6 +9520,8 @@ function migrateOldSave(){
   if(!G.marketStock) G.marketStock = [];
   if(!G.resources) G.resources = {ore:0,scrap:0,data:0,bio:0};
   if(!G.arenaFloor) G.arenaFloor = 1;
+  if(G.steps === undefined) G.steps = 0;
+  if(G.stepMilestones === undefined) G.stepMilestones = 0;
   G.followers.forEach(f => {
     if(!f.gear) f.gear = {};
     if(f.cityIdx === undefined) f.cityIdx = 0;
