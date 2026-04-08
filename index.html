@@ -7902,57 +7902,57 @@ function renderExplore(c){
 }
 
 function renderExpeditions(c){
-  let html = '<h2>Expeditions</h2>';
-  html += '<div class="text-sm text-dim mb">Send followers on timed missions. Max 3 active.</div>';
+  let html = '<h2>🚀 Expeditions</h2>';
+  html += '<div class="card"><div class="card-row"><div class="card-icon">🚀</div><div class="card-body">';
+  html += '<div class="card-title">Active: ' + (G.expeditions||[]).length + '/3</div>';
+  html += '<div class="card-desc">Send followers on timed missions for rewards</div>';
+  html += '</div></div></div>';
+
   // Active expeditions
-  if(G.expeditions && G.expeditions.length > 0){
-    html += '<h3>Active (' + G.expeditions.length + '/3)</h3>';
-    G.expeditions.forEach((exp, i) => {
-      const type = EXPEDITION_TYPES[exp.type];
-      const timeLeft = Math.max(0, Math.floor((exp.endTime - Date.now()) / 1000));
-      const ready = timeLeft <= 0;
-      const fNames = exp.followerIds.map(id => { const f = G.followers.find(x=>x.id===id); return f ? f.name : '?'; }).join(', ');
-      html += '<div class="card" style="border-color:'+(ready?'#ffd700':'#333')+'">';
-      html += '<b>' + type.name + '</b> - ' + fNames + '<br>';
-      if(ready){ html += '<button class="btn btn-gold" onclick="collectExpedition('+i+');showTab(\'expeditions\')">COLLECT!</button>'; }
-      else { html += 'Time left: ' + Math.floor(timeLeft/60) + 'm ' + (timeLeft%60) + 's'; }
-      html += '</div>';
-    });
-  }
+  (G.expeditions||[]).forEach((exp, i) => {
+    const type = EXPEDITION_TYPES[exp.type];
+    const timeLeft = Math.max(0, Math.floor((exp.endTime - Date.now()) / 1000));
+    const ready = timeLeft <= 0;
+    const pct = ready ? 100 : Math.floor(((Date.now() - exp.startTime) / (exp.endTime - exp.startTime)) * 100);
+    const fNames = exp.followerIds.map(id => { const f = G.followers.find(x=>x.id===id); return f ? f.name : '?'; }).join(', ');
+    html += '<div class="card" style="border-color:'+(ready?'#ffd700':'#1e1e3a')+'"><div class="card-row">';
+    html += '<div style="font-size:22px;width:36px;text-align:center">' + (ready?'🎁':'⏳') + '</div>';
+    html += '<div class="card-body">';
+    html += '<div class="card-title">' + type.name + '</div>';
+    html += '<div class="card-desc">' + fNames + '</div>';
+    html += '<div class="pbar pbar-gold pbar-sm" style="margin-top:4px"><div class="pbar-fill" style="width:'+pct+'%"></div><span class="pbar-text">' + (ready?'READY!':Math.floor(timeLeft/60)+'m '+timeLeft%60+'s') + '</span></div>';
+    html += '</div>';
+    if(ready) html += '<div class="card-action"><button class="btn btn-gold" onclick="collectExpedition('+i+');showTab(\'expeditions\')">Collect</button></div>';
+    html += '</div></div>';
+  });
+
   // Start new
   if(!G.expeditions || G.expeditions.length < 3){
-    html += '<h3>Start Expedition</h3>';
+    html += '<h3>Send Expedition</h3>';
     const idleFollowers = G.followers.filter(f => f.assigned === 'idle' || f.assigned === 'combat');
     if(idleFollowers.length === 0){
-      html += '<div class="text-dim">No idle followers available.</div>';
+      html += '<div class="card text-center text-dim">No idle followers available</div>';
     } else {
+      const timeIcons = ['⚡','🕐','🕗','🌙','🌑','🌌'];
       EXPEDITION_TYPES.forEach((type, ti) => {
-        html += '<div class="card">';
-        html += '<b>' + type.name + '</b> (' + type.desc + ') - EN:' + type.energy + '<br>';
-        html += '<span class="text-sm">Gold: ' + type.goldMin + '-' + type.goldMax + ' | XP: ' + type.xpMin + '-' + type.xpMax + ' | Gear: ' + Math.floor(type.gearChance*100) + '%</span><br>';
-        // Quick send first idle follower
+        html += '<div class="card"><div class="card-row">';
+        html += '<div style="font-size:22px;width:36px;text-align:center">' + (timeIcons[ti]||'🚀') + '</div>';
+        html += '<div class="card-body">';
+        html += '<div class="card-title">' + type.name + ' <span class="text-sm text-dim">(' + type.desc + ')</span></div>';
+        html += '<div class="card-desc">' + fmtNum(type.goldMin) + '-' + fmtNum(type.goldMax) + 'g | ' + Math.floor(type.gearChance*100) + '% gear | EN:' + type.energy + '</div>';
+        html += '</div>';
+        html += '<div style="display:flex;flex-direction:column;gap:4px">';
         const first = idleFollowers[0];
-        html += '<button class="btn btn-cyan" onclick="startExpedition('+ti+',['+first.id+']);showTab(\'expeditions\')">Send ' + first.name + '</button>';
+        html += '<button class="btn btn-cyan" style="padding:6px 12px;min-height:32px;font-size:11px" onclick="startExpedition('+ti+',['+first.id+']);showTab(\'expeditions\')">Send 1</button>';
         if(idleFollowers.length > 1){
           const ids = idleFollowers.slice(0,3).map(f=>f.id);
-          html += ' <button class="btn btn-green" onclick="startExpedition('+ti+','+JSON.stringify(ids)+');showTab(\'expeditions\')">Send '+Math.min(3,idleFollowers.length)+' followers</button>';
+          html += '<button class="btn btn-green" style="padding:6px 12px;min-height:32px;font-size:11px" onclick="startExpedition('+ti+','+JSON.stringify(ids)+');showTab(\'expeditions\')">Send ' + Math.min(3,idleFollowers.length) + '</button>';
         }
-        html += '</div>';
+        html += '</div></div></div>';
       });
     }
   }
-  // Expedition Log (#4)
-  if(G.expeditionLog && G.expeditionLog.length > 0){
-    html += '<h3>Expedition Log</h3>';
-    G.expeditionLog.forEach(entry => {
-      const ago = Math.floor((Date.now() - entry.time) / 60000);
-      html += '<div class="card text-sm">';
-      html += '<span style="color:#ffd700">' + (entry.type||'Expedition') + '</span> (' + ago + 'm ago)<br>';
-      html += entry.msg;
-      html += '</div>';
-    });
-  }
-  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  html += '<button class="btn btn-full" onclick="showTab(\'more\')">← Back</button>';
   c.innerHTML = html;
 }
 
