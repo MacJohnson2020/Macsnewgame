@@ -7839,52 +7839,65 @@ function renderMore(c){
 }
 
 function renderResearch(c){
-  let html = '<h2>Research Lab</h2>';
-  html += '<div class="text-sm text-dim mb">Requires Lab Lv.3+. Current: Lv.' + getAllBuildingLevel('lab') + '</div>';
+  const labLv = getAllBuildingLevel('lab');
+  const done = Object.keys(G.research||{}).filter(k=>G.research[k]).length;
+  let html = '<h2>🔬 Research</h2>';
+  html += '<div class="card"><div class="card-row"><div class="card-icon">🔬</div><div class="card-body">';
+  html += '<div class="card-title">Lab Level: ' + labLv + '</div>';
+  html += '<div class="card-desc">Researched: ' + done + '/' + TECH_TREE.length + (labLv<3?' | Need Lab Lv.3 to research':'') + '</div>';
+  html += '</div></div></div>';
   TECH_TREE.forEach(t => {
-    const done = G.research[t.id];
-    const canResearch = !done && getAllBuildingLevel('lab') >= 3 && Object.keys(t.req).every(r => G.research[r]);
-    html += '<div class="card" style="border-color:' + (done?'#0f0':canResearch?'#0ff':'#333') + '">';
-    html += '<b>' + t.name + '</b> - ' + t.desc + '<br>';
-    // Show prereqs
-    if(Object.keys(t.req).length > 0){
-      html += '<span class="text-sm text-dim">Requires: ' + Object.keys(t.req).map(r => TECH_TREE.find(x=>x.id===r).name).join(', ') + '</span><br>';
-    }
-    if(done){ html += '<span style="color:#0f0">RESEARCHED</span>'; }
-    else if(canResearch){ html += '<button class="btn btn-cyan" onclick="researchTech(\''+t.id+'\');showTab(\'research\')">Research ('+t.cost+'g)</button>'; }
-    else { html += '<span class="text-dim">Locked</span>'; }
+    const isDone = G.research[t.id];
+    const canResearch = !isDone && labLv >= 3 && Object.keys(t.req).every(r => G.research[r]);
+    const icon = isDone ? '✅' : canResearch ? '🔓' : '🔒';
+    const border = isDone ? '#0f0' : canResearch ? 'var(--accent)' : '#1e1e3a';
+    html += '<div class="card" style="border-color:'+border+'"><div class="card-row">';
+    html += '<div style="font-size:20px;width:30px;text-align:center">' + icon + '</div>';
+    html += '<div class="card-body">';
+    html += '<div class="card-title">' + t.name + '</div>';
+    html += '<div class="card-desc">' + t.desc + '</div>';
+    if(Object.keys(t.req).length > 0) html += '<div class="text-sm" style="color:#556;margin-top:2px">Needs: ' + Object.keys(t.req).map(r => TECH_TREE.find(x=>x.id===r).name).join(', ') + '</div>';
     html += '</div>';
+    if(isDone) html += '<div style="color:#0f0;font-weight:700;font-size:12px">DONE</div>';
+    else if(canResearch) html += '<div class="card-action"><button class="btn btn-cyan" onclick="researchTech(\''+t.id+'\');showTab(\'research\')">' + fmtNum(t.cost) + 'g</button></div>';
+    else html += '<div style="color:#334;font-size:11px">' + fmtNum(t.cost) + 'g</div>';
+    html += '</div></div>';
   });
-  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  html += '<button class="btn btn-full" onclick="showTab(\'more\')">← Back</button>';
   c.innerHTML = html;
 }
 
 function renderExplore(c){
   generateMap();
-  let html = '<h2>Exploration Map</h2>';
-  html += '<div class="text-sm text-dim mb">Explore the wasteland tile by tile. Costs 8 energy per tile.</div>';
-  html += '<div class="text-sm">Position: ' + (G.mapPosition||0) + '/50 tiles explored</div>';
-  // Show map as tiles
-  html += '<div class="card" style="font-family:monospace;font-size:11px;line-height:1.6">';
-  const start = Math.max(0, (G.mapPosition||0) - 3);
-  const end = Math.min(MAP_TILES.length, (G.mapPosition||0) + 8);
+  const tileIcons = {enemy:'💀',boss:'👹',cache:'💰',resource:'⛏',ruins:'🏛',shrine:'⛩',trap:'💥',empty:'·'};
+  let html = '<h2>🗺 Explore</h2>';
+  html += '<div class="card"><div class="card-row"><div class="card-icon">🗺</div><div class="card-body">';
+  html += '<div class="card-title">Tile ' + (G.mapPosition||0) + ' / 50</div>';
+  const pct = Math.floor(((G.mapPosition||0)/50)*100);
+  html += '<div class="pbar pbar-cyan pbar-sm" style="margin-top:4px"><div class="pbar-fill" style="width:'+pct+'%"></div><span class="pbar-text">'+pct+'%</span></div>';
+  html += '<div class="card-desc">Free to explore. Find caches, shrines, and bosses!</div>';
+  html += '</div></div></div>';
+  // Show tiles
+  const start = Math.max(0, (G.mapPosition||0) - 2);
+  const end = Math.min(MAP_TILES.length, (G.mapPosition||0) + 6);
   for(let i = start; i < end; i++){
     const tile = MAP_TILES[i];
     const explored = G.exploredTiles && G.exploredTiles.includes(i);
     const canExplore = i <= (G.mapPosition||0) + 1 && !explored;
-    const icon = explored ? (tile.type==='enemy'?'X':tile.type==='boss'?'B':tile.type==='cache'?'$':tile.type==='resource'?'R':tile.type==='ruins'?'A':tile.type==='shrine'?'S':tile.type==='trap'?'!':'.') : '?';
-    const color = explored ? '#666' : canExplore ? '#0ff' : '#333';
-    html += '<span style="color:'+color+'">[' + (i < 10 ? '0' : '') + i + ':' + icon + ']</span> ';
-    if(canExplore){
-      html += '<button class="btn btn-cyan" style="padding:2px 8px;min-height:24px;font-size:10px" onclick="exploreTile('+i+');showTab(\'explore\')">Explore</button>';
-    } else if(explored){
-      html += '<span class="text-dim">' + tile.name + '</span>';
-    }
-    html += '<br>';
+    const icon = explored ? (tileIcons[tile.type]||'·') : '❓';
+    const border = canExplore ? 'var(--accent)' : explored ? '#1e1e3a' : '#111';
+    html += '<div class="card" style="border-color:'+border+'"><div class="card-row">';
+    html += '<div style="font-size:22px;width:36px;text-align:center">' + icon + '</div>';
+    html += '<div class="card-body">';
+    html += '<div class="card-title" style="font-size:13px">Tile ' + i + (explored ? ': ' + tile.name : '') + '</div>';
+    if(!explored && canExplore) html += '<div class="card-desc">Unknown territory</div>';
+    else if(!explored) html += '<div class="card-desc" style="color:#333">Too far ahead</div>';
+    html += '</div>';
+    if(canExplore) html += '<div class="card-action"><button class="btn btn-cyan" onclick="exploreTile('+i+');showTab(\'explore\')">Explore</button></div>';
+    html += '</div></div>';
   }
-  html += '</div>';
-  html += '<div class="text-sm text-dim">Legend: X=Enemy B=Boss $=Cache R=Resource A=Ruins S=Shrine !=Trap .=Empty ?=Unknown</div>';
-  html += '<div class="mt"><button class="btn" onclick="showTab(\'more\')">Back</button></div>';
+  if((G.treasureMaps||0) > 0) html += '<div class="card text-center"><button class="btn btn-gold btn-full" onclick="useTreasureMap();showTab(\'explore\')">🗺 Use Treasure Map ('+G.treasureMaps+')</button></div>';
+  html += '<button class="btn btn-full" onclick="showTab(\'more\')">← Back</button>';
   c.innerHTML = html;
 }
 
