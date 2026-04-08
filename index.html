@@ -9,13 +9,147 @@ html { --accent: #0ff; }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 body { background:#0a0a1a; color:#d0d0d0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:14px; overflow-x:hidden; -webkit-font-smoothing:antialiased; }
 #app { max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
-/* Top Bar */
-#top-bar { background:linear-gradient(180deg,#141428,#0d0d1f); padding:10px 14px 6px; border-bottom:1px solid #2a2a4a; position:sticky; top:0; z-index:10; }
-#top-bar .row { display:flex; justify-content:space-between; align-items:center; gap:4px; }
-.stat-label { color:#667; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
-.stat-val { color:#0ff; font-size:14px; font-weight:700; font-family:'Courier New',monospace; }
-.gold-val { color:#ffd700; font-family:'Courier New',monospace; font-weight:700; }
+/* Top Bar - SimpleMMO style compact */
+#top-bar { background:#0d0d1f; padding:8px 12px; border-bottom:1px solid #1a1a3a; position:sticky; top:0; z-index:10; }
+#top-bar .row { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+.hud-stat { text-align:center; min-width:48px; }
+.stat-label { color:#556; font-size:9px; text-transform:uppercase; letter-spacing:0.5px; display:block; }
+.stat-val { color:var(--accent); font-size:15px; font-weight:700; font-family:'Courier New',monospace; }
+.gold-val { color:#ffd700; font-family:'Courier New',monospace; font-weight:700; font-size:15px; }
 .energy-val { color:#0f0; font-family:'Courier New',monospace; font-weight:700; }
+/* Main Content - big readable area */
+#content { flex:1; overflow-y:auto; padding:10px 14px; padding-bottom:62px; scroll-behavior:smooth; }
+/* Bottom Nav - SimpleMMO style big clear buttons */
+#nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; display:flex; background:#0d0d1f; border-top:1px solid #1a1a3a; z-index:10; padding:4px 4px; padding-bottom:max(4px, env(safe-area-inset-bottom)); gap:2px; }
+#nav button { flex:1; padding:8px 2px 6px; background:#111125; border:1px solid #1a1a3a; border-radius:8px; color:#445; font-family:inherit; font-size:10px; font-weight:600; cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column; align-items:center; gap:2px; }
+#nav button .nav-icon { font-size:18px; line-height:1; }
+#nav button.active { color:var(--accent); background:#151535; border-color:var(--accent); box-shadow:0 0 8px rgba(0,255,255,0.1); }
+#nav button:active { transform:scale(0.95); opacity:0.8; }
+/* Buttons - big, clear, easy to tap */
+.btn { display:inline-block; padding:12px 18px; margin:4px; background:#151530; border:1px solid #2a2a4a; border-radius:10px; color:#ccc; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; min-height:48px; min-width:48px; transition:all 0.15s; user-select:none; text-align:center; }
+.btn:active { background:#252550; transform:scale(0.97); }
+.btn:disabled { opacity:0.3; pointer-events:none; }
+.btn-full { display:block; width:100%; margin:6px 0; }
+.btn-cyan { border-color:#0aa; color:#0ff; background:rgba(0,255,255,0.06); }
+.btn-purple { border-color:#8020cc; color:#b026ff; background:rgba(176,38,255,0.06); }
+.btn-gold { border-color:#aa8800; color:#ffd700; background:rgba(255,215,0,0.06); }
+.btn-green { border-color:#0a0; color:#0f0; background:rgba(0,255,0,0.06); }
+.btn-red { border-color:#b33; color:#f44; background:rgba(255,68,68,0.06); }
+.btn:active { opacity:0.8; }
+/* Rarity Colors */
+.common { color:#999; } .uncommon { color:#0f0; } .rare { color:#5588ff; }
+.epic { color:#b026ff; } .legendary { color:#ffd700; text-shadow:0 0 4px rgba(255,215,0,0.3); } .mythic { color:#ff2060; text-shadow:0 0 8px rgba(255,32,96,0.4); font-weight:700; }
+/* Progress Bar */
+.pbar { background:#0e0e20; border:1px solid #222; height:20px; margin:4px 0; position:relative; border-radius:10px; overflow:hidden; }
+.pbar-sm { height:14px; }
+.pbar-fill { height:100%; transition:width 0.4s ease-out; border-radius:10px; }
+.pbar-text { position:absolute; top:0; left:0; right:0; font-size:11px; line-height:20px; color:#fff; text-align:center; font-weight:600; text-shadow:0 1px 2px rgba(0,0,0,0.8); font-family:'Courier New',monospace; }
+.pbar-sm .pbar-text { font-size:9px; line-height:14px; }
+.pbar-cyan .pbar-fill { background:linear-gradient(90deg,#044,#0cc); }
+.pbar-green .pbar-fill { background:linear-gradient(90deg,#040,#0a0); }
+.pbar-purple .pbar-fill { background:linear-gradient(90deg,#306,#a0f); }
+.pbar-gold .pbar-fill { background:linear-gradient(90deg,#640,#da0); }
+.pbar-red .pbar-fill { background:linear-gradient(90deg,#400,#c44); }
+/* Sections */
+h2 { color:var(--accent); font-size:18px; margin:14px 0 10px; font-weight:700; }
+h3 { color:#889; font-size:13px; margin:12px 0 6px; font-weight:600; text-transform:uppercase; letter-spacing:1px; }
+.card { background:#111125; border:1px solid #1e1e3a; border-radius:10px; padding:14px; margin:8px 0; }
+.card-row { display:flex; align-items:center; gap:12px; }
+.card-icon { font-size:28px; flex-shrink:0; width:40px; text-align:center; }
+.card-body { flex:1; min-width:0; }
+.card-title { font-weight:700; font-size:15px; }
+.card-desc { font-size:12px; color:#667; margin-top:2px; }
+.card-action { flex-shrink:0; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+.text-center { text-align:center; }
+.text-sm { font-size:12px; }
+.text-dim { color:#556; }
+.mt { margin-top:10px; }
+.mb { margin-bottom:10px; }
+/* Sub-nav - horizontal scrolling pills */
+.sub-nav { display:flex; gap:6px; overflow-x:auto; padding:6px 0; -webkit-overflow-scrolling:touch; scrollbar-width:none; margin-bottom:8px; }
+.sub-nav::-webkit-scrollbar { display:none; }
+.sub-nav button { flex-shrink:0; padding:8px 16px; border-radius:20px; border:1px solid #2a2a4a; background:#111125; color:#667; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.sub-nav button.active { background:rgba(0,255,255,0.1); border-color:var(--accent); color:var(--accent); }
+.sub-nav button:active { transform:scale(0.95); }
+/* Collapsible Sections */
+.collapse-header { cursor:pointer; user-select:none; padding:8px 0; display:flex; justify-content:space-between; align-items:center; }
+.collapse-header:after { content:'▼'; color:#556; font-size:10px; }
+.collapse-header.collapsed:after { content:'▶'; }
+.collapse-body { overflow:hidden; }
+.collapse-body.hidden { display:none; }
+/* Toast */
+#toast-container { position:fixed; top:50px; left:50%; transform:translateX(-50%); z-index:100; width:90%; max-width:420px; pointer-events:none; }
+.toast { background:#151535; border:1px solid var(--accent); border-radius:10px; padding:10px 14px; margin:6px 0; text-align:center; animation:toastIn 0.3s ease-out; font-size:13px; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+@keyframes toastIn { from{opacity:0;transform:translateY(-15px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)} }
+/* Modal */
+.modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:50; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.2s; }
+.modal { background:#111125; border:1px solid var(--accent); border-radius:14px; padding:20px; max-width:92%; max-height:85vh; overflow-y:auto; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+/* Combat Log */
+.log { max-height:220px; overflow-y:auto; background:#060612; border:1px solid #1a1a2a; border-radius:8px; padding:8px; font-size:12px; font-family:'Courier New',monospace; line-height:1.5; }
+.log-line { margin:1px 0; padding:2px 6px; border-radius:3px; }
+.dmg-player { color:#f55; background:rgba(255,68,68,0.05); }
+.dmg-enemy { color:#0ff; background:rgba(0,255,255,0.05); }
+.heal { color:#0f0; background:rgba(0,255,0,0.05); }
+/* Followers */
+.follower-card { background:#0e0e22; border:1px solid #1e1e3a; border-radius:8px; padding:10px 12px; margin:6px 0; }
+.follower-card .name { font-weight:700; }
+/* Input */
+input[type="text"] { background:#0e0e22; border:1px solid #2a2a4a; border-radius:8px; color:#ddd; padding:12px 14px; font-family:inherit; font-size:15px; width:100%; }
+input[type="text"]:focus { border-color:var(--accent); outline:none; }
+select { background:#0e0e22; border:1px solid #2a2a4a; border-radius:8px; color:#ddd; padding:12px 14px; font-family:inherit; font-size:15px; }
+/* Number display */
+.num { font-family:'Courier New',monospace; font-weight:700; }
+/* Scrollbar */
+::-webkit-scrollbar { width:3px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#2a2a4a; border-radius:2px; }
+/* Hint */
+.hint { background:rgba(0,255,255,0.04); border-left:3px solid var(--accent); padding:10px 14px; margin:8px 0; border-radius:0 8px 8px 0; font-size:13px; color:#8aa; }
+.tutorial-hint { background:rgba(0,255,255,0.08); border:1px solid var(--accent); border-radius:10px; padding:12px 16px; margin:8px 0; font-size:14px; color:#add; text-align:center; animation:tutPulse 2s infinite; }
+@keyframes tutPulse { 0%,100%{box-shadow:0 0 5px rgba(0,255,255,0.1)} 50%{box-shadow:0 0 15px rgba(0,255,255,0.2)} }
+/* Badge */
+.badge { display:inline-block; background:#f44; color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:8px; min-width:16px; text-align:center; }
+/* Rarity borders */
+.rarity-border-epic { border-color:#b026ff !important; }
+.rarity-border-legendary { border-color:#ffd700 !important; box-shadow:0 0 8px rgba(255,215,0,0.1); }
+.rarity-border-mythic { border-color:#ff2060 !important; box-shadow:0 0 12px rgba(255,32,96,0.15); animation:mythicPulse 2s infinite; }
+@keyframes mythicPulse { 0%,100%{box-shadow:0 0 8px rgba(255,32,96,0.1)} 50%{box-shadow:0 0 16px rgba(255,32,96,0.25)} }
+/* Stat row */
+.stat-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #151530; }
+.stat-row:last-child { border-bottom:none; }
+/* Divider */
+.divider { border:none; border-top:1px solid #1a1a3a; margin:12px 0; }
+/* Pull animations */
+.pull-result { animation:pullReveal 0.4s ease-out; }
+.pull-epic { animation:pullReveal 0.4s; border-color:#b026ff; box-shadow:0 0 20px rgba(176,38,255,0.2); }
+.pull-legendary { animation:pullReveal 0.5s; border-color:#ffd700; box-shadow:0 0 25px rgba(255,215,0,0.25); }
+.pull-mythic { animation:pullReveal 0.6s; border-color:#ff2060; box-shadow:0 0 30px rgba(255,32,96,0.3); }
+@keyframes pullReveal { from{opacity:0;transform:scale(0.8) translateY(10px)} to{opacity:1;transform:scale(1) translateY(0)} }
+/* Splash */
+#splash { position:fixed; top:0; left:0; width:100%; height:100%; background:#0a0a1a; z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+#splash .logo { font-size:48px; margin-bottom:10px; animation:splashPulse 2s infinite; }
+@keyframes splashPulse { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+#splash .title { font-size:28px; font-weight:900; color:var(--accent); text-shadow:0 0 30px rgba(0,255,255,0.4); letter-spacing:4px; margin-bottom:6px; }
+#splash .subtitle { font-size:11px; color:#445; margin-bottom:30px; letter-spacing:3px; }
+#splash .loading-bar { width:220px; height:3px; background:#1a1a2e; border-radius:2px; overflow:hidden; }
+#splash .loading-fill { height:100%; background:linear-gradient(90deg,#066,#0ff,#066); background-size:200%; width:0%; animation:loadFill 1.5s ease-out forwards; }
+@keyframes loadFill { to { width:100% } }
+/* Character creation */
+.class-card { background:#111128; border:2px solid #1e1e3a; border-radius:12px; padding:14px; margin:8px 0; cursor:pointer; transition:all 0.2s; }
+.class-card.selected { border-color:var(--accent); background:#151535; }
+.class-card .class-name { font-size:16px; font-weight:700; }
+.class-card .class-desc { font-size:12px; color:#889; margin-top:2px; }
+.class-card .class-passive { font-size:11px; margin-top:4px; }
+.class-card .class-stats { font-size:10px; color:#556; margin-top:4px; font-family:'Courier New',monospace; }
+.element-btn { padding:10px 18px; margin:3px; border-radius:20px; border:2px solid #333; background:none; color:#ccc; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+.element-btn.selected { border-color:var(--accent); color:var(--accent); background:rgba(0,255,255,0.08); }
+/* Ticker */
+#ticker-text { animation:tickerFade 5s infinite; }
+@keyframes tickerFade { 0%,85%{opacity:1} 92%,100%{opacity:0} }
+</style>
 /* Main Content */
 #content { flex:1; overflow-y:auto; padding:12px; padding-bottom:85px; scroll-behavior:smooth; }
 /* Bottom Nav */
@@ -159,32 +293,40 @@ select:focus { border-color:#0ff; outline:none; }
 /* Stat row */
 .stat-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #111; }
 .stat-row:last-child { border-bottom:none; }
+/* Sub-navigation pills */
+.sub-nav { display:flex; gap:4px; overflow-x:auto; padding:4px 0 8px; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.sub-nav::-webkit-scrollbar { display:none; }
+.sub-nav button { flex-shrink:0; padding:6px 14px; border-radius:20px; border:1px solid #2a2a4a; background:#0e0e20; color:#667; font-family:inherit; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.sub-nav button.active { background:rgba(0,255,255,0.1); border-color:var(--accent); color:var(--accent); }
+.sub-nav button:active { transform:scale(0.95); }
+/* Compact stat bar */
+.stat-bar-compact { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:6px 10px; font-size:11px; }
+.stat-bar-compact span { color:#667; }
+.stat-bar-compact .val { color:var(--accent); font-weight:700; font-family:'Courier New',monospace; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="top-bar">
     <div class="row">
-      <div class="hud-stat"><span class="stat-label">LVL</span><br><span class="stat-val" id="hud-level">1</span></div>
-      <div class="hud-stat" style="flex:1"><span class="stat-label">ENERGY</span><br>
-        <div class="pbar pbar-green" style="height:14px;margin:2px 0"><div class="pbar-fill" id="hud-energy-fill" style="width:100%"></div><span class="pbar-text" style="font-size:9px;line-height:14px" id="hud-energy">100/100</span></div>
-        <span id="hud-energy-timer" style="font-size:9px;color:#888;display:block;text-align:center;height:12px"></span>
+      <div class="hud-stat"><span class="stat-label">LV</span><span class="stat-val" id="hud-level">1</span></div>
+      <div class="hud-stat" style="flex:1">
+        <div class="pbar pbar-green pbar-sm" style="margin:0"><div class="pbar-fill" id="hud-energy-fill" style="width:100%"></div><span class="pbar-text">⚡ <span id="hud-energy">100/100</span></span></div>
       </div>
-      <div class="hud-stat"><span style="font-size:12px">&#11044;</span><br><span class="gold-val" id="hud-gold">0</span></div>
-      <div class="hud-stat"><span style="font-size:12px;color:#b026ff">&#9670;</span><br><span style="color:#b026ff;font-family:'Courier New',monospace;font-weight:700;font-size:14px" id="hud-gems">10</span></div>
+      <div class="hud-stat"><span class="gold-val" id="hud-gold">0</span><span class="stat-label"> gold</span></div>
+      <div class="hud-stat"><span style="color:#b026ff;font-family:'Courier New',monospace;font-weight:700" id="hud-gems">10</span><span class="stat-label"> gems</span></div>
     </div>
-    <div class="pbar pbar-cyan" style="margin-top:4px;height:14px"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" style="font-size:9px;line-height:14px" id="hud-xp-text">0 / 100 XP</span></div>
-    <div id="hud-title" style="color:#ffd700;text-align:center;font-size:10px;margin-top:2px;letter-spacing:1px"></div>
-    <div id="hud-tickets" style="display:flex;justify-content:center;gap:12px;margin-top:2px;font-size:9px;color:#556"></div>
+    <div class="pbar pbar-cyan pbar-sm" style="margin-top:4px"><div class="pbar-fill" id="hud-xp-fill" style="width:0%"></div><span class="pbar-text" id="hud-xp-text">0 / 100 XP</span></div>
+    <div id="hud-title" style="color:#ffd700;text-align:center;font-size:9px;margin-top:2px;letter-spacing:1px;height:14px"></div>
   </div>
   <div id="content"></div>
   <div id="nav">
-    <button onclick="showTab('missions')" id="tab-missions"><span class="nav-icon">&#9876;</span>Fight</button>
-    <button onclick="showTab('skills')" id="tab-skills"><span class="nav-icon">&#9733;</span>Skills</button>
-    <button onclick="showTab('gear')" id="tab-gear"><span class="nav-icon">&#9881;</span>Gear</button>
-    <button onclick="showTab('town')" id="tab-town"><span class="nav-icon">&#9960;</span>Town</button>
-    <button onclick="showTab('gacha')" id="tab-gacha"><span class="nav-icon">&#10026;</span>Summon</button>
-    <button onclick="showTab('more')" id="tab-more"><span class="nav-icon">&#8942;</span>More</button>
+    <button onclick="showTab('missions')" id="tab-missions"><span class="nav-icon">⚔</span>Fight</button>
+    <button onclick="showTab('skills')" id="tab-skills"><span class="nav-icon">★</span>Skills</button>
+    <button onclick="showTab('gear')" id="tab-gear"><span class="nav-icon">⚙</span>Gear</button>
+    <button onclick="showTab('town')" id="tab-town"><span class="nav-icon">🏰</span>Town</button>
+    <button onclick="showTab('gacha')" id="tab-gacha"><span class="nav-icon">✦</span>Summon</button>
+    <button onclick="showTab('more')" id="tab-more"><span class="nav-icon">☰</span>More</button>
   </div>
 </div>
 <div id="toast-container"></div>
@@ -5847,73 +5989,52 @@ function renderSmartHint(){
   return '';
 }
 
+let missionSubTab = 'missions';
+function setMissionSubTab(tab){ missionSubTab = tab; showTab('missions'); }
+
 function renderMissions(c){
   let html = '';
-  // World State Ticker
-  const tickerMsgs = getTickerMessages();
-  const tickerIdx = Math.floor(Date.now()/5000) % tickerMsgs.length;
-  html += '<div style="overflow:hidden;white-space:nowrap;padding:6px 0;color:#556;font-size:11px;text-align:center;border-bottom:1px solid #1a1a2a;margin-bottom:8px">';
-  html += '<span id="ticker-text">' + tickerMsgs[tickerIdx] + '</span>';
-  html += '</div>';
 
-  // Tutorial hint step 1
-  if(G.tutorialStep === 1){
-    html += '<div class="tutorial-hint">\uD83D\uDC46 Tap \'Scavenge Wreckage\' below to fight your first battle!</div>';
-  }
-  // Tutorial hint step 2
-  if(G.tutorialStep === 2){
-    html += '<div class="tutorial-hint">Great job! Now visit the Summon tab to pull more followers!</div>';
-  }
+  // Tutorial hints
+  if(G.tutorialStep === 1) html += '<div class="tutorial-hint">👆 Tap a mission below to fight!</div>';
+  if(G.tutorialStep === 2) html += '<div class="tutorial-hint">Great job! Now visit the Summon tab!</div>';
 
-  html += '<h2>Missions</h2>';
   // Contextual hint
   const hint = getHint();
   if(hint) html += '<div class="hint">' + hint + '</div>';
-  else html += renderSmartHint();
 
-  // Combat preview stats
-  html += '<div class="card text-sm">';
-  html += 'Your Power: <span style="color:#0ff">' + getCombatPower() + '</span> | Def: ' + getCombatDefense() + ' | Speed: ' + getCombatSpeed() + ' | Luck: ' + getLuck();
-  html += ' | HP: ' + (50 + G.level*10 + G.stats.defense*3);
-  html += '<br>Element: <span style="color:' + ELEMENT_COLORS[G.element||'physical'] + '">' + ELEMENT_NAMES[G.element||'physical'] + '</span>';
-  const cls = CLASSES[G.class];
-  html += '<br>Class: <span style="color:'+cls.passiveColor+'">' + cls.passive + '</span> - ' + cls.passiveDesc;
-  if(G.activeBuff) html += '<br>Active buff: <span style="color:#ffd700">' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns)</span>';
-  const curWeather = getWeatherInfo();
-  html += '<br>Weather: <span style="color:' + curWeather.color + '">' + curWeather.name + '</span> - ' + curWeather.desc;
+  // Sub-navigation pills
+  html += '<div class="sub-nav">';
+  html += '<button class="'+(missionSubTab==='missions'?'active':'')+'" onclick="setMissionSubTab(\'missions\')">⚔ Missions</button>';
+  if(G.level >= 5) html += '<button class="'+(missionSubTab==='bosses'?'active':'')+'" onclick="setMissionSubTab(\'bosses\')">💀 Bosses</button>';
+  if(G.level >= 10) html += '<button class="'+(missionSubTab==='special'?'active':'')+'" onclick="setMissionSubTab(\'special\')">🌀 Special</button>';
+  if(G.level >= 20) html += '<button class="'+(missionSubTab==='dungeons'?'active':'')+'" onclick="setMissionSubTab(\'dungeons\')">🏰 Dungeons</button>';
+  html += '<button class="'+(missionSubTab==='status'?'active':'')+'" onclick="setMissionSubTab(\'status\')">📊 Status</button>';
   html += '</div>';
 
-  // Quick potion bar
-  const hasPotions = Object.values(G.potions).some(v => v > 0);
-  if(hasPotions){
-    html += '<div class="card text-sm">';
-    html += '<b>Potions:</b> ';
-    for(const t in POTIONS){
-      if(G.potions[t] > 0){
-        html += '<button class="btn" style="padding:4px 8px;min-height:30px;border-color:'+POTIONS[t].color+';color:'+POTIONS[t].color+'" onclick="usePotion(\''+t+'\')">' + POTIONS[t].name + ' x' + G.potions[t] + '</button> ';
-      }
-    }
-    // Feature 18: Auto-Potion Toggle
-    const apOn = G.autoPotionEnabled !== false;
-    html += '<br><button class="btn' + (apOn?' btn-green':'') + '" style="padding:4px 8px;min-height:30px" onclick="G.autoPotionEnabled=!G.autoPotionEnabled;save();showTab(\'missions\')">Auto-Potion: ' + (apOn?'ON':'OFF') + '</button>';
-    html += '</div>';
-  }
+  // Ticker
+  const tickerMsgs = getTickerMessages();
+  html += '<div style="text-align:center;padding:4px;color:#445;font-size:11px"><span id="ticker-text">' + tickerMsgs[Math.floor(Date.now()/5000) % tickerMsgs.length] + '</span></div>';
 
-  // Auto-battle status
+  // Auto-battle banner (always visible if active)
   if(G.autoBattle){
     html += '<div class="card" style="border-color:#0f0">';
-    html += '<b style="color:#0f0">Auto-Battle Active</b><br>';
-    html += 'Zone: ' + G.autoBattle.zoneName + ' | Mission: ' + G.autoBattle.missionName + '<br>';
-    html += 'Earned: ' + G.autoBattleEarnings.gold + 'g | ' + G.autoBattleEarnings.kills + ' kills | ' + (G.autoBattleEarnings.items||0) + ' items<br>';
-    html += '<button class="btn btn-red" onclick="stopAutoBattle()">Stop Auto-Battle</button>';
-    html += '</div>';
+    html += '<div class="card-row"><div class="card-icon">⚔</div><div class="card-body">';
+    html += '<div class="card-title" style="color:#0f0">Auto-Battle Running</div>';
+    html += '<div class="card-desc">' + G.autoBattle.missionName + ' | ' + G.autoBattleEarnings.kills + ' kills, ' + fmtNum(G.autoBattleEarnings.gold) + 'g</div>';
+    html += '</div><div class="card-action"><button class="btn btn-red" onclick="stopAutoBattle()">Stop</button></div></div></div>';
   }
 
   // Win streak
-  if((G.winStreak||0) >= 3){
-    html += '<div class="text-sm" style="color:#ffd700">Win Streak: ' + G.winStreak + ' (x' + getStreakMult().toFixed(2) + ' gold) | Best: ' + (G.bestWinStreak||0) + '</div>';
-  }
+  if((G.winStreak||0) >= 3) html += '<div style="text-align:center;color:#ffd700;font-size:12px;padding:4px">🔥 Streak: x' + G.winStreak + ' (' + getStreakMult().toFixed(2) + 'x gold)</div>';
 
+  // ============ SUB-TAB CONTENT ============
+  if(missionSubTab === 'missions'){
+    // Regular zone missions - clean SimpleMMO style
+
+  } // end missions sub-tab
+
+  if(missionSubTab === 'bosses'){
   // Daily Dungeon (Level 20+)
   if(G.level >= 20){
   const ddToday = getDailyDungeonSeed();
@@ -6078,23 +6199,10 @@ function renderMissions(c){
   html += '<button class="btn" style="color:#ff2060;border-color:#ff2060;padding:8px 14px;min-height:36px" onclick="fightScheduledBoss(\'weekly\')">FIGHT</button>';
   html += '</div>';
   } // end Daily & Weekly Boss level gate
+  } // end bosses sub-tab
 
-  // Skill combos display
-  const activeCombos = getActiveSkillCombos();
-  if(activeCombos.length > 0){
-    html += '<div class="card"><b>Skill Combos Active:</b><br>';
-    activeCombos.forEach(c => { html += '<span style="color:#ffd700">' + c.name + ': ' + c.desc + '</span><br>'; });
-    html += '</div>';
-  }
-
-  // Named set bonuses
-  const namedSets = getNamedSetBonuses();
-  if(namedSets.length > 0){
-    html += '<div class="card"><b>Gear Set Bonuses:</b><br>';
-    namedSets.forEach(s => { html += '<span style="color:#ffd700">' + s.name + ' (' + s.pieces + 'pc): ' + s.bonus + '</span><br>'; });
-    html += '</div>';
-  }
-
+  if(missionSubTab === 'special'){
+  html += '<h2>Special</h2>';
   // Roaming Enemies (Level 10+)
   if(G.level >= 10) spawnRoamingEnemies();
   if(G.level >= 10 && G.roamingEnemies && G.roamingEnemies.length > 0){
@@ -6136,7 +6244,9 @@ function renderMissions(c){
   html += '<button class="btn btn-red" style="padding:8px 14px;min-height:36px" onclick="attackWorldBoss()">ATTACK</button>';
   html += '</div>';
   } // end World Boss level gate
+  } // end special sub-tab
 
+  if(missionSubTab === 'dungeons'){
   // Bounty Board
   if(G.skillLevels[12] >= 50 || (G.bounties && G.bounties.length > 0)){
     if(!G.bounties || G.bounties.length === 0) refreshBounties();
@@ -6192,6 +6302,45 @@ function renderMissions(c){
   html += collapseSection('dungeons', '🏰 Dungeons (Multi-Wave)', dungeonContent, false);
   } // end Dungeons level gate
 
+  } // end dungeons sub-tab
+
+  if(missionSubTab === 'status'){
+    // Combat stats and info
+    html += '<h2>Combat Status</h2>';
+    html += '<div class="card">';
+    html += '<div class="stat-row"><span>Power</span><span class="num" style="color:#0ff">' + getCombatPower() + '</span></div>';
+    html += '<div class="stat-row"><span>Defense</span><span class="num">' + getCombatDefense() + '</span></div>';
+    html += '<div class="stat-row"><span>Speed</span><span class="num">' + getCombatSpeed() + '</span></div>';
+    html += '<div class="stat-row"><span>Luck</span><span class="num">' + getLuck() + '</span></div>';
+    html += '<div class="stat-row"><span>HP</span><span class="num">' + (50 + G.level*10 + G.stats.defense*3) + '</span></div>';
+    const cls = CLASSES[G.class];
+    html += '<div class="stat-row"><span>Class</span><span style="color:'+cls.passiveColor+'">' + cls.name + '</span></div>';
+    html += '<div class="stat-row"><span>Element</span><span style="color:' + (typeof ELEMENT_COLORS!=='undefined'?ELEMENT_COLORS[G.element||'physical']:'#ccc') + '">' + (typeof ELEMENT_NAMES!=='undefined'?ELEMENT_NAMES[G.element||'physical']:'Physical') + '</span></div>';
+    const curWeather = typeof getWeatherInfo==='function' ? getWeatherInfo() : {name:'Clear',desc:'No effect',color:'#ccc'};
+    html += '<div class="stat-row"><span>Weather</span><span style="color:'+curWeather.color+'">' + curWeather.name + '</span></div>';
+    html += '</div>';
+    // Potions
+    const hasPotions = Object.values(G.potions).some(v => v > 0);
+    if(hasPotions){
+      html += '<h3>Potions</h3><div class="card">';
+      for(const t in POTIONS){
+        if(G.potions[t] > 0){
+          html += '<button class="btn" style="border-color:'+POTIONS[t].color+';color:'+POTIONS[t].color+'" onclick="usePotion(\''+t+'\')">' + POTIONS[t].name + ' x' + G.potions[t] + '</button> ';
+        }
+      }
+      const apOn = G.autoPotionEnabled !== false;
+      html += '<br><button class="btn'+(apOn?' btn-green':'')+'" onclick="G.autoPotionEnabled=!G.autoPotionEnabled;save();showTab(\'missions\')">Auto-Potion: '+(apOn?'ON':'OFF')+'</button>';
+      html += '</div>';
+    }
+    if(G.activeBuff) html += '<div class="card"><b>Active Buff:</b> ' + POTIONS[G.activeBuff.type].name + ' (' + G.activeBuff.turnsLeft + ' turns)</div>';
+    // Active combos/sets
+    const activeCombos = getActiveSkillCombos();
+    if(activeCombos.length > 0){ html += '<h3>Skill Combos</h3><div class="card">'; activeCombos.forEach(co => { html += '<div style="color:#ffd700">' + co.name + ': ' + co.desc + '</div>'; }); html += '</div>'; }
+    const namedSets = getNamedSetBonuses();
+    if(namedSets.length > 0){ html += '<h3>Gear Sets</h3><div class="card">'; namedSets.forEach(s => { html += '<div style="color:#ffd700">' + s.name + ' (' + s.pieces + 'pc): ' + s.bonus + '</div>'; }); html += '</div>'; }
+  } // end status sub-tab
+
+  if(missionSubTab === 'missions'){
   // Regular Missions with combat preview & auto-battle
   // Endless Void mode (#18) & Boss Rush (#19)
   if(G.level >= 30){
@@ -6283,8 +6432,10 @@ function renderMissions(c){
     firstOpenZone = false;
   });
 
+  } // end missions sub-tab (zones)
+
   // Ambient flavor text
-  html += '<div style="text-align:center;padding:12px 0;font-style:italic;color:#445;font-size:12px">' + AMBIENT_TEXT[Math.floor(Math.random()*AMBIENT_TEXT.length)] + '</div>';
+  html += '<div style="text-align:center;padding:12px 0;font-style:italic;color:#334;font-size:11px">' + AMBIENT_TEXT[Math.floor(Math.random()*AMBIENT_TEXT.length)] + '</div>';
 
   c.innerHTML = html;
 }
