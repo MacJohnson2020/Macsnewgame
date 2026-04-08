@@ -7684,55 +7684,157 @@ function allocStat(stat){
 // ==================== MORE MENU ====================
 function renderMore(c){
   let html = '<h2>More</h2>';
-  // Active event
+
+  // Active event banner
   if(G.activeEvent && Date.now() < G.eventEndTime){
     const timeLeft = Math.floor((G.eventEndTime - Date.now()) / 60000);
-    html += '<div class="card" style="border-color:#ffd700"><b style="color:#ffd700">EVENT: ' + G.activeEvent.name + '</b><br>';
-    html += G.activeEvent.desc + '<br>Ends in: ' + timeLeft + ' min</div>';
+    html += '<div class="card" style="border-color:#ffd700"><div class="card-row"><div class="card-icon">🎉</div><div class="card-body">';
+    html += '<div class="card-title" style="color:#ffd700">' + G.activeEvent.name + '</div>';
+    html += '<div class="card-desc">' + G.activeEvent.desc + ' | ' + timeLeft + 'm left</div>';
+    html += '</div></div></div>';
   }
-  // Set bonuses
-  const sets = getSetBonus();
-  if(sets.length > 0){
-    html += '<div class="card"><b>Set Bonuses Active:</b><br>';
-    sets.forEach(s => { html += '<span style="color:#ffd700">' + s.name + ': ' + s.desc + '</span><br>'; });
-    html += '</div>';
-  }
+
   // World tier
-  html += '<div class="card">World Tier: ' + (G.worldTier||1) + ' | Ascension: ' + (G.ascension||0);
-  html += '<br><span class="text-sm text-dim">Enemies +' + Math.floor(((G.worldTier||1)-1)*25) + '% | Loot +' + Math.floor(((G.worldTier||1)-1)*15) + '%</span></div>';
-  // Sub-pages
-  html += '<h3>Systems</h3>';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'profile\')">Profile & Potions</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'research\')">Research Lab</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'explore\')">Explore Map</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'expeditions\')">Expeditions</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'recipes\')">Crafting Recipes</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'fusion\')">Follower Fusion</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'clan\')">Clan</button> ';
-  html += '<button class="btn btn-gold" onclick="showTab(\'market\')">Black Market</button> ';
-  html += '<button class="btn btn-gold" onclick="showTab(\'challenges\')">Challenges</button> ';
-  html += '<button class="btn btn-purple" onclick="showTab(\'relics\')">Relics</button> ';
-  html += '<button class="btn btn-purple" onclick="showTab(\'bestiary\')">Bestiary</button> ';
-  html += '<button class="btn" onclick="showTab(\'halloffame\')">Hall of Fame</button> ';
-  html += '<button class="btn btn-green" onclick="showTab(\'dashboard\')">Idle Dashboard</button> ';
-  html += '<button class="btn" style="color:#f80;border-color:#f80" onclick="showTab(\'factions\')">Factions</button> ';
-  html += '<button class="btn btn-gold" onclick="showTab(\'gambling\')">Gambling Den</button> ';
-  html += '<button class="btn" onclick="showTab(\'titles\')">Titles</button> ';
-  html += '<button class="btn btn-purple" onclick="showTab(\'lore\')">Lore</button> ';
-  html += '<button class="btn" onclick="showTab(\'notifications\')">Notifications</button> ';
-  html += '<button class="btn btn-red" onclick="showTab(\'sieges\')">City Sieges</button> ';
-  html += '<button class="btn" style="color:#f80;border-color:#f80" onclick="showTab(\'resourcecraft\')">Resource Crafting</button> ';
-  html += '<button class="btn btn-cyan" onclick="showTab(\'contracts\')">Bounty Contracts</button> ';
-  html += '<button class="btn btn-green" onclick="showTab(\'stockmarket\')">Stock Market</button> ';
-  html += '<button class="btn btn-gold" onclick="showTab(\'prestigeshop\')">Prestige Shop</button> ';
-  // New feature links
-  if((G.artifactFragments||0) > 0 || (G.artifacts||[]).length > 0){
-    html += '<button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="showTab(\'profile\')">Artifacts ('+((G.artifacts||[]).length)+')</button> ';
+  html += '<div class="card"><div class="card-row"><div class="card-icon">🌍</div><div class="card-body">';
+  html += '<div class="card-title">World Tier ' + (G.worldTier||1) + '</div>';
+  html += '<div class="card-desc">Steps: ' + fmtNum(G.steps||0) + ' | Ascension: ' + (G.ascension||0) + '</div>';
+  html += '</div></div></div>';
+
+  // === VISIT LOCATIONS (step-based) ===
+  html += '<h3>Visit Locations</h3>';
+  html += '<div class="grid2">';
+
+  html += '<div class="card text-center" onclick="addStep(1);showTab(\'market\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🏪</div><div class="card-title" style="font-size:13px">Black Market</div>';
+  html += '<div class="text-sm text-dim">Browse rare goods</div></div>';
+
+  html += '<div class="card text-center" onclick="addStep(1);showTab(\'gambling\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🎰</div><div class="card-title" style="font-size:13px">Gambling Den</div>';
+  html += '<div class="text-sm text-dim">Try your luck</div></div>';
+
+  html += '<div class="card text-center" onclick="addStep(1);showTab(\'factions\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">⚔</div><div class="card-title" style="font-size:13px">Factions</div>';
+  html += '<div class="text-sm text-dim">' + (G.faction ? FACTIONS[G.faction].name : 'Join one!') + '</div></div>';
+
+  html += '<div class="card text-center" onclick="addStep(1);showTab(\'explore\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🗺</div><div class="card-title" style="font-size:13px">Explore Map</div>';
+  html += '<div class="text-sm text-dim">Tile ' + (G.mapPosition||0) + '/50</div></div>';
+
+  html += '</div>';
+
+  // === CHARACTER ===
+  html += '<h3>Character</h3>';
+  html += '<div class="grid2">';
+
+  html += '<div class="card text-center" onclick="showTab(\'profile\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">👤</div><div class="card-title" style="font-size:13px">Profile</div>';
+  html += '<div class="text-sm text-dim">Stats & Potions</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'titles\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🏅</div><div class="card-title" style="font-size:13px">Titles</div>';
+  html += '<div class="text-sm text-dim">' + (G.unlockedTitles||[]).length + ' unlocked</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'clan\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">👥</div><div class="card-title" style="font-size:13px">Clan</div>';
+  html += '<div class="text-sm text-dim">' + (G.clanName||'Found one!') + '</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'halloffame\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🏆</div><div class="card-title" style="font-size:13px">Hall of Fame</div>';
+  html += '<div class="text-sm text-dim">Records</div></div>';
+
+  html += '</div>';
+
+  // === CRAFTING & PROGRESSION ===
+  html += '<h3>Crafting & Progression</h3>';
+  html += '<div class="grid2">';
+
+  html += '<div class="card text-center" onclick="showTab(\'recipes\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">📜</div><div class="card-title" style="font-size:13px">Recipes</div>';
+  html += '<div class="text-sm text-dim">Craft gear</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'resourcecraft\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🔧</div><div class="card-title" style="font-size:13px">Resources</div>';
+  html += '<div class="text-sm text-dim">Craft from materials</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'research\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🔬</div><div class="card-title" style="font-size:13px">Research</div>';
+  html += '<div class="text-sm text-dim">Tech tree</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'relics\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">💎</div><div class="card-title" style="font-size:13px">Relics</div>';
+  html += '<div class="text-sm text-dim">' + (G.relics||[]).length + ' found</div></div>';
+
+  html += '</div>';
+
+  // === FOLLOWERS ===
+  html += '<h3>Followers</h3>';
+  html += '<div class="grid2">';
+
+  html += '<div class="card text-center" onclick="showTab(\'fusion\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🔮</div><div class="card-title" style="font-size:13px">Fusion</div>';
+  html += '<div class="text-sm text-dim">Combine followers</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'expeditions\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🚀</div><div class="card-title" style="font-size:13px">Expeditions</div>';
+  html += '<div class="text-sm text-dim">' + (G.expeditions||[]).length + '/3 active</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'contracts\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">📋</div><div class="card-title" style="font-size:13px">Contracts</div>';
+  html += '<div class="text-sm text-dim">Bounty contracts</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'sieges\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">⚔</div><div class="card-title" style="font-size:13px">Sieges</div>';
+  html += '<div class="text-sm text-dim">Attack cities</div></div>';
+
+  html += '</div>';
+
+  // === INFO ===
+  html += '<h3>Info</h3>';
+  html += '<div class="grid2">';
+
+  html += '<div class="card text-center" onclick="showTab(\'challenges\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">📊</div><div class="card-title" style="font-size:13px">Challenges</div>';
+  html += '<div class="text-sm text-dim">' + (G.challengesClaimed||0) + ' claimed</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'bestiary\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">📖</div><div class="card-title" style="font-size:13px">Bestiary</div>';
+  html += '<div class="text-sm text-dim">' + Object.keys(G.bestiary||{}).length + ' entries</div></div>';
+
+  html += '<div class="card text-center" onclick="addStep(1);showTab(\'lore\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">📚</div><div class="card-title" style="font-size:13px">Lore</div>';
+  html += '<div class="text-sm text-dim">' + (G.loreFragments||[]).length + ' fragments</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'dashboard\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">📈</div><div class="card-title" style="font-size:13px">Dashboard</div>';
+  html += '<div class="text-sm text-dim">Idle income</div></div>';
+
+  html += '<div class="card text-center" onclick="showTab(\'notifications\')" style="cursor:pointer">';
+  html += '<div style="font-size:28px">🔔</div><div class="card-title" style="font-size:13px">Notifications</div>';
+  html += '<div class="text-sm text-dim">' + (G.notificationLog||[]).length + ' recent</div></div>';
+
+  if(typeof renderStockMarket === 'function'){
+    html += '<div class="card text-center" onclick="showTab(\'stockmarket\')" style="cursor:pointer">';
+    html += '<div style="font-size:28px">📉</div><div class="card-title" style="font-size:13px">Stock Market</div>';
+    html += '<div class="text-sm text-dim">Invest gold</div></div>';
   }
+
+  html += '</div>';
+
   // Ascension
   if(hasResearch('ascend') && G.level >= 100){
-    html += '<div class="card mt" style="border-color:#ff2060"><button class="btn" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button></div>';
+    html += '<div class="card mt" style="border-color:#ff2060;text-align:center">';
+    html += '<div style="font-size:32px">🌟</div>';
+    html += '<button class="btn btn-full" style="color:#ff2060;border-color:#ff2060" onclick="if(confirm(\'Ascend? Resets level/cities but keeps research/clan/achievements. Enemies stronger, loot better.\'))doAscension()">ASCEND to World Tier ' + ((G.worldTier||1)+1) + '</button>';
+    html += '</div>';
   }
+
+  // Prestige shop
+  if(G.prestige > 0){
+    html += '<div class="card text-center" onclick="showTab(\'prestigeshop\')" style="cursor:pointer;border-color:#ffd700">';
+    html += '<div style="font-size:28px">⭐</div><div class="card-title" style="font-size:13px">Prestige Shop</div>';
+    html += '<div class="text-sm text-dim">Spend prestige points</div></div>';
+  }
+
   c.innerHTML = html;
 }
 
