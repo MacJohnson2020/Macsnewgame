@@ -203,14 +203,14 @@ export function endRaid(raid, success) {
         result.heroesLost.push(hero.name);
         result.itemsLost.push(...hero.inventory, ...Object.values(hero.gear).filter(Boolean));
         hero.inventory = [];
-        hero.gear = { weapon: null, armor: null, accessory: null };
+        hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
       }
     }
     if (!party.some(h => h.alive)) {
       for (const hero of party) {
         result.itemsLost.push(...hero.inventory, ...Object.values(hero.gear).filter(Boolean));
         hero.inventory = [];
-        hero.gear = { weapon: null, armor: null, accessory: null };
+        hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
       }
     }
   }

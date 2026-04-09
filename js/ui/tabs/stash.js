@@ -1,7 +1,7 @@
 // === Voidborn — Stash Tab ===
 
 import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame } from '../../state.js';
-import { CLASSES } from '../../config.js';
+import { CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
 import { el } from '../../utils.js';
 import { itemDisplay, itemDetail, btn, statRow, toast, progressBar } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -56,12 +56,17 @@ function renderHeroGear(hero) {
     ]),
   ]));
 
-  // Equipment slots
+  // Equipment slots (11 RuneScape-style)
   card.appendChild(el('div', { class: 'text-dim', text: 'Equipment', style: 'font-size: 11px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase;' }));
   const gearGrid = el('div', { class: 'grid-3', style: 'margin-bottom: 8px;' });
 
-  for (const slot of ['weapon', 'armor', 'accessory']) {
+  const isTwoHanded = hero.gear.weapon && hero.gear.weapon.twoHanded;
+
+  for (const slot of GEAR_SLOTS) {
+    const slotInfo = GEAR_SLOT_INFO[slot];
     const item = hero.gear[slot];
+    const blocked = slot === 'offhand' && isTwoHanded;
+
     if (item) {
       const slotEl = el('div', { class: `item-slot rarity-${item.rarity}`, style: 'cursor: pointer;' }, [
         el('span', { class: 'item-icon', text: item.icon }),
@@ -70,11 +75,15 @@ function renderHeroGear(hero) {
       ]);
       slotEl.onclick = () => showEquippedItemActions(hero, slot, item);
       gearGrid.appendChild(slotEl);
+    } else if (blocked) {
+      gearGrid.appendChild(el('div', { class: 'item-slot empty', style: 'opacity: 0.3;' }, [
+        el('span', { class: 'text-dim', text: '2H', style: 'font-size: 10px;' }),
+      ]));
     } else {
       const emptySlot = el('div', { class: 'item-slot empty', style: 'cursor: pointer;' }, [
-        el('span', { class: 'text-dim', text: slot, style: 'font-size: 11px;' }),
+        el('span', { text: slotInfo.icon, style: 'font-size: 16px; opacity: 0.4;' }),
+        el('span', { class: 'text-dim', text: slotInfo.name, style: 'font-size: 9px;' }),
       ]);
-      // Click empty slot to equip from stash
       emptySlot.onclick = () => showEquipOptions(hero, slot);
       gearGrid.appendChild(emptySlot);
     }

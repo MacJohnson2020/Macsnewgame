@@ -1,7 +1,7 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
 import { G, getHero, saveGame, canCarry } from '../../state.js';
-import { ZONES, CLASSES } from '../../config.js';
+import { ZONES, CLASSES, GEAR_SLOTS } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -157,6 +157,14 @@ function renderExploring(container, raid) {
       cardEl.appendChild(equipRow);
     }
     container.appendChild(cardEl);
+  }
+
+  // Trade button (only if 2+ alive heroes)
+  const aliveHeroes = raid.party.map(id => getHero(id)).filter(h => h && h.alive);
+  if (aliveHeroes.length >= 2) {
+    container.appendChild(btn('\uD83D\uDD04 Trade Items', 'btn-block btn-sm', () => {
+      showTradeMenu(container, raid);
+    }));
   }
 
   // Abandon raid button
@@ -592,7 +600,7 @@ function showRaidEquipMenu(parent, hero, raid) {
   picker.appendChild(el('div', { class: 'text-bright', text: `${hero.name} — Equipment`, style: 'font-size: 12px; font-weight: 700; margin-bottom: 4px;' }));
 
   // Current gear
-  for (const slot of ['weapon', 'armor', 'accessory']) {
+  for (const slot of GEAR_SLOTS) {
     const equipped = hero.gear[slot];
     const available = hero.inventory.filter(i => i.slot === slot && !i.isConsumable);
 
@@ -632,6 +640,82 @@ function showRaidEquipMenu(parent, hero, raid) {
 
   picker.appendChild(btn('Close', 'btn-sm', () => picker.remove()));
   parent.appendChild(picker);
+}
+
+// Trade menu — pick a hero, then pick items to transfer
+function showTradeMenu(container, raid) {
+  const old = container.querySelector('.trade-menu');
+  if (old) { old.remove(); return; }
+
+  const menu = el('div', { class: 'trade-menu card', style: 'margin-top: 8px;' });
+  menu.appendChild(el('div', { class: 'text-bright', text: 'Trade — Select Hero', style: 'font-weight: 700; margin-bottom: 6px;' }));
+
+  const heroes = raid.party.map(id => getHero(id)).filter(h => h && h.alive);
+
+  for (const hero of heroes) {
+    const cls = CLASSES[hero.classId];
+    const heroBtn = btn(`${cls.icon} ${hero.name} (${hero.inventory.length} items)`, 'btn-block btn-sm', () => {
+      showTradeFrom(menu, hero, heroes, raid);
+    });
+    menu.appendChild(heroBtn);
+  }
+
+  menu.appendChild(btn('Close', 'btn-sm btn-block', () => menu.remove()));
+  container.appendChild(menu);
+}
+
+function showTradeFrom(menu, fromHero, allHeroes, raid) {
+  menu.innerHTML = '';
+  const cls = CLASSES[fromHero.classId];
+  menu.appendChild(el('div', { class: 'text-bright', text: `${cls.icon} ${fromHero.name}'s Items`, style: 'font-weight: 700; margin-bottom: 6px;' }));
+
+  if (fromHero.inventory.length === 0) {
+    menu.appendChild(el('p', { class: 'text-dim', text: 'No items to trade.' }));
+    menu.appendChild(btn('Back', 'btn-sm btn-block', () => { menu.remove(); }));
+    return;
+  }
+
+  for (const item of fromHero.inventory) {
+    const row = el('div', { class: 'loot-item', style: 'flex-wrap: wrap;' }, [
+      el('div', { class: 'loot-item-info' }, [
+        el('span', { text: item.icon }),
+        el('span', { class: `rarity-text-${item.rarity || 'common'}`, text: item.name, style: 'font-size: 12px;' }),
+        el('span', { class: 'text-dim', text: `${item.size}u`, style: 'font-size: 10px;' }),
+      ]),
+    ]);
+
+    // "Give to" buttons for other heroes
+    for (const target of allHeroes) {
+      if (target.id === fromHero.id) continue;
+      const tCls = CLASSES[target.classId];
+      const space = target.inventoryCapacity - usedInvQuick(target);
+      if (space >= item.size) {
+        row.appendChild(btn(`\u27A1\uFE0F ${tCls.icon} ${target.name}`, 'btn-sm', () => {
+          const idx = fromHero.inventory.findIndex(i => i.id === item.id);
+          if (idx >= 0) {
+            fromHero.inventory.splice(idx, 1);
+            target.inventory.push(item);
+            saveGame();
+            toast(`Gave ${item.name} to ${target.name}`, 'success');
+            showTradeFrom(menu, fromHero, allHeroes, raid);
+          }
+        }));
+      }
+    }
+
+    menu.appendChild(row);
+  }
+
+  menu.appendChild(btn('Back', 'btn-sm btn-block', () => { menu.remove(); }));
+}
+
+function usedInvQuick(hero) {
+  let used = 0;
+  for (const item of hero.inventory) used += item.size;
+  for (const slot of GEAR_SLOTS) {
+    if (hero.gear[slot]) used += hero.gear[slot].size;
+  }
+  return used;
 }
 
 function renderCombatVictory(container, raid) {
@@ -736,7 +820,7 @@ function renderCombatDefeat(container, raid) {
         container.appendChild(el('p', { class: 'text-danger', text: `${hero.name} dropped: ${item.name}`, style: 'font-size: 12px;' }));
       }
       hero.inventory = [];
-      hero.gear = { weapon: null, armor: null, accessory: null };
+      hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
     }
 
     container.appendChild(btn('Continue (weakened)', 'btn-primary btn-block', () => {
@@ -868,7 +952,7 @@ function endRaidFailed(raid) {
   const party = raid.party.map(id => getHero(id)).filter(Boolean);
   for (const hero of party) {
     hero.inventory = [];
-    hero.gear = { weapon: null, armor: null, accessory: null };
+    hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
     hero.alive = true;
     hero.hp = Math.floor(hero.maxHp * 0.5);
   }

@@ -1,7 +1,7 @@
 // === Voidborn — Party Tab ===
 
 import { G, getHero, recalcHero, usedInventory } from '../../state.js';
-import { CLASSES, STATS, STAT_DESC } from '../../config.js';
+import { CLASSES, STATS, STAT_DESC, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
 import { el } from '../../utils.js';
 import { heroCard, progressBar, statRow, btn, toast, itemDetail } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -106,20 +106,27 @@ function renderHeroDetail(hero) {
 
   card.appendChild(statsDiv);
 
-  // Gear
+  // Gear (11 slots)
   card.appendChild(el('div', { class: 'text-dim', text: 'Equipment', style: 'font-size: 11px; font-weight: 600; margin-bottom: 4px;' }));
   const gearGrid = el('div', { class: 'grid-3' });
-  for (const slot of ['weapon', 'armor', 'accessory']) {
+  const isTwoHanded = hero.gear.weapon && hero.gear.weapon.twoHanded;
+  for (const slot of GEAR_SLOTS) {
+    const info = GEAR_SLOT_INFO[slot];
     const item = hero.gear[slot];
+    const blocked = slot === 'offhand' && isTwoHanded;
     if (item) {
-      const slotEl = el('div', { class: `item-slot rarity-${item.rarity}` }, [
+      gearGrid.appendChild(el('div', { class: `item-slot rarity-${item.rarity}` }, [
         el('span', { class: 'item-icon', text: item.icon }),
         el('span', { class: `item-name rarity-text-${item.rarity}`, text: item.name }),
-      ]);
-      gearGrid.appendChild(slotEl);
+      ]));
+    } else if (blocked) {
+      gearGrid.appendChild(el('div', { class: 'item-slot empty', style: 'opacity: 0.3;' }, [
+        el('span', { class: 'text-dim', text: '2H', style: 'font-size: 10px;' }),
+      ]));
     } else {
       gearGrid.appendChild(el('div', { class: 'item-slot empty' }, [
-        el('span', { class: 'text-dim', text: slot }),
+        el('span', { text: info.icon, style: 'font-size: 14px; opacity: 0.3;' }),
+        el('span', { class: 'text-dim', text: info.name, style: 'font-size: 9px;' }),
       ]));
     }
   }

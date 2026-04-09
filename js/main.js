@@ -191,28 +191,27 @@ function giveStarterGear(hero) {
   const { uid } = getUidHelper();
   const classId = hero.classId;
 
-  let weapon, armor;
+  let weapon, body;
 
   switch (classId) {
     case 'fighter':
-      weapon = { id: uid(), name: 'Rusty Sword', icon: '\u2694\uFE0F', slot: 'weapon', weaponType: 'sword', size: 3, rarity: 'common', damageType: 'physical', dmgMin: 5, dmgMax: 9, accuracy: 12, statReq: {}, substats: [] };
-      armor = { id: uid(), name: 'Worn Chainmail', icon: '\uD83E\uDDE5', slot: 'armor', armorType: 'chainmail', size: 4, rarity: 'common', armor: 8, magicResist: 3, statReq: {}, substats: [] };
+      weapon = { id: uid(), name: 'Rusty Sword', icon: '\u2694\uFE0F', slot: 'weapon', weaponType: 'sword', size: 3, rarity: 'common', damageType: 'physical', twoHanded: false, dmgMin: 5, dmgMax: 9, accuracy: 12, statReq: {}, substats: [] };
+      body = { id: uid(), name: 'Worn Chainmail', icon: '\uD83E\uDDE5', slot: 'body', size: 4, rarity: 'common', armor: 8, magicResist: 3, statReq: {}, substats: [] };
       break;
     case 'rogue':
-      weapon = { id: uid(), name: 'Chipped Dagger', icon: '\uD83D\uDDE1\uFE0F', slot: 'weapon', weaponType: 'dagger', size: 1, rarity: 'common', damageType: 'physical', dmgMin: 4, dmgMax: 7, accuracy: 18, statReq: {}, substats: [] };
-      armor = { id: uid(), name: 'Tattered Leather', icon: '\uD83E\uDDE5', slot: 'armor', armorType: 'leather', size: 3, rarity: 'common', armor: 5, magicResist: 2, statReq: {}, substats: [] };
+      weapon = { id: uid(), name: 'Chipped Dagger', icon: '\uD83D\uDDE1\uFE0F', slot: 'weapon', weaponType: 'dagger', size: 1, rarity: 'common', damageType: 'physical', twoHanded: false, dmgMin: 4, dmgMax: 7, accuracy: 18, statReq: {}, substats: [] };
+      body = { id: uid(), name: 'Tattered Leather', icon: '\uD83E\uDDE5', slot: 'body', size: 3, rarity: 'common', armor: 5, magicResist: 2, statReq: {}, substats: [] };
       break;
     case 'mage':
-      weapon = { id: uid(), name: 'Cracked Wand', icon: '\uD83E\uDE84', slot: 'weapon', weaponType: 'wand', size: 1, rarity: 'common', damageType: 'magic', dmgMin: 5, dmgMax: 10, accuracy: 16, statReq: {}, substats: [] };
-      armor = { id: uid(), name: 'Faded Robes', icon: '\uD83E\uDDE5', slot: 'armor', armorType: 'robes', size: 2, rarity: 'common', armor: 2, magicResist: 8, statReq: {}, substats: [] };
+      weapon = { id: uid(), name: 'Cracked Wand', icon: '\uD83E\uDE84', slot: 'weapon', weaponType: 'wand', size: 1, rarity: 'common', damageType: 'magic', twoHanded: false, dmgMin: 5, dmgMax: 10, accuracy: 16, statReq: {}, substats: [] };
+      body = { id: uid(), name: 'Faded Robes', icon: '\uD83E\uDDE5', slot: 'body', size: 2, rarity: 'common', armor: 2, magicResist: 8, statReq: {}, substats: [] };
       break;
   }
 
-  // Give a health potion
   const potion = { id: uid(), consumableId: 'health_potion', name: 'Health Potion', icon: '\u2764\uFE0F', size: 1, rarity: 'common', isConsumable: true, effect: 'heal', value: 30, desc: 'Restore 30 HP' };
 
   hero.gear.weapon = weapon;
-  hero.gear.armor = armor;
+  hero.gear.body = body;
   hero.inventory.push(potion);
 }
 
