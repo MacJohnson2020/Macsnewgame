@@ -477,17 +477,11 @@ function renderHeroActions(raid, combat, hero) {
 
     if (onCooldown || noMp) {
       abilBtn.disabled = true;
-    } else if (ability.aoe) {
-      // AoE — no target needed
-      abilBtn.onclick = () => {
-        abilityAction(combat, hero, ability.id, null);
-        nextTurn(combat);
-        saveGame();
-        renderActiveTab();
-      };
     } else {
-      // Single target — show target picker
-      abilBtn.onclick = () => showAbilityTargetPicker(actions, combat, hero, ability, raid);
+      abilBtn.onclick = () => {
+        // Replace action panel with target selection
+        showAbilityTargetScreen(container, raid, combat, hero, ability);
+      };
     }
     abilRow.appendChild(abilBtn);
   }
@@ -533,29 +527,62 @@ function renderHeroActions(raid, combat, hero) {
   return actions;
 }
 
-// Ability target picker for single-target abilities
-function showAbilityTargetPicker(parent, combat, hero, ability, raid) {
-  // Remove existing picker
-  const old = parent.querySelector('.target-picker');
-  if (old) old.remove();
+// Full-screen ability target selection
+function showAbilityTargetScreen(container, raid, combat, hero, ability) {
+  // Clear the content area and show target selection
+  const content = document.getElementById('content');
+  content.innerHTML = '';
 
-  const picker = el('div', { class: 'target-picker card', style: 'margin-top: 6px;' });
-  picker.appendChild(el('div', { class: 'text-bright', text: `${ability.name} — Pick target:`, style: 'font-size: 12px; font-weight: 700; margin-bottom: 4px;' }));
+  const screen = el('div', { class: 'flex-col gap-md' });
 
-  for (const enemy of combat.enemies.filter(e => e.alive)) {
-    const tBtn = el('button', { class: 'combat-action-btn' });
-    tBtn.appendChild(el('span', { text: `${enemy.icon} ${enemy.name} (${enemy.hp}/${enemy.maxHp})` }));
-    tBtn.onclick = () => {
-      abilityAction(combat, hero, ability.id, enemy);
+  // Header
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: ability.name, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: ability.desc, style: 'font-size: 12px; margin-top: 4px;' }),
+    el('div', { class: 'text-accent', text: `${ability.mpCost} MP | ${ability.aoe ? 'Hits all enemies' : 'Single target'}`, style: 'font-size: 11px; margin-top: 4px;' }),
+  ]));
+
+  if (ability.aoe) {
+    // AoE — confirm or back
+    screen.appendChild(el('div', { class: 'text-dim', text: 'This ability hits all enemies.', style: 'text-align: center; margin: 8px 0;' }));
+    screen.appendChild(btn('Confirm', 'btn-primary btn-block btn-lg', () => {
+      abilityAction(combat, hero, ability.id, null);
       nextTurn(combat);
       saveGame();
       renderActiveTab();
-    };
-    picker.appendChild(tBtn);
+    }));
+  } else {
+    // Single target — show enemy list
+    screen.appendChild(el('div', { class: 'text-dim', text: 'Pick a target:', style: 'font-weight: 600; margin-bottom: 4px;' }));
+
+    for (const enemy of combat.enemies.filter(e => e.alive)) {
+      const preview = previewAttack(hero, enemy, true);
+      const tBtn = el('div', { class: 'combatant-card', style: 'cursor: pointer; margin-bottom: 6px;' });
+      tBtn.appendChild(el('div', { class: 'combatant-header' }, [
+        el('span', { class: 'combatant-icon', text: enemy.icon }),
+        el('div', { class: 'combatant-info' }, [
+          el('span', { class: 'combatant-name', text: enemy.name }),
+          el('span', { class: 'combatant-class', text: `HP: ${enemy.hp}/${enemy.maxHp}` }),
+        ]),
+        el('span', { class: 'text-dim', text: `${preview.hitChance}% hit`, style: 'font-size: 11px;' }),
+      ]));
+      tBtn.appendChild(progressBar(enemy.hp, enemy.maxHp, 'hp', false));
+      tBtn.onclick = () => {
+        abilityAction(combat, hero, ability.id, enemy);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
+      };
+      screen.appendChild(tBtn);
+    }
   }
 
-  picker.appendChild(btn('Cancel', 'btn-sm', () => picker.remove()));
-  parent.appendChild(picker);
+  // Back button
+  screen.appendChild(el('div', { style: 'margin-top: 8px;' }, [
+    btn('\u2190 Back', 'btn-block', () => renderActiveTab()),
+  ]));
+
+  content.appendChild(screen);
 }
 
 // Item picker during combat
