@@ -7,7 +7,7 @@ import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar,
 import { renderActiveTab } from '../router.js';
 import { renderHUD } from '../hud.js';
 import { setNavVisible } from '../router.js';
-import { startRaid, getAvailableNodes, stepToNode, resolveEncounter, onCombatVictory, extractRaid, clearRaid, isPartyWiped, RAID_PHASE } from '../../raid/loop.js';
+import { startRaid, getAvailableNodes, stepToNode, resolveEncounter, extractRaid, clearRaid, isPartyWiped, RAID_PHASE } from '../../raid/loop.js';
 import { renderPath, renderPathOverview } from '../../raid/pathRenderer.js';
 import { getCurrentCombatant, nextTurn, attackAction, abilityAction, useItemAction, fleeAction, previewAttack, enemyAI } from '../../raid/combat.js';
 import { generateGear, generateConsumable, generateGold } from '../../raid/entities.js';
