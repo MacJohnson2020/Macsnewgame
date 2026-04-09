@@ -140,12 +140,23 @@ function renderExploring(container, raid) {
     container.appendChild(el('p', { class: 'text-warning', text: 'Dead end! You must extract or go back.' }));
   }
 
-  // Party status (compact)
+  // Party status with equip buttons
   container.appendChild(el('div', { class: 'divider' }));
   container.appendChild(el('div', { class: 'text-dim', text: 'Party', style: 'font-weight: 600; margin-bottom: 4px;' }));
   for (const heroId of raid.party) {
     const hero = getHero(heroId);
-    if (hero) container.appendChild(heroCard(hero));
+    if (!hero) continue;
+    const cardEl = heroCard(hero);
+    // Add equip button per hero
+    const gearCount = hero.inventory.filter(i => i.slot && !i.isConsumable).length;
+    if (gearCount > 0 || hero.inventory.length > 0) {
+      const equipRow = el('div', { style: 'margin-top: 4px; display: flex; gap: 4px;' });
+      equipRow.appendChild(btn(`\uD83D\uDEE1\uFE0F Equip (${gearCount})`, 'btn-sm', () => {
+        showRaidEquipMenu(container, hero, raid);
+      }));
+      cardEl.appendChild(equipRow);
+    }
+    container.appendChild(cardEl);
   }
 
   // Abandon raid button
@@ -192,7 +203,7 @@ function renderEncounter(container, raid) {
           for (const heroId of raid.party) {
             const hero = getHero(heroId);
             if (hero && hero.alive && canCarry(hero, item)) {
-              const pickBtn = btn(`${CLASSES[hero.classId].icon}`, 'btn-sm', () => {
+              const pickBtn = btn(`\uD83C\uDF92 ${hero.name}`, 'btn-sm', () => {
                 hero.inventory.push(item);
                 const itemIdx = result.items.indexOf(item);
                 if (itemIdx >= 0) result.items.splice(itemIdx, 1);
@@ -272,7 +283,7 @@ function renderEncounter(container, raid) {
           for (const heroId of raid.party) {
             const hero = getHero(heroId);
             if (hero && hero.alive && canCarry(hero, item)) {
-              lootRow.appendChild(btn(`${CLASSES[hero.classId].icon}`, 'btn-sm', () => {
+              lootRow.appendChild(btn(`\uD83C\uDF92 ${hero.name}`, 'btn-sm', () => {
                 hero.inventory.push(item);
                 saveGame();
                 renderActiveTab();
@@ -427,11 +438,8 @@ function renderHeroActions(raid, combat, hero) {
 
   actions.appendChild(el('div', { class: 'text-bright', text: `${hero.name}'s Turn`, style: 'font-weight: 700; text-align: center; margin-bottom: 4px;' }));
 
-  // Attack button — needs target selection
-  const atkRow = el('div', { class: 'combat-action-row' });
-
-  // Attack (show target buttons)
-  atkRow.appendChild(el('div', { class: 'text-dim', text: 'Attack:', style: 'grid-column: 1 / -1; font-size: 11px; font-weight: 600;' }));
+  // Attack — pick target
+  actions.appendChild(el('div', { class: 'text-dim', text: 'Attack:', style: 'font-size: 11px; font-weight: 600; margin-bottom: 2px;' }));
   for (const enemy of combat.enemies.filter(e => e.alive)) {
     const preview = previewAttack(hero, enemy, true);
     const atkBtn = el('button', { class: 'combat-action-btn' });
@@ -446,8 +454,9 @@ function renderHeroActions(raid, combat, hero) {
     actions.appendChild(atkBtn);
   }
 
-  // Class abilities
+  // Class abilities — with target selection for single-target
   const cls = CLASSES[hero.classId];
+  actions.appendChild(el('div', { class: 'text-dim', text: 'Abilities:', style: 'font-size: 11px; font-weight: 600; margin-top: 6px; margin-bottom: 2px;' }));
   const abilRow = el('div', { class: 'combat-action-row' });
   for (const ability of cls.abilities) {
     if (hero.level < ability.level) continue;
@@ -456,46 +465,48 @@ function renderHeroActions(raid, combat, hero) {
 
     const abilBtn = el('button', { class: 'combat-action-btn' });
     abilBtn.appendChild(el('span', { text: ability.name }));
-    abilBtn.appendChild(el('span', { class: 'hit-chance', text: `${ability.mpCost} MP | ${ability.desc}` }));
+    abilBtn.appendChild(el('span', { class: 'hit-chance', text: `${ability.mpCost} MP${onCooldown ? ' (CD)' : ''}` }));
 
     if (onCooldown || noMp) {
       abilBtn.disabled = true;
-    } else {
+    } else if (ability.aoe) {
+      // AoE — no target needed
       abilBtn.onclick = () => {
-        // For AoE, no target needed. For single target, pick first alive enemy.
-        const target = ability.aoe ? null : combat.enemies.find(e => e.alive);
-        abilityAction(combat, hero, ability.id, target);
+        abilityAction(combat, hero, ability.id, null);
         nextTurn(combat);
         saveGame();
         renderActiveTab();
       };
+    } else {
+      // Single target — show target picker
+      abilBtn.onclick = () => showAbilityTargetPicker(actions, combat, hero, ability, raid);
     }
     abilRow.appendChild(abilBtn);
   }
   actions.appendChild(abilRow);
 
-  // Items & Flee row
-  const utilRow = el('div', { class: 'combat-action-row' });
+  // Items & Flee
+  const utilRow = el('div', { class: 'combat-action-row', style: 'margin-top: 6px;' });
 
-  // Item use
+  // Item use — show list of consumables
   const consumables = hero.inventory.filter(i => i.isConsumable);
   if (consumables.length > 0) {
     const itemBtn = el('button', { class: 'combat-action-btn' });
-    itemBtn.textContent = `Use Item (${consumables.length})`;
-    itemBtn.onclick = () => {
-      // Use first health potion on self (simplified for MVP)
-      const potion = consumables.find(i => i.effect === 'heal') || consumables[0];
-      useItemAction(combat, hero, potion);
-      nextTurn(combat);
-      saveGame();
-      renderActiveTab();
-    };
+    itemBtn.textContent = `\uD83C\uDF1F Items (${consumables.length})`;
+    itemBtn.onclick = () => showItemPicker(actions, combat, hero, raid);
     utilRow.appendChild(itemBtn);
   }
 
+  // Equip — manage gear mid-raid
+  const gearItems = hero.inventory.filter(i => i.slot && !i.isConsumable);
+  const equipBtn = el('button', { class: 'combat-action-btn' });
+  equipBtn.textContent = `\uD83D\uDEE1\uFE0F Equip${gearItems.length ? ` (${gearItems.length})` : ''}`;
+  equipBtn.onclick = () => showRaidEquipMenu(actions, hero, raid);
+  utilRow.appendChild(equipBtn);
+
   // Flee
   const fleeBtn = el('button', { class: 'combat-action-btn' });
-  fleeBtn.textContent = 'Flee';
+  fleeBtn.textContent = '\uD83C\uDFC3 Flee';
   fleeBtn.onclick = () => {
     fleeAction(combat);
     if (combat.state === 'fled') {
@@ -512,6 +523,115 @@ function renderHeroActions(raid, combat, hero) {
   actions.appendChild(utilRow);
 
   return actions;
+}
+
+// Ability target picker for single-target abilities
+function showAbilityTargetPicker(parent, combat, hero, ability, raid) {
+  // Remove existing picker
+  const old = parent.querySelector('.target-picker');
+  if (old) old.remove();
+
+  const picker = el('div', { class: 'target-picker card', style: 'margin-top: 6px;' });
+  picker.appendChild(el('div', { class: 'text-bright', text: `${ability.name} — Pick target:`, style: 'font-size: 12px; font-weight: 700; margin-bottom: 4px;' }));
+
+  for (const enemy of combat.enemies.filter(e => e.alive)) {
+    const tBtn = el('button', { class: 'combat-action-btn' });
+    tBtn.appendChild(el('span', { text: `${enemy.icon} ${enemy.name} (${enemy.hp}/${enemy.maxHp})` }));
+    tBtn.onclick = () => {
+      abilityAction(combat, hero, ability.id, enemy);
+      nextTurn(combat);
+      saveGame();
+      renderActiveTab();
+    };
+    picker.appendChild(tBtn);
+  }
+
+  picker.appendChild(btn('Cancel', 'btn-sm', () => picker.remove()));
+  parent.appendChild(picker);
+}
+
+// Item picker during combat
+function showItemPicker(parent, combat, hero, raid) {
+  const old = parent.querySelector('.item-picker');
+  if (old) old.remove();
+
+  const picker = el('div', { class: 'item-picker card', style: 'margin-top: 6px;' });
+  picker.appendChild(el('div', { class: 'text-bright', text: 'Use Item:', style: 'font-size: 12px; font-weight: 700; margin-bottom: 4px;' }));
+
+  const consumables = hero.inventory.filter(i => i.isConsumable);
+  for (const item of consumables) {
+    const row = el('button', { class: 'combat-action-btn', style: 'text-align: left;' });
+    row.appendChild(el('span', { text: `${item.icon} ${item.name}` }));
+    row.appendChild(el('span', { class: 'hit-chance', text: item.desc }));
+    row.onclick = () => {
+      if (item.effect === 'revive') {
+        // Pick a dead hero to revive
+        const dead = combat.party.filter(h => !h.alive);
+        if (dead.length === 0) { toast('No one to revive', 'info'); return; }
+        useItemAction(combat, hero, item, dead[0]);
+      } else {
+        useItemAction(combat, hero, item);
+      }
+      nextTurn(combat);
+      saveGame();
+      renderActiveTab();
+    };
+    picker.appendChild(row);
+  }
+
+  picker.appendChild(btn('Cancel', 'btn-sm', () => picker.remove()));
+  parent.appendChild(picker);
+}
+
+// Equip menu during raid (combat or exploration)
+function showRaidEquipMenu(parent, hero, raid) {
+  const old = parent.querySelector('.equip-picker');
+  if (old) old.remove();
+
+  const picker = el('div', { class: 'equip-picker card', style: 'margin-top: 6px;' });
+  picker.appendChild(el('div', { class: 'text-bright', text: `${hero.name} — Equipment`, style: 'font-size: 12px; font-weight: 700; margin-bottom: 4px;' }));
+
+  // Current gear
+  for (const slot of ['weapon', 'armor', 'accessory']) {
+    const equipped = hero.gear[slot];
+    const available = hero.inventory.filter(i => i.slot === slot && !i.isConsumable);
+
+    const row = el('div', { style: 'margin-bottom: 6px;' });
+    row.appendChild(el('div', { class: 'text-dim', text: slot.toUpperCase(), style: 'font-size: 10px; font-weight: 700;' }));
+
+    if (equipped) {
+      row.appendChild(el('div', { class: 'text-dim', text: `  Equipped: ${equipped.icon} ${equipped.name}`, style: 'font-size: 11px;' }));
+    }
+
+    // Show equippable items from backpack
+    for (const item of available) {
+      let meetsReqs = true;
+      if (item.statReq) {
+        for (const [stat, val] of Object.entries(item.statReq)) {
+          if ((hero.stats[stat] || 0) < val) meetsReqs = false;
+        }
+      }
+      if (!meetsReqs) continue;
+
+      const eqBtn = el('button', { class: 'combat-action-btn', style: 'text-align: left;' });
+      eqBtn.appendChild(el('span', { text: `${item.icon} Equip ${item.name}`, class: `rarity-text-${item.rarity}` }));
+      eqBtn.onclick = () => {
+        const idx = hero.inventory.findIndex(i => i.id === item.id);
+        if (idx >= 0) hero.inventory.splice(idx, 1);
+        if (hero.gear[slot]) hero.inventory.push(hero.gear[slot]);
+        hero.gear[slot] = item;
+        saveGame();
+        renderActiveTab();
+        toast(`Equipped ${item.name}`, 'success');
+      };
+      row.appendChild(eqBtn);
+    }
+
+    picker.appendChild(row);
+  }
+
+  picker.appendChild(btn('Close', 'btn-sm', () => picker.remove()));
+  parent.appendChild(picker);
 }
 
 function renderCombatVictory(container, raid) {
@@ -556,7 +676,7 @@ function renderCombatVictory(container, raid) {
       for (const heroId of raid.party) {
         const hero = getHero(heroId);
         if (hero && hero.alive && canCarry(hero, item)) {
-          lootRow.appendChild(btn(`${CLASSES[hero.classId].icon}`, 'btn-sm', () => {
+          lootRow.appendChild(btn(`\uD83C\uDF92 ${hero.name}`, 'btn-sm', () => {
             hero.inventory.push(item);
             raid.itemsCollected.push(item);
             lootRow.remove();
