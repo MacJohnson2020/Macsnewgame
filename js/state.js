@@ -1,6 +1,6 @@
 // === Voidborn — Game State Management ===
 
-import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZE, MAX_ENERGY } from './config.js';
+import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZE, MAX_ENERGY, GEAR_SLOTS } from './config.js';
 import { uid, deepClone } from './utils.js';
 
 const SAVE_KEY = 'voidborn_save';
@@ -21,7 +21,7 @@ export function createHero(name, classId, stats) {
     maxHp: cls.hpBase + Math.floor((stats.CON - 10) / 2) * 2,
     mp: cls.mpBase + Math.floor((stats.INT - 10) / 2) * 2,
     maxMp: cls.mpBase + Math.floor((stats.INT - 10) / 2) * 2,
-    gear: { weapon: null, armor: null, accessory: null },
+    gear: Object.fromEntries(GEAR_SLOTS.map(s => [s, null])),
     inventory: [], // items carried, each has a .size
     inventoryCapacity: HERO_INVENTORY_SIZE,
     abilityCooldowns: {},
@@ -65,8 +65,7 @@ export function addXp(hero, amount) {
 export function usedInventory(hero) {
   let used = 0;
   for (const item of hero.inventory) used += item.size;
-  // Equipped gear counts toward inventory
-  for (const slot of ['weapon', 'armor', 'accessory']) {
+  for (const slot of GEAR_SLOTS) {
     if (hero.gear[slot]) used += hero.gear[slot].size;
   }
   return used;

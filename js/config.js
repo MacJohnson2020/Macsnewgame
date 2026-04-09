@@ -73,29 +73,79 @@ export function xpForLevel(level) {
   return Math.floor(50 * Math.pow(level, 1.8));
 }
 
+// Equipment slots (RuneScape style)
+export const GEAR_SLOTS = ['head','body','legs','weapon','offhand','hands','feet','cape','neck','ring','ammo'];
+
+export const GEAR_SLOT_INFO = {
+  head:    { name: 'Head',     icon: '\u26D1\uFE0F' },
+  body:    { name: 'Body',     icon: '\uD83E\uDDE5' },
+  legs:    { name: 'Legs',     icon: '\uD83D\uDC56' },
+  weapon:  { name: 'Weapon',   icon: '\u2694\uFE0F' },
+  offhand: { name: 'Off-hand', icon: '\uD83D\uDEE1\uFE0F' },
+  hands:   { name: 'Hands',    icon: '\uD83E\uDDE4' },
+  feet:    { name: 'Feet',     icon: '\uD83D\uDC62' },
+  cape:    { name: 'Cape',     icon: '\uD83E\uDDE3' },
+  neck:    { name: 'Neck',     icon: '\uD83D\uDCFF' },
+  ring:    { name: 'Ring',     icon: '\uD83D\uDC8D' },
+  ammo:    { name: 'Ammo',     icon: '\uD83C\uDFF9' },
+};
+
 // Weapon types
 export const WEAPON_TYPES = {
-  sword:     { name: 'Sword',      icon: '\u2694\uFE0F', slot: 'weapon', size: 3, statReq: { STR: 10 }, damageType: 'physical', baseDmg: [8, 14],  baseAcc: 15 },
-  dagger:    { name: 'Dagger',     icon: '\uD83D\uDDE1\uFE0F', slot: 'weapon', size: 1, statReq: { DEX: 10 }, damageType: 'physical', baseDmg: [5, 10],  baseAcc: 25 },
-  greatsword:{ name: 'Greatsword', icon: '\u2694\uFE0F', slot: 'weapon', size: 5, statReq: { STR: 14 }, damageType: 'physical', baseDmg: [14, 22], baseAcc: 10 },
-  bow:       { name: 'Bow',        icon: '\uD83C\uDFF9',  slot: 'weapon', size: 3, statReq: { DEX: 12 }, damageType: 'physical', baseDmg: [7, 13],  baseAcc: 20 },
-  staff:     { name: 'Staff',      icon: '\uD83E\uDE84',  slot: 'weapon', size: 3, statReq: { INT: 12 }, damageType: 'magic',    baseDmg: [10, 18], baseAcc: 18 },
-  wand:      { name: 'Wand',       icon: '\uD83E\uDE84',  slot: 'weapon', size: 1, statReq: { INT: 10 }, damageType: 'magic',    baseDmg: [6, 12],  baseAcc: 22 },
+  sword:      { name: 'Sword',      icon: '\u2694\uFE0F',      slot: 'weapon', size: 3, statReq: { STR: 10 }, damageType: 'physical', baseDmg: [8, 14],  baseAcc: 15, twoHanded: false },
+  dagger:     { name: 'Dagger',     icon: '\uD83D\uDDE1\uFE0F', slot: 'weapon', size: 1, statReq: { DEX: 10 }, damageType: 'physical', baseDmg: [5, 10],  baseAcc: 25, twoHanded: false },
+  greatsword: { name: 'Greatsword', icon: '\u2694\uFE0F',      slot: 'weapon', size: 5, statReq: { STR: 14 }, damageType: 'physical', baseDmg: [14, 22], baseAcc: 10, twoHanded: true },
+  bow:        { name: 'Bow',        icon: '\uD83C\uDFF9',       slot: 'weapon', size: 3, statReq: { DEX: 12 }, damageType: 'physical', baseDmg: [7, 13],  baseAcc: 20, twoHanded: true, usesAmmo: true },
+  staff:      { name: 'Staff',      icon: '\uD83E\uDE84',       slot: 'weapon', size: 3, statReq: { INT: 12 }, damageType: 'magic',    baseDmg: [10, 18], baseAcc: 18, twoHanded: true },
+  wand:       { name: 'Wand',       icon: '\uD83E\uDE84',       slot: 'weapon', size: 1, statReq: { INT: 10 }, damageType: 'magic',    baseDmg: [6, 12],  baseAcc: 22, twoHanded: false },
+  crossbow:   { name: 'Crossbow',   icon: '\uD83C\uDFF9',       slot: 'weapon', size: 3, statReq: { DEX: 11 }, damageType: 'physical', baseDmg: [9, 16],  baseAcc: 18, twoHanded: false, usesAmmo: true },
 };
 
-// Armor types
-export const ARMOR_TYPES = {
-  leather:    { name: 'Leather Armor',  icon: '\uD83E\uDDE5', slot: 'armor', size: 3, statReq: {},           baseArmor: [5, 10],  baseMR: [2, 5] },
-  chainmail:  { name: 'Chainmail',      icon: '\uD83E\uDDE5', slot: 'armor', size: 4, statReq: { STR: 12 }, baseArmor: [10, 18], baseMR: [3, 6] },
-  plate:      { name: 'Plate Armor',    icon: '\uD83D\uDEE1\uFE0F', slot: 'armor', size: 6, statReq: { STR: 15 }, baseArmor: [18, 28], baseMR: [2, 4] },
-  robes:      { name: 'Mage Robes',     icon: '\uD83E\uDDE5', slot: 'armor', size: 2, statReq: { INT: 10 }, baseArmor: [2, 5],   baseMR: [10, 20] },
+// Off-hand types
+export const OFFHAND_TYPES = {
+  shield:     { name: 'Shield',     icon: '\uD83D\uDEE1\uFE0F', slot: 'offhand', size: 3, statReq: { STR: 10 }, baseArmor: [8, 16], baseMR: [3, 6] },
+  tome:       { name: 'Tome',       icon: '\uD83D\uDCD6',       slot: 'offhand', size: 2, statReq: { INT: 10 }, baseArmor: [1, 3],  baseMR: [8, 14] },
+  offDagger:  { name: 'Off-dagger', icon: '\uD83D\uDDE1\uFE0F', slot: 'offhand', size: 1, statReq: { DEX: 11 }, baseDmg: [3, 7], baseAcc: 12 },
 };
 
-// Accessory types
-export const ACCESSORY_TYPES = {
-  ring:    { name: 'Ring',    icon: '\uD83D\uDC8D', slot: 'accessory', size: 1 },
-  amulet:  { name: 'Amulet',  icon: '\uD83D\uDCFF', slot: 'accessory', size: 1 },
-  cloak:   { name: 'Cloak',   icon: '\uD83E\uDDE3', slot: 'accessory', size: 2 },
+// Body armor types
+export const BODY_TYPES = {
+  leather:   { name: 'Leather Armor', icon: '\uD83E\uDDE5',      slot: 'body', size: 3, statReq: {},           baseArmor: [5, 10],  baseMR: [2, 5] },
+  chainmail: { name: 'Chainmail',     icon: '\uD83E\uDDE5',      slot: 'body', size: 4, statReq: { STR: 12 }, baseArmor: [10, 18], baseMR: [3, 6] },
+  plate:     { name: 'Plate Armor',   icon: '\uD83D\uDEE1\uFE0F', slot: 'body', size: 6, statReq: { STR: 15 }, baseArmor: [18, 28], baseMR: [2, 4] },
+  robes:     { name: 'Mage Robes',    icon: '\uD83E\uDDE5',      slot: 'body', size: 2, statReq: { INT: 10 }, baseArmor: [2, 5],   baseMR: [10, 20] },
+};
+
+// Other gear slot types
+export const SLOT_TYPES = {
+  // Head
+  helm:      { name: 'Helm',       icon: '\u26D1\uFE0F', slot: 'head',  size: 2, baseArmor: [4, 10],  baseMR: [1, 4] },
+  hood:      { name: 'Hood',       icon: '\u26D1\uFE0F', slot: 'head',  size: 1, baseArmor: [1, 3],   baseMR: [4, 10] },
+  circlet:   { name: 'Circlet',    icon: '\u26D1\uFE0F', slot: 'head',  size: 1, baseArmor: [1, 2],   baseMR: [3, 8] },
+  // Legs
+  greaves:   { name: 'Greaves',    icon: '\uD83D\uDC56', slot: 'legs',  size: 3, statReq: { STR: 10 }, baseArmor: [6, 14], baseMR: [1, 3] },
+  leggings:  { name: 'Leggings',   icon: '\uD83D\uDC56', slot: 'legs',  size: 2, baseArmor: [3, 8],   baseMR: [2, 5] },
+  robeskirt: { name: 'Robe Skirt', icon: '\uD83D\uDC56', slot: 'legs',  size: 2, baseArmor: [1, 3],   baseMR: [5, 12] },
+  // Hands
+  gauntlets: { name: 'Gauntlets',  icon: '\uD83E\uDDE4', slot: 'hands', size: 2, statReq: { STR: 10 }, baseArmor: [3, 7], baseMR: [0, 2] },
+  gloves:    { name: 'Gloves',     icon: '\uD83E\uDDE4', slot: 'hands', size: 1, baseArmor: [1, 3],   baseMR: [1, 3] },
+  bracers:   { name: 'Bracers',    icon: '\uD83E\uDDE4', slot: 'hands', size: 1, baseArmor: [2, 5],   baseMR: [1, 4] },
+  // Feet
+  boots:     { name: 'Boots',      icon: '\uD83D\uDC62', slot: 'feet',  size: 2, baseArmor: [3, 8],   baseMR: [1, 3] },
+  sandals:   { name: 'Sandals',    icon: '\uD83D\uDC62', slot: 'feet',  size: 1, baseArmor: [0, 2],   baseMR: [3, 7] },
+  // Cape
+  cloak:     { name: 'Cloak',      icon: '\uD83E\uDDE3', slot: 'cape',  size: 2, baseArmor: [2, 5],   baseMR: [2, 5] },
+  cape:      { name: 'Cape',       icon: '\uD83E\uDDE3', slot: 'cape',  size: 1, baseArmor: [1, 3],   baseMR: [1, 3] },
+  // Neck
+  amulet:    { name: 'Amulet',     icon: '\uD83D\uDCFF', slot: 'neck',  size: 1 },
+  necklace:  { name: 'Necklace',   icon: '\uD83D\uDCFF', slot: 'neck',  size: 1 },
+  // Ring
+  ring:      { name: 'Ring',       icon: '\uD83D\uDC8D', slot: 'ring',  size: 1 },
+  signet:    { name: 'Signet',     icon: '\uD83D\uDC8D', slot: 'ring',  size: 1 },
+  // Ammo
+  arrows:    { name: 'Arrows',     icon: '\u27B3',       slot: 'ammo',  size: 1, stackable: true },
+  bolts:     { name: 'Bolts',      icon: '\u27B3',       slot: 'ammo',  size: 1, stackable: true },
+  runes:     { name: 'Runes',      icon: '\uD83D\uDD2E', slot: 'ammo',  size: 1, stackable: true },
 };
 
 // Rarity config

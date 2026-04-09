@@ -1,6 +1,6 @@
 // === Voidborn — Entity (Hero/Enemy) stat calculations ===
 
-import { CLASSES, ENEMIES, WEAPON_TYPES, ARMOR_TYPES, RARITIES } from '../config.js';
+import { CLASSES, ENEMIES, WEAPON_TYPES, OFFHAND_TYPES, BODY_TYPES, SLOT_TYPES, RARITIES, GEAR_SLOTS } from '../config.js';
 import { statMod, randInt, pick, weightedPick, uid } from '../utils.js';
 
 // Get hero's total accuracy
@@ -31,19 +31,21 @@ export function getAccuracy(hero) {
   return Math.max(1, acc);
 }
 
-// Get hero's armor (physical defense)
+// Get hero's armor (physical defense) — sum from all gear slots
 export function getArmor(hero) {
   let armor = 0;
-  if (hero.gear.armor) armor += hero.gear.armor.armor || 0;
-  if (hero.gear.accessory && hero.gear.accessory.armor) armor += hero.gear.accessory.armor;
+  for (const slot of GEAR_SLOTS) {
+    if (hero.gear[slot] && hero.gear[slot].armor) armor += hero.gear[slot].armor;
+  }
   return armor;
 }
 
-// Get hero's magic resist
+// Get hero's magic resist — sum from all gear slots + WIS
 export function getMagicResist(hero) {
-  let mr = statMod(hero.stats.WIS) * 2; // WIS contributes to base MR
-  if (hero.gear.armor) mr += hero.gear.armor.magicResist || 0;
-  if (hero.gear.accessory && hero.gear.accessory.magicResist) mr += hero.gear.accessory.magicResist;
+  let mr = statMod(hero.stats.WIS) * 2;
+  for (const slot of GEAR_SLOTS) {
+    if (hero.gear[slot] && hero.gear[slot].magicResist) mr += hero.gear[slot].magicResist;
+  }
   return Math.max(0, mr);
 }
 
@@ -88,7 +90,7 @@ export function getInitiative(hero) {
 // Get total substat value across all gear
 function getSubstatTotal(hero, substatId) {
   let total = 0;
-  for (const slot of ['weapon', 'armor', 'accessory']) {
+  for (const slot of GEAR_SLOTS) {
     const item = hero.gear[slot];
     if (item && item.substats) {
       for (const sub of item.substats) {
@@ -143,105 +145,98 @@ export function createEnemy(typeId, zoneLevel = 1) {
   };
 }
 
-// Generate a random piece of gear
+// Generate a random piece of gear for any of the 11 slots
 export function generateGear(level, forcedRarity = null) {
-  // Pick rarity
   const rarityEntries = Object.entries(RARITIES).map(([id, r]) => ({ id, ...r }));
   const rarity = forcedRarity
     ? { id: forcedRarity, ...RARITIES[forcedRarity] }
     : weightedPick(rarityEntries);
 
-  // Pick gear type
-  const gearCategory = pick(['weapon', 'armor', 'accessory']);
+  const scale = 1 + (level - 1) * 0.1;
+
+  // Pick a random slot category
+  const slotPool = pick(['weapon', 'offhand', 'body', 'head', 'legs', 'hands', 'feet', 'cape', 'neck', 'ring', 'ammo']);
   let item;
 
-  if (gearCategory === 'weapon') {
+  if (slotPool === 'weapon') {
     const typeId = pick(Object.keys(WEAPON_TYPES));
     const type = WEAPON_TYPES[typeId];
-    const scale = 1 + (level - 1) * 0.1;
     item = {
-      id: uid(),
-      name: `${rarity.name} ${type.name}`,
-      icon: type.icon,
-      slot: 'weapon',
-      weaponType: typeId,
-      size: type.size,
-      rarity: rarity.id,
-      damageType: type.damageType,
+      id: uid(), name: `${rarity.name} ${type.name}`, icon: type.icon,
+      slot: 'weapon', weaponType: typeId, size: type.size, rarity: rarity.id,
+      damageType: type.damageType, twoHanded: type.twoHanded || false,
+      usesAmmo: type.usesAmmo || false,
       dmgMin: Math.round(type.baseDmg[0] * scale * rarity.statMult),
       dmgMax: Math.round(type.baseDmg[1] * scale * rarity.statMult),
       accuracy: Math.round(type.baseAcc * scale * rarity.statMult * 0.8),
-      statReq: { ...type.statReq },
-      substats: [],
+      statReq: { ...type.statReq }, substats: [],
     };
-  } else if (gearCategory === 'armor') {
-    const typeId = pick(Object.keys(ARMOR_TYPES));
-    const type = ARMOR_TYPES[typeId];
-    const scale = 1 + (level - 1) * 0.1;
+  } else if (slotPool === 'offhand') {
+    const typeId = pick(Object.keys(OFFHAND_TYPES));
+    const type = OFFHAND_TYPES[typeId];
     item = {
-      id: uid(),
-      name: `${rarity.name} ${type.name}`,
-      icon: type.icon,
-      slot: 'armor',
-      armorType: typeId,
-      size: type.size,
-      rarity: rarity.id,
+      id: uid(), name: `${rarity.name} ${type.name}`, icon: type.icon,
+      slot: 'offhand', size: type.size, rarity: rarity.id,
+      statReq: { ...type.statReq }, substats: [],
+    };
+    if (type.baseArmor) {
+      item.armor = Math.round(randInt(type.baseArmor[0], type.baseArmor[1]) * scale * rarity.statMult);
+      item.magicResist = Math.round(randInt(type.baseMR[0], type.baseMR[1]) * scale * rarity.statMult);
+    }
+    if (type.baseDmg) {
+      item.dmgMin = Math.round(type.baseDmg[0] * scale * rarity.statMult);
+      item.dmgMax = Math.round(type.baseDmg[1] * scale * rarity.statMult);
+      item.accuracy = Math.round(type.baseAcc * scale * rarity.statMult * 0.8);
+      item.damageType = 'physical';
+    }
+  } else if (slotPool === 'body') {
+    const typeId = pick(Object.keys(BODY_TYPES));
+    const type = BODY_TYPES[typeId];
+    item = {
+      id: uid(), name: `${rarity.name} ${type.name}`, icon: type.icon,
+      slot: 'body', size: type.size, rarity: rarity.id,
       armor: Math.round(randInt(type.baseArmor[0], type.baseArmor[1]) * scale * rarity.statMult),
       magicResist: Math.round(randInt(type.baseMR[0], type.baseMR[1]) * scale * rarity.statMult),
-      statReq: { ...type.statReq },
-      substats: [],
+      statReq: { ...(type.statReq || {}) }, substats: [],
     };
   } else {
-    const typeId = pick(Object.keys({ ring: 1, amulet: 1, cloak: 1 }));
-    const types = { ring: 'Ring', amulet: 'Amulet', cloak: 'Cloak' };
-    const icons = { ring: '\uD83D\uDC8D', amulet: '\uD83D\uDCFF', cloak: '\uD83E\uDDE3' };
-    const sizes = { ring: 1, amulet: 1, cloak: 2 };
-    item = {
-      id: uid(),
-      name: `${rarity.name} ${types[typeId]}`,
-      icon: icons[typeId],
-      slot: 'accessory',
-      accessoryType: typeId,
-      size: sizes[typeId],
-      rarity: rarity.id,
-      armor: Math.round(randInt(1, 5) * rarity.statMult),
-      magicResist: Math.round(randInt(1, 5) * rarity.statMult),
-      substats: [],
-    };
+    // Head, legs, hands, feet, cape, neck, ring, ammo
+    const candidates = Object.entries(SLOT_TYPES).filter(([, t]) => t.slot === slotPool);
+    if (candidates.length === 0) {
+      // Fallback to a ring
+      item = { id: uid(), name: `${rarity.name} Ring`, icon: '\uD83D\uDC8D', slot: 'ring', size: 1, rarity: rarity.id, substats: [] };
+    } else {
+      const [typeId, type] = pick(candidates);
+      item = {
+        id: uid(), name: `${rarity.name} ${type.name}`, icon: type.icon,
+        slot: type.slot, size: type.size, rarity: rarity.id,
+        statReq: { ...(type.statReq || {}) }, substats: [],
+      };
+      if (type.baseArmor) item.armor = Math.round(randInt(type.baseArmor[0], type.baseArmor[1]) * scale * rarity.statMult);
+      if (type.baseMR) item.magicResist = Math.round(randInt(type.baseMR[0], type.baseMR[1]) * scale * rarity.statMult);
+      if (type.stackable) item.stackable = true;
+    }
   }
 
   // Add substats based on rarity
-  const { SUBSTATS } = await_substats();
-  const subCount = rarity.substatCount;
+  const SUBSTATS = [
+    { id: 'accuracy', name: 'Accuracy', range: [3, 10] },
+    { id: 'armorPen', name: 'Armor Pen', range: [3, 12], suffix: '%' },
+    { id: 'magicPen', name: 'Magic Pen', range: [3, 12], suffix: '%' },
+    { id: 'critChance', name: 'Crit Chance', range: [2, 8], suffix: '%' },
+    { id: 'maxHp', name: 'Max HP', range: [5, 25] },
+    { id: 'maxMp', name: 'Max MP', range: [3, 15] },
+  ];
   const usedIds = new Set();
-  for (let i = 0; i < subCount; i++) {
+  for (let i = 0; i < rarity.substatCount; i++) {
     const available = SUBSTATS.filter(s => !usedIds.has(s.id));
     if (available.length === 0) break;
     const sub = pick(available);
     usedIds.add(sub.id);
-    item.substats.push({
-      id: sub.id,
-      name: sub.name,
-      value: randInt(sub.range[0], sub.range[1]),
-      suffix: sub.suffix || '',
-    });
+    item.substats.push({ id: sub.id, name: sub.name, value: randInt(sub.range[0], sub.range[1]), suffix: sub.suffix || '' });
   }
 
   return item;
-}
-
-// Workaround for circular import - inline substats
-function await_substats() {
-  return {
-    SUBSTATS: [
-      { id: 'accuracy', name: 'Accuracy', range: [3, 10] },
-      { id: 'armorPen', name: 'Armor Pen', range: [3, 12], suffix: '%' },
-      { id: 'magicPen', name: 'Magic Pen', range: [3, 12], suffix: '%' },
-      { id: 'critChance', name: 'Crit Chance', range: [2, 8], suffix: '%' },
-      { id: 'maxHp', name: 'Max HP', range: [5, 25] },
-      { id: 'maxMp', name: 'Max MP', range: [3, 15] },
-    ]
-  };
 }
 
 // Generate a consumable drop
