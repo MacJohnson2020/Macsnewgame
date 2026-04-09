@@ -1,6 +1,6 @@
 // === Voidborn — HUD (Top Bar) ===
 
-import { G, getMainHero } from '../state.js';
+import { G, getMainHero, deleteSave } from '../state.js';
 import { el, fmtNum } from '../utils.js';
 
 export function renderHUD() {
@@ -30,6 +30,21 @@ export function renderHUD() {
     });
     hud.appendChild(badge);
   }
+
+  // Reset button
+  const resetBtn = el('button', {
+    text: '\u2699\uFE0F',
+    style: 'background:none;border:none;font-size:18px;cursor:pointer;margin-left:auto;padding:4px;',
+  });
+  resetBtn.onclick = () => {
+    if (confirm('Reset game? This deletes ALL progress permanently.')) {
+      if (confirm('Are you sure? This cannot be undone.')) {
+        deleteSave();
+        location.reload();
+      }
+    }
+  };
+  hud.appendChild(resetBtn);
 }
 
 function hudStat(icon, value) {

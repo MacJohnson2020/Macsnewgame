@@ -2,7 +2,7 @@
 
 import { G, getHero, saveGame } from '../state.js';
 import { ZONES, CORRUPTION_LEVELS, xpForLevel } from '../config.js';
-import { generateRaidPath, getChildren, revealAdjacent } from './generator.js';
+import { generateRaidPath, getChildren } from './generator.js';
 import { generateEncounter, resolveEventChoice, applyTrap, applyShrine } from './encounter.js';
 import { createCombatState } from './combat.js';
 import { generateGold } from './entities.js';
@@ -51,7 +51,7 @@ export function startRaid(zoneId) {
   };
 
   path.nodes[0].visited = true;
-  revealAdjacent(path, path.nodes[0].id, 2);
+  path.currentFloor = 0;
 
   G.activeRaid = raid;
   G.totalRaids++;
@@ -77,13 +77,12 @@ export function stepToNode(raid, nodeId) {
   raid.currentNodeId = nodeId;
   node.visited = true;
   raid.steps++;
+  raid.path.currentFloor = node.floor;
   raid.corruption += ZONES.find(z => z.id === raid.zoneId)?.corruptionRate || 1;
 
   raid.corruptionLevel = [...CORRUPTION_LEVELS]
     .reverse()
     .find(c => raid.corruption >= c.threshold) || CORRUPTION_LEVELS[0];
-
-  revealAdjacent(raid.path, nodeId, 2);
 
   const zone = ZONES.find(z => z.id === raid.zoneId);
   const encounter = generateEncounter(node, zone, raid.partyLevel, raid.corruption);

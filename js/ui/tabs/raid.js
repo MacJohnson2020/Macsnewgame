@@ -148,6 +148,14 @@ function renderExploring(container, raid) {
     if (hero) container.appendChild(heroCard(hero));
   }
 
+  // Abandon raid button
+  container.appendChild(el('div', { class: 'divider' }));
+  container.appendChild(btn('Abandon Raid (lose all items)', 'btn-danger btn-block btn-sm', () => {
+    if (confirm('Abandon raid? You will lose ALL carried items and equipped gear.')) {
+      endRaidFailed(raid);
+    }
+  }));
+
   return container;
 }
 
