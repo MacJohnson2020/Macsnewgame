@@ -1,150 +1,146 @@
 // === Voidborn — Stash Tab ===
 
-import { G, stashCapacity, stashUsed, canStash, getHero, canCarry } from '../../state.js';
+import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame } from '../../state.js';
+import { CLASSES } from '../../config.js';
 import { el } from '../../utils.js';
-import { itemDisplay, itemDetail, btn, card, statRow, toast } from '../components.js';
+import { itemDisplay, itemDetail, btn, statRow, toast, progressBar } from '../components.js';
 import { renderActiveTab } from '../router.js';
 import { renderHUD } from '../hud.js';
-import { saveGame } from '../../state.js';
 
 export function renderStashTab() {
   const container = el('div', { class: 'flex-col gap-md' });
 
-  // Stash header
-  container.appendChild(el('div', { class: 'section-title', text: 'Town Stash' }));
-  container.appendChild(el('div', { class: 'text-dim', text: `${stashUsed()}/${stashCapacity()} units used`, style: 'margin-bottom: 8px;' }));
+  // Hero equipment & inventory (show first — this is what players care about)
+  container.appendChild(el('div', { class: 'section-title', text: 'Heroes' }));
 
-  if (G.stash.length === 0) {
-    container.appendChild(el('p', { class: 'text-dim', text: 'Stash is empty. Extract loot from raids to fill it!' }));
-  } else {
-    const grid = el('div', { class: 'grid-3' });
-    for (const item of G.stash) {
-      grid.appendChild(itemDisplay(item, (itm) => showItemActions(itm, container)));
-    }
-    container.appendChild(grid);
+  for (const hero of G.heroes) {
+    container.appendChild(renderHeroGear(hero));
   }
 
   // Divider
   container.appendChild(el('div', { class: 'divider' }));
 
-  // Hero inventories
-  container.appendChild(el('div', { class: 'section-title', text: 'Hero Inventories' }));
+  // Town Stash
+  container.appendChild(el('div', { class: 'section-title', text: 'Town Stash' }));
+  const used = stashUsed();
+  const cap = stashCapacity();
+  container.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 8px;' }, [
+    el('span', { class: 'text-dim', text: `${used}/${cap} units`, style: 'font-size: 12px;' }),
+    progressBar(used, cap, '', false),
+  ]));
 
-  for (const hero of G.heroes) {
-    const heroSection = el('div', { class: 'card', style: 'margin-bottom: 8px;' });
-    const { CLASSES } = getClassesLocal();
-    const cls = CLASSES[hero.classId] || { icon: '?', name: '?' };
-    const used = getUsedInv(hero);
-
-    heroSection.appendChild(el('div', { class: 'card-header' }, [
-      el('span', { class: 'card-title', text: `${cls.icon} ${hero.name} (${used}/${hero.inventoryCapacity}u)` }),
-    ]));
-
-    // Equipped gear
-    for (const slot of ['weapon', 'armor', 'accessory']) {
-      const item = hero.gear[slot];
-      if (item) {
-        const row = el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 4px;' }, [
-          el('span', { class: 'text-dim', text: slot, style: 'width: 60px; font-size: 11px;' }),
-          el('span', { text: item.icon }),
-          el('span', { class: `rarity-text-${item.rarity}`, text: item.name, style: 'font-size: 12px; flex: 1;' }),
-          btn('Unequip', 'btn-sm', () => unequipItem(hero, slot)),
-        ]);
-        heroSection.appendChild(row);
-      } else {
-        heroSection.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 4px; opacity: 0.4;' }, [
-          el('span', { class: 'text-dim', text: slot, style: 'width: 60px; font-size: 11px;' }),
-          el('span', { class: 'text-dim', text: '(empty)' }),
-        ]));
-      }
+  if (G.stash.length === 0) {
+    container.appendChild(el('p', { class: 'text-dim', text: 'Stash is empty. Extract loot from raids!' }));
+  } else {
+    const grid = el('div', { class: 'grid-3' });
+    for (const item of G.stash) {
+      grid.appendChild(itemDisplay(item, (itm) => showStashItemActions(itm)));
     }
-
-    // Inventory items
-    if (hero.inventory.length > 0) {
-      const invGrid = el('div', { class: 'grid-3', style: 'margin-top: 6px;' });
-      for (const item of hero.inventory) {
-        invGrid.appendChild(itemDisplay(item, (itm) => showHeroItemActions(hero, itm, container)));
-      }
-      heroSection.appendChild(invGrid);
-    }
-
-    container.appendChild(heroSection);
+    container.appendChild(grid);
   }
 
   return container;
 }
 
-function showItemActions(item, container) {
-  // Show item detail + actions (equip to hero, discard)
-  const modal = el('div', { class: 'card', style: 'position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 50; max-width: 400px; width: 90%;' });
+function renderHeroGear(hero) {
+  const cls = CLASSES[hero.classId];
+  const used = usedInventory(hero);
+  const card = el('div', { class: 'card', style: 'margin-bottom: 8px;' });
 
+  // Header
+  card.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 8px;' }, [
+    el('span', { text: cls.icon, style: 'font-size: 22px;' }),
+    el('div', { style: 'flex: 1;' }, [
+      el('div', { class: 'text-bright', text: `${hero.name}`, style: 'font-weight: 700;' }),
+      el('div', { class: 'text-dim', text: `Lv.${hero.level} ${cls.name} | ${used}/${hero.inventoryCapacity}u`, style: 'font-size: 11px;' }),
+    ]),
+  ]));
+
+  // Equipment slots
+  card.appendChild(el('div', { class: 'text-dim', text: 'Equipment', style: 'font-size: 11px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase;' }));
+  const gearGrid = el('div', { class: 'grid-3', style: 'margin-bottom: 8px;' });
+
+  for (const slot of ['weapon', 'armor', 'accessory']) {
+    const item = hero.gear[slot];
+    if (item) {
+      const slotEl = el('div', { class: `item-slot rarity-${item.rarity}`, style: 'cursor: pointer;' }, [
+        el('span', { class: 'item-icon', text: item.icon }),
+        el('span', { class: `item-name rarity-text-${item.rarity}`, text: item.name }),
+        el('span', { class: 'text-dim', text: `${item.size}u`, style: 'font-size: 9px;' }),
+      ]);
+      slotEl.onclick = () => showEquippedItemActions(hero, slot, item);
+      gearGrid.appendChild(slotEl);
+    } else {
+      const emptySlot = el('div', { class: 'item-slot empty', style: 'cursor: pointer;' }, [
+        el('span', { class: 'text-dim', text: slot, style: 'font-size: 11px;' }),
+      ]);
+      // Click empty slot to equip from stash
+      emptySlot.onclick = () => showEquipOptions(hero, slot);
+      gearGrid.appendChild(emptySlot);
+    }
+  }
+  card.appendChild(gearGrid);
+
+  // Inventory (non-equipped items)
+  if (hero.inventory.length > 0) {
+    card.appendChild(el('div', { class: 'text-dim', text: 'Backpack', style: 'font-size: 11px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase;' }));
+    const invGrid = el('div', { class: 'grid-3' });
+    for (const item of hero.inventory) {
+      invGrid.appendChild(itemDisplay(item, (itm) => showHeroItemActions(hero, itm)));
+    }
+    card.appendChild(invGrid);
+  }
+
+  return card;
+}
+
+// Show actions for an equipped item
+function showEquippedItemActions(hero, slot, item) {
+  const modal = createModal();
   modal.appendChild(itemDetail(item));
 
   const actions = el('div', { class: 'flex-col gap-sm', style: 'margin-top: 8px;' });
 
-  // Equip to hero buttons
-  for (const hero of G.heroes) {
-    if (item.slot && canCarry(hero, item)) {
-      const { CLASSES } = getClassesLocal();
-      const cls = CLASSES[hero.classId] || { icon: '?', name: '?' };
-
-      // Check stat requirements
-      let meetsReqs = true;
-      if (item.statReq) {
-        for (const [stat, val] of Object.entries(item.statReq)) {
-          if ((hero.stats[stat] || 0) < val) meetsReqs = false;
-        }
-      }
-
-      const equipBtn = btn(
-        `${meetsReqs ? 'Equip on' : 'Req not met:'} ${cls.icon} ${hero.name}`,
-        meetsReqs ? 'btn-primary btn-sm btn-block' : 'btn-sm btn-block',
-        meetsReqs ? () => equipFromStash(hero, item, modal) : null
-      );
-      if (!meetsReqs) equipBtn.disabled = true;
-      actions.appendChild(equipBtn);
-    }
-  }
-
-  // Discard
-  actions.appendChild(btn('Discard', 'btn-danger btn-sm btn-block', () => {
-    const idx = G.stash.findIndex(i => i.id === item.id);
-    if (idx >= 0) G.stash.splice(idx, 1);
-    modal.remove();
+  // Unequip to stash
+  actions.appendChild(btn('Unequip to Stash', 'btn-primary btn-sm btn-block', () => {
+    if (!canStash(item)) { toast('Stash is full!', 'danger'); return; }
+    hero.gear[slot] = null;
+    G.stash.push(item);
+    closeModal(modal);
     saveGame();
     renderActiveTab();
+    toast(`Unequipped ${item.name}`, 'info');
   }));
 
-  // Close
-  actions.appendChild(btn('Close', 'btn-sm btn-block', () => modal.remove()));
+  // Unequip to backpack
+  const freeSpace = hero.inventoryCapacity - usedInventory(hero) + item.size;
+  if (freeSpace >= item.size) {
+    actions.appendChild(btn('Move to Backpack', 'btn-sm btn-block', () => {
+      hero.gear[slot] = null;
+      hero.inventory.push(item);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+    }));
+  }
 
+  actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
   modal.appendChild(actions);
   document.body.appendChild(modal);
 }
 
-function showHeroItemActions(hero, item, container) {
-  const modal = el('div', { class: 'card', style: 'position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 50; max-width: 400px; width: 90%;' });
-
-  modal.appendChild(itemDetail(item));
-
-  const actions = el('div', { class: 'flex-col gap-sm', style: 'margin-top: 8px;' });
-
-  // Move to stash
-  if (canStash(item)) {
-    actions.appendChild(btn('Move to Stash', 'btn-primary btn-sm btn-block', () => {
-      const idx = hero.inventory.findIndex(i => i.id === item.id);
-      if (idx >= 0) {
-        hero.inventory.splice(idx, 1);
-        G.stash.push(item);
-        modal.remove();
-        saveGame();
-        renderActiveTab();
-      }
-    }));
+// Show equip options from stash for an empty slot
+function showEquipOptions(hero, slot) {
+  const available = G.stash.filter(item => item.slot === slot);
+  if (available.length === 0) {
+    toast(`No ${slot} items in stash`, 'info');
+    return;
   }
 
-  // Equip (if gear)
-  if (item.slot && !item.isConsumable) {
+  const modal = createModal();
+  modal.appendChild(el('div', { class: 'text-bright', text: `Equip ${slot}`, style: 'font-weight: 700; margin-bottom: 8px;' }));
+
+  for (const item of available) {
     let meetsReqs = true;
     if (item.statReq) {
       for (const [stat, val] of Object.entries(item.statReq)) {
@@ -152,94 +148,173 @@ function showHeroItemActions(hero, item, container) {
       }
     }
 
+    const row = el('div', { class: `loot-item rarity-${item.rarity}`, style: 'cursor: pointer;' }, [
+      el('div', { class: 'loot-item-info' }, [
+        el('span', { text: item.icon }),
+        el('span', { class: `rarity-text-${item.rarity}`, text: item.name, style: 'font-size: 12px;' }),
+      ]),
+      meetsReqs
+        ? btn('Equip', 'btn-sm btn-success', () => {
+            const idx = G.stash.findIndex(i => i.id === item.id);
+            if (idx >= 0) G.stash.splice(idx, 1);
+            hero.gear[slot] = item;
+            closeModal(modal);
+            saveGame();
+            renderActiveTab();
+            renderHUD();
+            toast(`${hero.name} equipped ${item.name}`, 'success');
+          })
+        : el('span', { class: 'text-danger', text: 'Req not met', style: 'font-size: 10px;' }),
+    ]);
+    modal.appendChild(row);
+  }
+
+  modal.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
+  document.body.appendChild(modal);
+}
+
+// Show actions for a stash item
+function showStashItemActions(item) {
+  const modal = createModal();
+  modal.appendChild(itemDetail(item));
+
+  const actions = el('div', { class: 'flex-col gap-sm', style: 'margin-top: 8px;' });
+
+  // Equip to hero
+  if (item.slot) {
+    for (const hero of G.heroes) {
+      const cls = CLASSES[hero.classId];
+      let meetsReqs = true;
+      if (item.statReq) {
+        for (const [stat, val] of Object.entries(item.statReq)) {
+          if ((hero.stats[stat] || 0) < val) meetsReqs = false;
+        }
+      }
+
+      actions.appendChild(btn(
+        `${meetsReqs ? 'Equip on' : 'Cant equip:'} ${cls.icon} ${hero.name}`,
+        meetsReqs ? 'btn-primary btn-sm btn-block' : 'btn-sm btn-block',
+        meetsReqs ? () => {
+          const idx = G.stash.findIndex(i => i.id === item.id);
+          if (idx >= 0) G.stash.splice(idx, 1);
+          const slot = item.slot;
+          if (hero.gear[slot]) G.stash.push(hero.gear[slot]);
+          hero.gear[slot] = item;
+          closeModal(modal);
+          saveGame();
+          renderActiveTab();
+          renderHUD();
+          toast(`${hero.name} equipped ${item.name}`, 'success');
+        } : null
+      ));
+    }
+  }
+
+  // Give to hero backpack
+  for (const hero of G.heroes) {
+    const cls = CLASSES[hero.classId];
+    const space = hero.inventoryCapacity - usedInventory(hero);
+    if (space >= item.size) {
+      actions.appendChild(btn(
+        `Give to ${cls.icon} ${hero.name}`,
+        'btn-sm btn-block',
+        () => {
+          const idx = G.stash.findIndex(i => i.id === item.id);
+          if (idx >= 0) G.stash.splice(idx, 1);
+          hero.inventory.push(item);
+          closeModal(modal);
+          saveGame();
+          renderActiveTab();
+          toast(`Gave ${item.name} to ${hero.name}`, 'info');
+        }
+      ));
+    }
+  }
+
+  // Discard
+  actions.appendChild(btn('Discard', 'btn-danger btn-sm btn-block', () => {
+    const idx = G.stash.findIndex(i => i.id === item.id);
+    if (idx >= 0) G.stash.splice(idx, 1);
+    closeModal(modal);
+    saveGame();
+    renderActiveTab();
+  }));
+
+  actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
+  modal.appendChild(actions);
+  document.body.appendChild(modal);
+}
+
+// Show actions for a hero's backpack item
+function showHeroItemActions(hero, item) {
+  const modal = createModal();
+  modal.appendChild(itemDetail(item));
+
+  const actions = el('div', { class: 'flex-col gap-sm', style: 'margin-top: 8px;' });
+
+  // Equip if it's gear
+  if (item.slot && !item.isConsumable) {
+    let meetsReqs = true;
+    if (item.statReq) {
+      for (const [stat, val] of Object.entries(item.statReq)) {
+        if ((hero.stats[stat] || 0) < val) meetsReqs = false;
+      }
+    }
     if (meetsReqs) {
       actions.appendChild(btn('Equip', 'btn-success btn-sm btn-block', () => {
-        equipFromInventory(hero, item);
-        modal.remove();
+        const idx = hero.inventory.findIndex(i => i.id === item.id);
+        if (idx >= 0) hero.inventory.splice(idx, 1);
+        if (hero.gear[item.slot]) hero.inventory.push(hero.gear[item.slot]);
+        hero.gear[item.slot] = item;
+        closeModal(modal);
+        saveGame();
         renderActiveTab();
+        toast(`Equipped ${item.name}`, 'success');
       }));
     }
+  }
+
+  // Move to stash
+  if (canStash(item)) {
+    actions.appendChild(btn('Move to Stash', 'btn-primary btn-sm btn-block', () => {
+      const idx = hero.inventory.findIndex(i => i.id === item.id);
+      if (idx >= 0) hero.inventory.splice(idx, 1);
+      G.stash.push(item);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+    }));
   }
 
   // Discard
   actions.appendChild(btn('Discard', 'btn-danger btn-sm btn-block', () => {
     const idx = hero.inventory.findIndex(i => i.id === item.id);
     if (idx >= 0) hero.inventory.splice(idx, 1);
-    modal.remove();
+    closeModal(modal);
     saveGame();
     renderActiveTab();
   }));
 
-  actions.appendChild(btn('Close', 'btn-sm btn-block', () => modal.remove()));
-
+  actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
   modal.appendChild(actions);
   document.body.appendChild(modal);
 }
 
-function equipFromStash(hero, item, modal) {
-  // Remove from stash
-  const idx = G.stash.findIndex(i => i.id === item.id);
-  if (idx < 0) return;
-  G.stash.splice(idx, 1);
+// Modal helpers
+function createModal() {
+  // Remove any existing modal
+  const existing = document.querySelector('.item-modal-backdrop');
+  if (existing) existing.remove();
 
-  // If hero has something in that slot, unequip to stash
-  const slot = item.slot;
-  if (hero.gear[slot]) {
-    G.stash.push(hero.gear[slot]);
-  }
+  const backdrop = el('div', { class: 'item-modal-backdrop' });
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:90;display:flex;align-items:flex-end;justify-content:center;padding:0 8px 68px;';
+  backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
 
-  hero.gear[slot] = item;
+  const modal = el('div', { class: 'card', style: 'width:100%;max-width:420px;max-height:70vh;overflow-y:auto;' });
+  backdrop.appendChild(modal);
+  return backdrop;
+}
+
+function closeModal(modal) {
   modal.remove();
-  saveGame();
-  renderActiveTab();
-  toast(`${hero.name} equipped ${item.name}`, 'success');
-}
-
-function equipFromInventory(hero, item) {
-  const idx = hero.inventory.findIndex(i => i.id === item.id);
-  if (idx < 0) return;
-  hero.inventory.splice(idx, 1);
-
-  const slot = item.slot;
-  if (hero.gear[slot]) {
-    hero.inventory.push(hero.gear[slot]);
-  }
-
-  hero.gear[slot] = item;
-  saveGame();
-  toast(`${hero.name} equipped ${item.name}`, 'success');
-}
-
-function unequipItem(hero, slot) {
-  const item = hero.gear[slot];
-  if (!item) return;
-
-  if (canStash(item)) {
-    hero.gear[slot] = null;
-    G.stash.push(item);
-    saveGame();
-    renderActiveTab();
-    toast(`Unequipped ${item.name} to stash`, 'info');
-  } else {
-    toast('Stash is full!', 'danger');
-  }
-}
-
-function getUsedInv(hero) {
-  let used = 0;
-  for (const item of hero.inventory) used += item.size;
-  for (const slot of ['weapon', 'armor', 'accessory']) {
-    if (hero.gear[slot]) used += hero.gear[slot].size;
-  }
-  return used;
-}
-
-function getClassesLocal() {
-  return {
-    CLASSES: {
-      fighter: { icon: '\u2694\uFE0F', name: 'Fighter' },
-      rogue: { icon: '\uD83D\uDDE1\uFE0F', name: 'Rogue' },
-      mage: { icon: '\uD83E\uDDD9', name: 'Mage' },
-    },
-  };
 }

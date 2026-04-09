@@ -1,113 +1,125 @@
-// === Voidborn — DOM Path Renderer ===
+// === Voidborn — Slay the Spire Style Map Renderer ===
 
 import { getChildren } from './generator.js';
 import { el } from '../utils.js';
 
-// Render the path map as DOM
+// Render the full map as a vertical column layout
+// Each floor is a row, nodes are clickable circles, lines connect them
 export function renderPath(raid, onNodeClick) {
-  const container = el('div', { class: 'raid-path' });
-  const path = raid.path;
+  const { columns, edges, currentFloor } = raid.path;
   const currentId = raid.currentNodeId;
 
-  // Build the path as a tree from the start node
-  const startNode = path.nodes[0];
-  renderBranch(container, path, startNode, currentId, onNodeClick);
+  const map = el('div', { class: 'spire-map' });
 
-  return container;
-}
+  // Render floors bottom-to-top (start at bottom, extraction at top)
+  for (let floor = columns.length - 1; floor >= 0; floor--) {
+    const floorNodes = columns[floor];
+    const isCurrentFloor = floor === currentFloor;
 
-function renderBranch(container, path, node, currentId, onNodeClick) {
-  const children = getChildren(path, node.id);
-  const row = el('div', { class: 'path-row' });
+    // Floor row
+    const row = el('div', { class: 'spire-floor' });
 
-  // Render the current node
-  const nodeEl = renderNode(node, currentId, onNodeClick, children.length > 1);
-  row.appendChild(nodeEl);
+    // Floor label
+    const label = el('div', { class: 'spire-floor-label' });
+    if (floor === 0) label.textContent = 'START';
+    else if (floor === columns.length - 1) label.textContent = 'EXIT';
+    else label.textContent = `F${floor}`;
+    row.appendChild(label);
 
-  if (children.length === 1) {
-    // Single path forward — render connector and continue
-    const conn = el('div', { class: `path-connector ${node.visited ? 'active' : ''}` });
-    row.appendChild(conn);
-    container.appendChild(row);
-    renderBranch(container, path, children[0], currentId, onNodeClick);
-  } else if (children.length > 1) {
-    // Fork — render branches side by side
-    container.appendChild(row);
+    // Nodes container
+    const nodesDiv = el('div', { class: 'spire-nodes' });
 
-    const forkContainer = el('div', { class: 'fork-container' });
-    const branches = el('div', { class: 'fork-branches' });
+    for (const node of floorNodes) {
+      const isCurrent = node.id === currentId;
+      const isAvailable = !node.visited && floor === currentFloor + 1 && isReachableFrom(raid, currentId, node.id);
+      const isPast = node.visited;
+      const isFuture = floor > currentFloor + 1;
 
-    for (const child of children) {
-      const branchDiv = el('div', { class: 'fork-branch' });
-      const label = child.branch === 'risky' ? 'Risky Path' : 'Safe Path';
-      branchDiv.appendChild(el('span', { class: 'branch-label', text: label }));
-      renderBranchColumn(branchDiv, path, child, currentId, onNodeClick);
-      branches.appendChild(branchDiv);
+      let classes = 'spire-node';
+      if (isCurrent) classes += ' current';
+      if (isPast) classes += ' visited';
+      if (isAvailable) classes += ' available';
+      if (isFuture) classes += ' future';
+      if (node.type === 'extraction') classes += ' extraction';
+      if (node.type === 'enemy') classes += ' enemy';
+      if (node.type === 'chest') classes += ' chest';
+      if (node.type === 'shrine') classes += ' shrine';
+      if (node.type === 'merchant') classes += ' merchant';
+
+      const nodeEl = el('div', { class: classes });
+      nodeEl.appendChild(el('span', { class: 'spire-node-icon', text: node.icon }));
+      nodeEl.appendChild(el('span', { class: 'spire-node-label', text: node.label }));
+
+      if (isAvailable && onNodeClick) {
+        nodeEl.onclick = () => onNodeClick(node.id);
+      }
+
+      nodesDiv.appendChild(nodeEl);
     }
 
-    forkContainer.appendChild(branches);
-    container.appendChild(forkContainer);
-  } else {
-    // Leaf node (no children)
-    container.appendChild(row);
-  }
-}
+    row.appendChild(nodesDiv);
+    map.appendChild(row);
 
-function renderBranchColumn(container, path, node, currentId, onNodeClick) {
-  const children = getChildren(path, node.id);
+    // Draw connection lines between this floor and the one below
+    if (floor > 0) {
+      const connRow = el('div', { class: 'spire-connections' });
+      const aboveNodes = columns[floor];
+      const belowNodes = columns[floor - 1];
 
-  const nodeEl = renderNode(node, currentId, onNodeClick, false);
-  container.appendChild(nodeEl);
+      // SVG for clean connection lines
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'spire-svg');
+      svg.setAttribute('preserveAspectRatio', 'none');
 
-  if (children.length === 1) {
-    const conn = el('div', { class: `path-connector vertical ${node.visited ? 'active' : ''}` });
-    container.appendChild(conn);
-    renderBranchColumn(container, path, children[0], currentId, onNodeClick);
-  } else if (children.length > 1) {
-    // Nested fork within a branch — render inline
-    const subFork = el('div', { class: 'fork-branches', style: 'font-size: 0.9em;' });
-    for (const child of children) {
-      const subBranch = el('div', { class: 'fork-branch' });
-      renderBranchColumn(subBranch, path, child, currentId, onNodeClick);
-      subFork.appendChild(subBranch);
+      // We'll position lines based on node indices
+      for (const edge of edges) {
+        const fromNode = belowNodes.find(n => n.id === edge.from);
+        const toNode = aboveNodes.find(n => n.id === edge.to);
+        if (!fromNode || !toNode) continue;
+
+        const fromX = getNodeX(fromNode.lane, belowNodes.length);
+        const toX = getNodeX(toNode.lane, aboveNodes.length);
+
+        const isActive = fromNode.visited || fromNode.id === currentId;
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', `${fromX}%`);
+        line.setAttribute('y1', '100%');
+        line.setAttribute('x2', `${toX}%`);
+        line.setAttribute('y2', '0%');
+        line.setAttribute('class', `spire-line ${isActive ? 'active' : ''}`);
+        svg.appendChild(line);
+      }
+
+      connRow.appendChild(svg);
+      map.appendChild(connRow);
     }
-    container.appendChild(subFork);
-  }
-}
-
-function renderNode(node, currentId, onNodeClick, isFork) {
-  const isCurrent = node.id === currentId;
-  const isAvailable = !node.visited && node.revealed;
-
-  let classes = 'path-node';
-  if (isCurrent) classes += ' current';
-  if (node.visited) classes += ' visited';
-  if (isAvailable) classes += ' available';
-  if (!node.revealed && !node.visited) classes += ' hidden-node';
-  if (node.type === 'extraction') classes += ' extraction';
-
-  const nodeEl = el('div', {
-    class: classes,
-    text: node.visited || node.revealed ? node.icon : '?',
-  });
-
-  if (isAvailable && onNodeClick) {
-    nodeEl.onclick = () => onNodeClick(node.id);
   }
 
-  return nodeEl;
+  return map;
 }
 
-// Render a compact path overview (for HUD)
+function getNodeX(lane, totalInRow) {
+  if (totalInRow === 1) return 50;
+  const margin = 15;
+  const spread = 100 - margin * 2;
+  return margin + (lane / (totalInRow - 1)) * spread;
+}
+
+function isReachableFrom(raid, currentId, targetId) {
+  return raid.path.edges.some(e => e.from === currentId && e.to === targetId);
+}
+
+// Compact overview for HUD
 export function renderPathOverview(raid) {
   const path = raid.path;
-  const totalNodes = path.nodes.length;
-  const visitedNodes = path.nodes.filter(n => n.visited).length;
+  const visited = path.nodes.filter(n => n.visited).length;
+  const total = path.nodes.length;
   const currentNode = path.nodes.find(n => n.id === raid.currentNodeId);
+  const floor = currentNode ? currentNode.floor : 0;
 
   return el('div', { class: 'raid-hud' }, [
     el('span', { class: 'raid-hud-zone', text: raid.zoneName }),
-    el('span', { class: 'raid-hud-step', text: `Step ${raid.steps} | ${visitedNodes}/${totalNodes} nodes` }),
-    el('span', { class: 'raid-hud-step', text: currentNode ? currentNode.label : '' }),
+    el('span', { class: 'raid-hud-step', text: `Floor ${floor}/${path.numFloors - 1}` }),
   ]);
 }
