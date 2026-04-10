@@ -1,6 +1,6 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
-import { G, getHero, saveGame, canCarry } from '../../state.js';
+import { G, getHero, saveGame, canCarry, giveStarterGear } from '../../state.js';
 import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
@@ -1261,7 +1261,7 @@ function renderResult(container, raid) {
   container.appendChild(resultCard);
 
   container.appendChild(btn('Return to Town', 'btn-primary btn-block btn-lg', () => {
-    // Heal and revive all heroes
+    // Heal and revive all heroes, give starter gear if they lost theirs
     for (const hero of G.heroes) {
       hero.alive = true;
       hero.hp = hero.maxHp;
@@ -1269,6 +1269,9 @@ function renderResult(container, raid) {
       hero.buffs = [];
       hero.debuffs = [];
       hero.dots = [];
+      if (!hero.gear.weapon) {
+        giveStarterGear(hero);
+      }
     }
     clearRaid();
     setNavVisible(true);
@@ -1287,6 +1290,7 @@ function endRaidFailed(raid) {
     hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
     hero.alive = true;
     hero.hp = Math.floor(hero.maxHp * 0.5);
+    giveStarterGear(hero);
   }
 
   raid.result = {

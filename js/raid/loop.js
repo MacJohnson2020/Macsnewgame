@@ -1,6 +1,6 @@
 // === Voidborn — Raid State Machine ===
 
-import { G, getHero, saveGame } from '../state.js';
+import { G, getHero, saveGame, giveStarterGear } from '../state.js';
 import { ZONES, CORRUPTION_LEVELS, xpForLevel } from '../config.js';
 import { generateRaidPath, getChildren, pruneUnreachable } from './generator.js';
 import { generateEncounter, resolveEventChoice, applyTrap, applyShrine } from './encounter.js';
@@ -232,13 +232,16 @@ export function endRaid(raid, success) {
     }
   }
 
-  // Revive dead heroes
+  // Revive dead heroes and give starter gear if they lost theirs
   for (const hero of party) {
     hero.alive = true;
     if (hero.hp <= 0) hero.hp = Math.floor(hero.maxHp * 0.5);
     hero.buffs = [];
     hero.debuffs = [];
     hero.dots = [];
+    if (!hero.gear.weapon) {
+      giveStarterGear(hero);
+    }
   }
 
   raid.phase = RAID_PHASE.RESULT;

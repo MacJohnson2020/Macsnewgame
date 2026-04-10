@@ -1,8 +1,8 @@
 // === Voidborn — Main Entry Point ===
 
-import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress } from './state.js';
+import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear } from './state.js';
 import { CLASSES, STATS, STAT_DESC, STAT_DEFAULTS, STARTING_STAT_POINTS } from './config.js';
-import { el } from './utils.js';
+import { el, uid } from './utils.js';
 import { initRouter, registerTab, switchTab, renderActiveTab } from './ui/router.js';
 import { renderHUD } from './ui/hud.js';
 import { toast } from './ui/components.js';
@@ -172,8 +172,11 @@ function showCharacterCreation() {
       G.heroes.push(hero);
       G.raidParty = [hero.id];
 
-      // Give starter gear
+      // Give starter gear + 3 health potions for new characters
       giveStarterGear(hero);
+      for (let i = 0; i < 3; i++) {
+        hero.inventory.push({ id: uid(), consumableId: 'health_potion', name: 'Health Potion', icon: '\u2764\uFE0F', size: 1, rarity: 'common', isConsumable: true, effect: 'heal', value: 30, desc: 'Restore 30 HP' });
+      }
 
       saveGame();
       overlay.classList.add('hidden');
@@ -187,42 +190,7 @@ function showCharacterCreation() {
   render();
 }
 
-function giveStarterGear(hero) {
-  const { uid } = getUidHelper();
-  const classId = hero.classId;
-
-  let weapon, body;
-
-  switch (classId) {
-    case 'fighter':
-      weapon = { id: uid(), name: 'Rusty Sword', icon: '\u2694\uFE0F', slot: 'weapon', weaponType: 'sword', size: 3, rarity: 'common', damageType: 'physical', twoHanded: false, dmgMin: 5, dmgMax: 9, accuracy: 12, statReq: {}, substats: [] };
-      body = { id: uid(), name: 'Worn Chainmail', icon: '\uD83E\uDDE5', slot: 'body', size: 4, rarity: 'common', armor: 8, magicResist: 3, statReq: {}, substats: [] };
-      break;
-    case 'rogue':
-      weapon = { id: uid(), name: 'Chipped Dagger', icon: '\uD83D\uDDE1\uFE0F', slot: 'weapon', weaponType: 'dagger', size: 1, rarity: 'common', damageType: 'physical', twoHanded: false, dmgMin: 4, dmgMax: 7, accuracy: 18, statReq: {}, substats: [] };
-      body = { id: uid(), name: 'Tattered Leather', icon: '\uD83E\uDDE5', slot: 'body', size: 3, rarity: 'common', armor: 5, magicResist: 2, statReq: {}, substats: [] };
-      break;
-    case 'mage':
-      weapon = { id: uid(), name: 'Cracked Wand', icon: '\uD83E\uDE84', slot: 'weapon', weaponType: 'wand', size: 1, rarity: 'common', damageType: 'magic', twoHanded: false, dmgMin: 5, dmgMax: 10, accuracy: 16, statReq: {}, substats: [] };
-      body = { id: uid(), name: 'Faded Robes', icon: '\uD83E\uDDE5', slot: 'body', size: 2, rarity: 'common', armor: 2, magicResist: 8, statReq: {}, substats: [] };
-      break;
-  }
-
-  hero.gear.weapon = weapon;
-  hero.gear.body = body;
-
-  // 3 starter health potions
-  for (let i = 0; i < 3; i++) {
-    hero.inventory.push({ id: uid(), consumableId: 'health_potion', name: 'Health Potion', icon: '\u2764\uFE0F', size: 1, rarity: 'common', isConsumable: true, effect: 'heal', value: 30, desc: 'Restore 30 HP' });
-  }
-}
-
-function getUidHelper() {
-  let counter = 0;
-  return {
-    uid: () => `starter_${Date.now().toString(36)}_${(++counter).toString(36)}`,
-  };
-}
+// giveStarterGear is now imported from state.js
 
 // Start the game when DOM is ready
 if (document.readyState === 'loading') {
