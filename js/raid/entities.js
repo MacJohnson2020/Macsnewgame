@@ -50,21 +50,35 @@ export function getMagicResist(hero) {
 }
 
 // Get defense for a specific damage type / element
+// Enemies with weakTo/resistTo get halved/doubled defense
 export function getDefense(entity, damageType) {
-  if (!damageType || damageType === 'physical') return entity.armor || getArmor(entity);
-  if (damageType === 'magic') return entity.magicResist || getMagicResist(entity);
+  let base;
+  if (!damageType || damageType === 'physical') {
+    base = entity.armor !== undefined ? entity.armor : getArmor(entity);
+  } else if (damageType === 'magic') {
+    base = entity.magicResist !== undefined && !entity.gear ? entity.magicResist : getMagicResist(entity);
+  } else {
+    // Elemental — check the DAMAGE_TYPES config for which resist to use
+    const dtConfig = DAMAGE_TYPES[damageType];
+    if (!dtConfig) return 0;
+    const resistKey = dtConfig.resist;
 
-  // Elemental — check the DAMAGE_TYPES config for which resist to use
-  const dtConfig = DAMAGE_TYPES[damageType];
-  if (!dtConfig) return 0;
-  const resistKey = dtConfig.resist;
-
-  // For heroes: sum gear substats + any direct stat
-  if (entity.gear) {
-    return getSubstatTotal(entity, resistKey) + (entity[resistKey] || 0);
+    if (entity.gear) {
+      base = getSubstatTotal(entity, resistKey) + (entity[resistKey] || 0);
+    } else {
+      base = entity[resistKey] || 0;
+    }
   }
-  // For enemies: direct stat
-  return entity[resistKey] || 0;
+
+  // Apply weakness/resistance for enemies
+  if (entity.weakTo && entity.weakTo.includes(damageType)) {
+    base = Math.floor(base * 0.5); // defense halved → takes ~50% more damage
+  }
+  if (entity.resistTo && entity.resistTo.includes(damageType)) {
+    base = Math.floor(base * 2); // defense doubled → takes ~50% less damage
+  }
+
+  return Math.max(0, base);
 }
 
 // Get hero's weapon damage range
@@ -157,6 +171,9 @@ export function createEnemy(typeId, zoneLevel = 1) {
     elite: template.elite || false,
     magic: template.magic || false,
     damageType: template.damageType || (template.magic ? 'magic' : 'physical'),
+    tags: template.tags || [],
+    weakTo: template.weakTo || [],
+    resistTo: template.resistTo || [],
     alive: true,
     buffs: [],
     debuffs: [],

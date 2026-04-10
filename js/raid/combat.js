@@ -187,16 +187,22 @@ export function attackAction(combat, attacker, target) {
   damage = Math.max(1, damage);
   target.hp -= damage;
 
+  // Check for weakness/resistance flavor
+  const atkType = isMagicWeapon ? 'magic' : 'physical';
+  const isWeak = target.weakTo && target.weakTo.includes(atkType);
+  const isResist = target.resistTo && target.resistTo.includes(atkType);
+  const weakTag = isWeak ? ' WEAK!' : isResist ? ' resisted' : '';
+
   if (isCrit) {
     combat.log.push({
       type: 'crit',
-      text: `${attacker.name} CRITS ${target.name} for ${damage} damage!`,
+      text: `${attacker.name} CRITS ${target.name} for ${damage} damage!${weakTag}`,
       class: 'crit',
     });
   } else {
     combat.log.push({
       type: 'damage',
-      text: `${attacker.name} hits ${target.name} for ${damage} damage (${hitChance}%)`,
+      text: `${attacker.name} hits ${target.name} for ${damage}${weakTag} (${hitChance}%)`,
       class: 'damage',
     });
   }
@@ -274,11 +280,14 @@ export function abilityAction(combat, hero, abilityId, target) {
 
       // Crit
       const critChance = getCritChance(hero) + (ability.critBonus || 0);
+      const isAbilWeak = t.weakTo && t.weakTo.includes(dmgType);
+      const isAbilResist = t.resistTo && t.resistTo.includes(dmgType);
+      const abilWeakTag = isAbilWeak ? ' WEAK!' : isAbilResist ? ' resisted' : '';
       if (rollChance(critChance)) {
         damage *= 2;
-        combat.log.push({ type: 'crit', text: `  → ${t.name}: CRIT! ${damage} damage`, class: 'crit' });
+        combat.log.push({ type: 'crit', text: `  → ${t.name}: CRIT! ${damage}${abilWeakTag}`, class: 'crit' });
       } else {
-        combat.log.push({ type: 'damage', text: `  → ${t.name}: ${damage} damage`, class: 'damage' });
+        combat.log.push({ type: 'damage', text: `  → ${t.name}: ${damage}${abilWeakTag}`, class: 'damage' });
       }
 
       damage = Math.max(1, Math.round(damage));

@@ -271,23 +271,37 @@ export const CONSUMABLES = {
 };
 
 // Enemy types by zone
+// tags: undead, beast, demon, construct, humanoid — used for weakness flavor
+// weakTo: these damage types deal 50% more damage (defense halved)
+// resistTo: these damage types deal 50% less damage (defense doubled)
 export const ENEMIES = {
   // Rust Crypts
-  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 10,  armor: 1,  mr: 1,  acc: 8,  dmg: [2, 4],   speed: 12, xp: 10, tier: 1 },
-  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 16,  armor: 3,  mr: 2,  acc: 10, dmg: [3, 6],   speed: 8,  xp: 18, tier: 2 },
-  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 24,  armor: 4,  mr: 3,  acc: 12, dmg: [4, 8],   speed: 10, xp: 25, tier: 3 },
-  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 40,  armor: 10, mr: 5,  acc: 14, dmg: [7, 12],  speed: 6,  xp: 45, elite: true, tier: 4 },
+  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 10,  armor: 1,  mr: 1,  acc: 8,  dmg: [2, 4],   speed: 12, xp: 10, tier: 1,
+                  tags: ['beast'], weakTo: ['fire'], resistTo: [] },
+  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 16,  armor: 3,  mr: 2,  acc: 10, dmg: [3, 6],   speed: 8,  xp: 18, tier: 2,
+                  tags: ['undead'], weakTo: ['holy', 'fire'], resistTo: ['demonic', 'ice'] },
+  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 24,  armor: 4,  mr: 3,  acc: 12, dmg: [4, 8],   speed: 10, xp: 25, tier: 3,
+                  tags: ['undead'], weakTo: ['holy', 'fire'], resistTo: ['demonic'] },
+  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 40,  armor: 10, mr: 5,  acc: 14, dmg: [7, 12],  speed: 6,  xp: 45, elite: true, tier: 4,
+                  tags: ['undead', 'construct'], weakTo: ['holy', 'lightning'], resistTo: ['demonic', 'physical'] },
 
   // Neon Depths
-  void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1 },
-  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2, damageType: 'demonic' },
-  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3, damageType: 'lightning' },
-  tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true, tier: 4 },
+  void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1,
+                  tags: ['beast'], weakTo: ['fire', 'ice'], resistTo: [] },
+  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2, damageType: 'demonic',
+                  tags: ['demon'], weakTo: ['holy', 'lightning'], resistTo: ['demonic', 'fire'] },
+  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3, damageType: 'lightning',
+                  tags: ['undead'], weakTo: ['holy'], resistTo: ['lightning', 'ice'] },
+  tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true, tier: 4,
+                  tags: ['construct'], weakTo: ['lightning', 'ice'], resistTo: ['holy', 'demonic'] },
 
   // Void Marshes
-  marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35, tier: 1 },
-  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2, damageType: 'fire' },
-  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4, damageType: 'demonic' },
+  marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35, tier: 1,
+                  tags: ['beast'], weakTo: ['ice', 'fire'], resistTo: [] },
+  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2, damageType: 'fire',
+                  tags: ['humanoid'], weakTo: ['ice', 'holy'], resistTo: ['fire'] },
+  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4, damageType: 'demonic',
+                  tags: ['demon', 'beast'], weakTo: ['holy'], resistTo: ['demonic', 'fire'] },
 };
 
 // Zones
