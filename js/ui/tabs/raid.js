@@ -1,7 +1,7 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
-import { G, getHero, saveGame, canCarry, giveStarterGear } from '../../state.js';
-import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
+import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero } from '../../state.js';
+import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -994,6 +994,99 @@ function showTradeFrom(menu, fromHero, allHeroes, raid) {
 }
 
 // Compare two items (new vs currently equipped) for stat diffs
+// Level-up stat allocation screen
+function showLevelUpScreen(heroes, index, raid) {
+  if (index >= heroes.length) {
+    // All heroes done — back to exploring
+    saveGame();
+    renderActiveTab();
+    return;
+  }
+
+  const hero = heroes[index];
+  const cls = CLASSES[hero.classId];
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  function render() {
+    content.innerHTML = '';
+    const screen = el('div', { class: 'flex-col gap-md' });
+
+    screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 16px;' }, [
+      el('div', { text: '\u2B50', style: 'font-size: 36px; text-align: center;' }),
+      el('div', { class: 'text-success', text: 'LEVEL UP!', style: 'font-size: 22px; font-weight: 900; text-align: center;' }),
+      el('div', { class: 'text-bright', text: `${cls.icon} ${hero.name} — Level ${hero.level}`, style: 'font-size: 16px; font-weight: 700; text-align: center; margin-top: 4px;' }),
+      el('div', { class: 'text-dim', text: `HP: ${hero.maxHp} | MP: ${hero.maxMp}`, style: 'font-size: 12px; text-align: center; margin-top: 2px;' }),
+    ]));
+
+    if (hero.statPoints > 0) {
+      screen.appendChild(el('div', { class: 'text-warning', text: `${hero.statPoints} stat points to allocate`, style: 'font-weight: 600; text-align: center; margin-bottom: 4px;' }));
+    }
+
+    const statsDiv = el('div', { class: 'card', style: 'padding: 12px;' });
+    for (const stat of STATS) {
+      const row = el('div', { class: 'stat-alloc' });
+      row.appendChild(el('span', { class: 'stat-alloc-name', text: stat }));
+      row.appendChild(el('span', { class: 'stat-alloc-desc', text: STAT_DESC[stat] }));
+
+      const controls = el('div', { class: 'stat-alloc-controls' });
+
+      const minusBtn = el('button', { class: 'stat-alloc-btn', text: '-' });
+      minusBtn.disabled = hero.stats[stat] <= 8;
+      minusBtn.onclick = () => {
+        if (hero.stats[stat] > 8) {
+          hero.stats[stat]--;
+          hero.statPoints++;
+          recalcHero(hero);
+          hero.hp = hero.maxHp;
+          hero.mp = hero.maxMp;
+          render();
+        }
+      };
+      controls.appendChild(minusBtn);
+
+      controls.appendChild(el('span', { class: 'stat-alloc-val', text: String(hero.stats[stat]) }));
+
+      const plusBtn = el('button', { class: 'stat-alloc-btn', text: '+' });
+      plusBtn.disabled = hero.statPoints <= 0;
+      plusBtn.onclick = () => {
+        if (hero.statPoints > 0) {
+          hero.stats[stat]++;
+          hero.statPoints--;
+          recalcHero(hero);
+          hero.hp = hero.maxHp;
+          hero.mp = hero.maxMp;
+          render();
+        }
+      };
+      controls.appendChild(plusBtn);
+
+      row.appendChild(controls);
+      statsDiv.appendChild(row);
+    }
+    screen.appendChild(statsDiv);
+
+    // Confirm button
+    const remaining = heroes.length - index - 1;
+    const label = hero.statPoints > 0
+      ? `Allocate all points first`
+      : remaining > 0
+        ? `Confirm — Next Hero (${remaining} more)`
+        : 'Confirm';
+
+    const confirmBtn = btn(label, 'btn-primary btn-block btn-lg', () => {
+      saveGame();
+      showLevelUpScreen(heroes, index + 1, raid);
+    });
+    confirmBtn.disabled = hero.statPoints > 0;
+    screen.appendChild(confirmBtn);
+
+    content.appendChild(screen);
+  }
+
+  render();
+}
+
 function compareItems(newItem, oldItem) {
   const diffs = [];
   const stats = ['dmgMin', 'dmgMax', 'accuracy', 'armor', 'magicResist'];
@@ -1072,8 +1165,9 @@ function renderCombatVictory(container, raid) {
     container.appendChild(lootDiv);
   }
 
-  // Distribute XP
+  // Distribute XP and check for level ups
   const survivors = raid.party.map(id => getHero(id)).filter(h => h && h.alive);
+  const leveledHeroes = [];
   if (survivors.length > 0 && combat.xpEarned > 0) {
     const xpEach = Math.floor(combat.xpEarned / survivors.length);
     for (const hero of survivors) {
@@ -1083,17 +1177,30 @@ function renderCombatVictory(container, raid) {
         hero.xp -= xpNeeded;
         hero.level++;
         hero.statPoints += 2;
-        toast(`${hero.name} leveled up to ${hero.level}!`, 'success');
+        recalcHero(hero);
+        hero.hp = hero.maxHp;
+        hero.mp = hero.maxMp;
+        leveledHeroes.push(hero);
       }
     }
   }
 
-  container.appendChild(btn('Continue', 'btn-primary btn-block', () => {
-    raid.combat = null;
-    raid.phase = RAID_PHASE.EXPLORING;
-    saveGame();
-    renderActiveTab();
-  }));
+  if (leveledHeroes.length > 0) {
+    // Show level-up screen before continuing
+    container.appendChild(btn('Continue — Level Up!', 'btn-success btn-block btn-lg', () => {
+      raid.combat = null;
+      raid.phase = RAID_PHASE.EXPLORING;
+      saveGame();
+      showLevelUpScreen(leveledHeroes, 0, raid);
+    }));
+  } else {
+    container.appendChild(btn('Continue', 'btn-primary btn-block', () => {
+      raid.combat = null;
+      raid.phase = RAID_PHASE.EXPLORING;
+      saveGame();
+      renderActiveTab();
+    }));
+  }
 
   return container;
 }

@@ -74,9 +74,9 @@ export function usedInventory(hero) {
   return used;
 }
 
-// Check if hero can carry an item
+// Check if hero can carry an item — no limit in town, 25u limit in raids
 export function canCarry(hero, item) {
-  return usedInventory(hero) + item.size <= hero.inventoryCapacity;
+  return true; // inventory is unlimited now
 }
 
 // New game state
@@ -186,9 +186,9 @@ export function stashUsed() {
   return G.stash.reduce((sum, item) => sum + item.size, 0);
 }
 
-// Check if stash can hold an item
+// Check if stash can hold an item — unlimited now
 export function canStash(item) {
-  return stashUsed() + item.size <= stashCapacity();
+  return true;
 }
 
 // Calculate offline progress
@@ -313,11 +313,9 @@ export function refreshRecruitPool() {
       points--;
     }
 
-    // Cost based on total stats + tavern modifier
-    const totalStats = Object.values(stats).reduce((a, b) => a + b, 0);
-    const mainHero = getMainHero();
-    const chaDiscount = mainHero ? Math.floor(mainHero.stats.CHA / 5) : 0;
-    const cost = Math.max(50, RECRUIT_BASE_COST + (totalStats - 60) * 5 - chaDiscount * 3);
+    // Cost scales exponentially by number of heroes owned: 1st=20, 2nd=50, 3rd=120, ...up to 1000
+    const owned = G.heroes.length;
+    const cost = Math.min(1000, Math.floor(20 * Math.pow(2.2, owned)));
 
     pool.push({ name, classId, stats, cost, id: uid() });
   }

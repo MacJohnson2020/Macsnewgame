@@ -22,12 +22,7 @@ export function renderStashTab() {
 
   // Town Stash
   container.appendChild(el('div', { class: 'section-title', text: 'Town Stash' }));
-  const used = stashUsed();
-  const cap = stashCapacity();
-  container.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 8px;' }, [
-    el('span', { class: 'text-dim', text: `${used}/${cap} units`, style: 'font-size: 12px;' }),
-    progressBar(used, cap, '', false),
-  ]));
+  container.appendChild(el('div', { class: 'text-dim', text: `${G.stash.length} items stored`, style: 'font-size: 12px; margin-bottom: 8px;' }));
 
   if (G.stash.length === 0) {
     container.appendChild(el('p', { class: 'text-dim', text: 'Stash is empty. Extract loot from raids!' }));
