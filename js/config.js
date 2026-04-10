@@ -303,6 +303,26 @@ export const ENEMIES = {
                   tags: ['humanoid'], weakTo: ['ice', 'holy'], resistTo: ['fire'] },
   void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4, damageType: 'demonic',
                   tags: ['demon', 'beast'], weakTo: ['holy'], resistTo: ['demonic', 'fire'] },
+
+  // Shattered Spire
+  spire_sentinel: { name: 'Spire Sentinel', icon: '\uD83E\uDD16', hp: 55, armor: 18, mr: 10, acc: 22, dmg: [12, 20], speed: 7, xp: 50, tier: 1,
+                    tags: ['construct'], weakTo: ['lightning', 'ice'], resistTo: ['holy', 'physical'] },
+  void_cultist:   { name: 'Void Cultist',   icon: '\uD83E\uDDD9', hp: 45, armor: 6,  mr: 20, acc: 26, dmg: [14, 22], speed: 12, xp: 60, magic: true, tier: 2, damageType: 'demonic',
+                    tags: ['humanoid'], weakTo: ['holy', 'physical'], resistTo: ['demonic', 'magic'] },
+  crystal_wraith: { name: 'Crystal Wraith',  icon: '\uD83D\uDC7B', hp: 50, armor: 4,  mr: 28, acc: 28, dmg: [16, 24], speed: 14, xp: 65, magic: true, tier: 3, damageType: 'ice',
+                    tags: ['undead'], weakTo: ['holy', 'fire'], resistTo: ['ice', 'lightning'] },
+  spire_warden:   { name: 'Spire Warden',   icon: '\uD83D\uDC82', hp: 120, armor: 28, mr: 20, acc: 24, dmg: [20, 32], speed: 6, xp: 100, elite: true, tier: 4, damageType: 'lightning',
+                    tags: ['construct'], weakTo: ['ice'], resistTo: ['lightning', 'holy', 'physical'] },
+
+  // The Abyss
+  abyssal_crawler: { name: 'Abyssal Crawler', icon: '\uD83D\uDC1B', hp: 60, armor: 14, mr: 14, acc: 26, dmg: [14, 22], speed: 16, xp: 70, tier: 1,
+                     tags: ['beast', 'demon'], weakTo: ['holy', 'fire'], resistTo: ['demonic'] },
+  void_knight:     { name: 'Void Knight',     icon: '\u2694\uFE0F', hp: 80, armor: 24, mr: 16, acc: 28, dmg: [18, 28], speed: 10, xp: 85, tier: 2, damageType: 'demonic',
+                     tags: ['undead'], weakTo: ['holy'], resistTo: ['demonic', 'ice', 'physical'] },
+  elder_demon:     { name: 'Elder Demon',     icon: '\uD83D\uDE08', hp: 70, armor: 10, mr: 30, acc: 30, dmg: [22, 34], speed: 13, xp: 95, magic: true, tier: 3, damageType: 'demonic',
+                     tags: ['demon'], weakTo: ['holy', 'lightning'], resistTo: ['demonic', 'fire'] },
+  void_lord:       { name: 'Void Lord',       icon: '\uD83D\uDC79', hp: 180, armor: 30, mr: 30, acc: 30, dmg: [28, 42], speed: 8, xp: 150, elite: true, tier: 4, damageType: 'demonic',
+                     tags: ['demon'], weakTo: ['holy'], resistTo: ['demonic', 'fire', 'ice', 'magic'] },
 };
 
 // Zones
@@ -348,6 +368,34 @@ export const ZONES = [
     corruptionRate: 1.5,
     lootLevel: 3,
     energyCost: 15,
+  },
+  {
+    id: 'shattered_spire',
+    name: 'Shattered Spire',
+    icon: '\uD83C\uDFEF',
+    desc: 'A fractured tower crackling with unstable void energy. Elite enemies and fast corruption.',
+    levelRange: [45, 75],
+    nodes: [16, 22],
+    forkChance: 0.45,
+    enemies: ['spire_sentinel', 'void_cultist', 'crystal_wraith'],
+    elites: ['spire_warden'],
+    corruptionRate: 2.0,
+    lootLevel: 4,
+    energyCost: 25,
+  },
+  {
+    id: 'the_abyss',
+    name: 'The Abyss',
+    icon: '\uD83C\uDF11',
+    desc: 'The source of all corruption. Everything here wants you dead. Bring your best.',
+    levelRange: [70, 99],
+    nodes: [20, 25],
+    forkChance: 0.5,
+    enemies: ['abyssal_crawler', 'void_knight', 'elder_demon'],
+    elites: ['void_lord'],
+    corruptionRate: 2.5,
+    lootLevel: 5,
+    energyCost: 40,
   },
 ];
 

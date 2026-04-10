@@ -1,6 +1,6 @@
 // === Voidborn — Combat System (Chance-to-Hit, Party Turn-Based) ===
 
-import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getPenetration, getCritChance, getInitiative } from './entities.js';
+import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getDamageMultiplier, getPenetration, getCritChance, getInitiative, getBuffValue } from './entities.js';
 import { CLASSES, DAMAGE_TYPES } from '../config.js';
 import { calcHitChance, calcDamage, rollChance, randInt, clamp, statMod } from '../utils.js';
 
@@ -175,6 +175,12 @@ export function attackAction(combat, attacker, target) {
   }
 
   let damage = randInt(dmgMin, dmgMax) + statBonus;
+
+  // Apply damage buffs (Rage, Inspire, etc.)
+  if (isHero) {
+    damage = Math.round(damage * getDamageMultiplier(attacker));
+  }
+
   let isCrit = false;
 
   // Crit check
@@ -276,7 +282,7 @@ export function abilityAction(combat, hero, abilityId, target) {
       }
 
       const [dmgMin, dmgMax] = getWeaponDamage(hero);
-      let damage = Math.round((randInt(dmgMin, dmgMax) + getDamageStat(hero)) * ability.dmgMult);
+      let damage = Math.round((randInt(dmgMin, dmgMax) + getDamageStat(hero)) * ability.dmgMult * getDamageMultiplier(hero));
 
       // Crit
       const critChance = getCritChance(hero) + (ability.critBonus || 0);
@@ -537,12 +543,17 @@ export function enemyAI(combat, enemy) {
     return;
   }
 
-  // Pick a living hero target (lowest HP)
-  const targets = combat.party.filter(h => h.alive);
-  if (targets.length === 0) return;
+  const alive = combat.party.filter(h => h.alive);
+  if (alive.length === 0) return;
 
-  targets.sort((a, b) => a.hp - b.hp);
-  const target = targets[0];
+  // Check for taunt — if any hero has taunt buff, must attack them
+  const taunter = alive.find(h => h.buffs?.some(b => b.stat === 'taunt'));
+  if (taunter) {
+    attackAction(combat, enemy, taunter);
+    return;
+  }
 
-  attackAction(combat, enemy, target);
+  // Default: target lowest HP hero
+  alive.sort((a, b) => a.hp - b.hp);
+  attackAction(combat, enemy, alive[0]);
 }

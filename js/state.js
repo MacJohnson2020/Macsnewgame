@@ -37,13 +37,31 @@ export function createHero(name, classId, stats) {
   return hero;
 }
 
-// Recalculate derived stats for a hero
+// Recalculate derived stats for a hero (includes gear substat bonuses)
 export function recalcHero(hero) {
   const cls = CLASSES[hero.classId];
   const conMod = Math.floor((hero.stats.CON - 10) / 2);
   const intMod = Math.floor((hero.stats.INT - 10) / 2);
-  hero.maxHp = cls.hpBase + cls.hpPerLevel * (hero.level - 1) + conMod * 2;
-  hero.maxMp = cls.mpBase + cls.mpPerLevel * (hero.level - 1) + intMod * 2;
+
+  // Base + level + stat bonuses
+  let maxHp = cls.hpBase + cls.hpPerLevel * (hero.level - 1) + conMod * 2;
+  let maxMp = cls.mpBase + cls.mpPerLevel * (hero.level - 1) + intMod * 2;
+
+  // Add gear substat bonuses (maxHp, maxMp)
+  if (hero.gear) {
+    for (const slot of GEAR_SLOTS) {
+      const item = hero.gear[slot];
+      if (item && item.substats) {
+        for (const sub of item.substats) {
+          if (sub.id === 'maxHp') maxHp += sub.value;
+          if (sub.id === 'maxMp') maxMp += sub.value;
+        }
+      }
+    }
+  }
+
+  hero.maxHp = maxHp;
+  hero.maxMp = maxMp;
   hero.hp = Math.min(hero.hp, hero.maxHp);
   hero.mp = Math.min(hero.mp, hero.maxMp);
 }
