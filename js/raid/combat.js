@@ -1,7 +1,7 @@
 // === Voidborn — Combat System (Chance-to-Hit, Party Turn-Based) ===
 
-import { getAccuracy, getArmor, getMagicResist, getWeaponDamage, getDamageStat, getPenetration, getCritChance, getInitiative } from './entities.js';
-import { CLASSES } from '../config.js';
+import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getPenetration, getCritChance, getInitiative } from './entities.js';
+import { CLASSES, DAMAGE_TYPES } from '../config.js';
 import { calcHitChance, calcDamage, rollChance, randInt, clamp, statMod } from '../utils.js';
 
 // Combat state
@@ -145,15 +145,10 @@ export function attackAction(combat, attacker, target) {
       pen = penStats.armorPen;
     }
   } else {
-    // Enemy attacking hero
+    // Enemy attacking hero — use element-aware defense
     accuracy = attacker.accuracy;
-    if (attacker.magic) {
-      defense = getMagicResist(target);
-      pen = 0;
-    } else {
-      defense = getArmor(target);
-      pen = 0;
-    }
+    defense = getDefense(target, attacker.damageType || (attacker.magic ? 'magic' : 'physical'));
+    pen = 0;
   }
 
   const hitChance = calcHitChance(accuracy, defense, pen);
@@ -241,11 +236,13 @@ export function abilityAction(combat, hero, abilityId, target) {
 
     // Damage abilities
     if (ability.dmgMult) {
-      const isMagic = ability.magic || false;
+      // Determine damage type: element > magic flag > physical
+      const dmgType = ability.element || (ability.magic ? 'magic' : 'physical');
+      const isMagicStat = ability.magic || ability.element; // uses INT scaling if magic or elemental
       const accuracy = getAccuracy(hero) + (ability.critBonus || 0);
       const penStats = getPenetration(hero);
-      const defense = isMagic ? (t.magicResist || 0) : (t.armor || 0);
-      const pen = isMagic ? penStats.magicPen : penStats.armorPen;
+      const defense = getDefense(t, dmgType);
+      const pen = isMagicStat ? penStats.magicPen : penStats.armorPen;
 
       const hitChance = calcHitChance(accuracy, defense, pen);
       const hit = rollChance(hitChance);
@@ -302,11 +299,23 @@ export function abilityAction(combat, hero, abilityId, target) {
       }
     }
 
-    // DoT effects
+    // DoT effects (legacy manual dot)
     if (ability.dot) {
       t.dots = t.dots || [];
       t.dots.push({ name: ability.name, damage: ability.dot.damage, turns: ability.dot.turns });
-      combat.log.push({ type: 'ability', text: `  → ${t.name} is poisoned! (${ability.dot.damage}/turn for ${ability.dot.turns} turns)`, class: 'ability' });
+      combat.log.push({ type: 'ability', text: `  → ${t.name} is afflicted! (${ability.dot.damage}/turn for ${ability.dot.turns} turns)`, class: 'ability' });
+    }
+
+    // Element-based DoT (applyDot references DAMAGE_TYPES)
+    if (ability.applyDot && !ability.dot) {
+      const dtConfig = DAMAGE_TYPES[ability.applyDot];
+      if (dtConfig && dtConfig.dot) {
+        const dotInfo = dtConfig.dot;
+        const dotDmg = dotInfo.dmgPer + Math.floor(hero.level / 3);
+        t.dots = t.dots || [];
+        t.dots.push({ name: dotInfo.name, damage: dotDmg, turns: 3 });
+        combat.log.push({ type: 'ability', text: `  → ${t.name}: ${dotInfo.name}! (${dotDmg}/turn for 3 turns)`, class: 'ability' });
+      }
     }
 
     // Debuff effects

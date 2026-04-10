@@ -28,10 +28,10 @@ export const CLASSES = {
     mpBase: 8,
     mpPerLevel: 2,
     abilities: [
-      { id: 'reckless_strike', name: 'Reckless Strike', desc: 'Deal 200% weapon damage', mpCost: 3, level: 1, dmgMult: 2.0 },
+      { id: 'reckless_strike', name: 'Reckless Strike', desc: 'Deal 200% damage, apply Bleed', mpCost: 3, level: 1, dmgMult: 2.0, applyDot: 'physical' },
       { id: 'rage', name: 'Rage', desc: 'Boost own damage by 40% for 3 turns', mpCost: 4, level: 3, selfBuff: { stat: 'damage', pct: 40, turns: 3 } },
-      { id: 'blood_frenzy', name: 'Blood Frenzy', desc: 'Hit all enemies for 100% damage', mpCost: 6, level: 5, dmgMult: 1.0, aoe: true },
-      { id: 'defy_death', name: 'Defy Death', desc: 'Deal 250% damage, heal 30% of damage dealt', mpCost: 10, level: 8, dmgMult: 2.5 },
+      { id: 'blood_frenzy', name: 'Blood Frenzy', desc: 'Hit all enemies, apply Bleed', mpCost: 6, level: 5, dmgMult: 1.0, aoe: true, applyDot: 'physical' },
+      { id: 'defy_death', name: 'Defy Death', desc: 'Deal 250% damage, heal 30% dealt', mpCost: 10, level: 8, dmgMult: 2.5, lifesteal: 30 },
     ],
   },
   rogue: {
@@ -60,10 +60,10 @@ export const CLASSES = {
     mpBase: 35,
     mpPerLevel: 6,
     abilities: [
-      { id: 'arcane_blast', name: 'Arcane Blast', desc: 'Deal 130% magic damage to all enemies', mpCost: 6, level: 1, dmgMult: 1.3, aoe: true, magic: true },
-      { id: 'frost_bolt', name: 'Frost Bolt', desc: 'Deal 160% magic damage, slow target', mpCost: 4, level: 3, dmgMult: 1.6, magic: true, effect: 'slow' },
+      { id: 'arcane_blast', name: 'Arcane Blast', desc: 'Deal 130% magic damage to all, apply Poison', mpCost: 6, level: 1, dmgMult: 1.3, aoe: true, magic: true, applyDot: 'magic' },
+      { id: 'frost_bolt', name: 'Frost Bolt', desc: 'Deal 160% ice damage, apply Frostbite', mpCost: 4, level: 3, dmgMult: 1.6, element: 'ice', applyDot: 'ice' },
       { id: 'arcane_shield', name: 'Arcane Shield', desc: 'Gain +50% magic resist for 3 turns', mpCost: 5, level: 5, selfBuff: { stat: 'magicResist', pct: 50, turns: 3 } },
-      { id: 'meteor', name: 'Meteor', desc: 'Deal 250% magic damage to all enemies', mpCost: 15, level: 8, dmgMult: 2.5, aoe: true, magic: true },
+      { id: 'meteor', name: 'Meteor', desc: 'Deal 250% fire damage to all enemies', mpCost: 15, level: 8, dmgMult: 2.5, aoe: true, element: 'fire' },
     ],
   },
   cleric: {
@@ -77,7 +77,7 @@ export const CLASSES = {
     mpPerLevel: 5,
     abilities: [
       { id: 'heal', name: 'Heal', desc: 'Restore 40% of an ally\'s max HP', mpCost: 4, level: 1, healAlly: true, healPct: 40 },
-      { id: 'smite', name: 'Smite', desc: 'Deal 150% magic damage to one enemy', mpCost: 5, level: 3, dmgMult: 1.5, magic: true },
+      { id: 'smite', name: 'Smite', desc: 'Deal 150% holy damage to one enemy', mpCost: 5, level: 3, dmgMult: 1.5, element: 'holy' },
       { id: 'group_heal', name: 'Group Heal', desc: 'Heal all allies for 25% max HP', mpCost: 8, level: 5, healAlly: true, healPct: 25, aoe: true },
       { id: 'divine_shield', name: 'Divine Shield', desc: 'Boost party armor by 30% for 3 turns', mpCost: 10, level: 8, buff: { stat: 'armor', pct: 30, turns: 3 } },
     ],
@@ -95,7 +95,7 @@ export const CLASSES = {
       { id: 'holy_strike', name: 'Holy Strike', desc: 'Deal 140% weapon damage', mpCost: 3, level: 1, dmgMult: 1.4 },
       { id: 'lay_on_hands', name: 'Lay on Hands', desc: 'Heal an ally for 50% of their max HP', mpCost: 6, level: 3, healAlly: true, healPct: 50 },
       { id: 'taunt', name: 'Taunt', desc: 'Force all enemies to target you for 2 turns', mpCost: 5, level: 5, selfBuff: { stat: 'taunt', pct: 1, turns: 2 } },
-      { id: 'divine_smite', name: 'Divine Smite', desc: 'Deal 200% damage, +50% vs elites', mpCost: 10, level: 8, dmgMult: 2.0 },
+      { id: 'divine_smite', name: 'Divine Smite', desc: 'Deal 200% holy damage, +50% vs elites', mpCost: 10, level: 8, dmgMult: 2.0, element: 'holy' },
     ],
   },
   ranger: {
@@ -124,10 +124,10 @@ export const CLASSES = {
     mpBase: 28,
     mpPerLevel: 5,
     abilities: [
-      { id: 'drain_life', name: 'Drain Life', desc: 'Deal 120% magic damage, heal self for half', mpCost: 4, level: 1, dmgMult: 1.2, magic: true, lifesteal: 50 },
+      { id: 'drain_life', name: 'Drain Life', desc: 'Deal 120% demonic damage, heal self for half', mpCost: 4, level: 1, dmgMult: 1.2, element: 'demonic', lifesteal: 50 },
       { id: 'curse', name: 'Curse', desc: 'Reduce enemy armor and MR by 30% for 3 turns', mpCost: 5, level: 3, debuff: { stat: 'armor', pct: -30, turns: 3 }, aoe: false },
-      { id: 'death_coil', name: 'Death Coil', desc: 'Deal 150% magic damage, apply 4 dmg/turn DoT', mpCost: 6, level: 5, dmgMult: 1.5, magic: true, dot: { damage: 4, turns: 3 } },
-      { id: 'soul_harvest', name: 'Soul Harvest', desc: 'Deal 180% magic damage to all, heal per hit', mpCost: 12, level: 8, dmgMult: 1.8, aoe: true, magic: true, lifesteal: 30 },
+      { id: 'death_coil', name: 'Death Coil', desc: 'Deal 150% demonic damage, apply Wither', mpCost: 6, level: 5, dmgMult: 1.5, element: 'demonic', applyDot: 'demonic' },
+      { id: 'soul_harvest', name: 'Soul Harvest', desc: 'Deal 180% demonic damage to all, heal per hit', mpCost: 12, level: 8, dmgMult: 1.8, aoe: true, element: 'demonic', lifesteal: 30 },
     ],
   },
   bard: {
@@ -143,7 +143,7 @@ export const CLASSES = {
       { id: 'inspire', name: 'Inspire', desc: 'Boost party damage by 25% for 3 turns', mpCost: 4, level: 1, buff: { stat: 'damage', pct: 25, turns: 3 } },
       { id: 'war_song', name: 'War Song', desc: 'Boost party accuracy by 25% for 3 turns', mpCost: 5, level: 3, buff: { stat: 'accuracy', pct: 25, turns: 3 } },
       { id: 'lullaby', name: 'Lullaby', desc: 'Stun all enemies for 1 turn', mpCost: 7, level: 5, effect: 'stun', aoe: true },
-      { id: 'encore', name: 'Encore', desc: 'Deal 120% damage and reset all ally cooldowns', mpCost: 12, level: 8, dmgMult: 1.2, magic: true },
+      { id: 'encore', name: 'Encore', desc: 'Deal 120% lightning damage, reset ally cooldowns', mpCost: 12, level: 8, dmgMult: 1.2, element: 'lightning' },
     ],
   },
 };
@@ -152,6 +152,21 @@ export const CLASSES = {
 export function xpForLevel(level) {
   return Math.floor(50 * Math.pow(level, 1.8));
 }
+
+// === Damage Types & Elements ===
+// physical and magic are base types; elements are rarer
+export const DAMAGE_TYPES = {
+  physical:  { name: 'Physical',  icon: '\u2694\uFE0F',      resist: 'armor',          dot: { name: 'Bleed',     icon: '\uD83E\uDE78', dmgPer: 3 } },
+  magic:     { name: 'Magic',     icon: '\uD83D\uDD2E',      resist: 'magicResist',    dot: { name: 'Poison',    icon: '\u2620\uFE0F', dmgPer: 3 } },
+  fire:      { name: 'Fire',      icon: '\uD83D\uDD25',      resist: 'fireResist',     dot: { name: 'Burn',      icon: '\uD83D\uDD25', dmgPer: 4 } },
+  ice:       { name: 'Ice',       icon: '\u2744\uFE0F',      resist: 'iceResist',      dot: { name: 'Frostbite', icon: '\u2744\uFE0F', dmgPer: 2 } },
+  lightning: { name: 'Lightning', icon: '\u26A1',             resist: 'lightningResist', dot: null },
+  demonic:   { name: 'Demonic',   icon: '\uD83D\uDE08',      resist: 'demonicResist',  dot: { name: 'Wither',    icon: '\uD83D\uDE08', dmgPer: 3 } },
+  holy:      { name: 'Holy',      icon: '\u2728',             resist: 'holyResist',     dot: null },
+};
+
+// All elemental resistance IDs (for gear generation)
+export const ELEMENT_RESISTS = ['fireResist', 'iceResist', 'lightningResist', 'demonicResist', 'holyResist'];
 
 // Equipment slots (RuneScape style)
 export const GEAR_SLOTS = ['head','body','legs','weapon','offhand','hands','feet','cape','neck','ring','ammo'];
@@ -265,14 +280,14 @@ export const ENEMIES = {
 
   // Neon Depths
   void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1 },
-  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2 },
-  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3 },
+  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2, damageType: 'demonic' },
+  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3, damageType: 'lightning' },
   tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true, tier: 4 },
 
   // Void Marshes
   marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35, tier: 1 },
-  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2 },
-  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4 },
+  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2, damageType: 'fire' },
+  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4, damageType: 'demonic' },
 };
 
 // Zones
