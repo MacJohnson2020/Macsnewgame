@@ -1,7 +1,7 @@
 // === Voidborn — Stash Tab ===
 
 import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame, secureContainerCapacity, secureContainerUsed, canSecure } from '../../state.js';
-import { CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
+import { CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, MATERIALS, SKILLS } from '../../config.js';
 import { el } from '../../utils.js';
 import { itemDisplay, itemDetail, btn, statRow, toast, progressBar } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -32,6 +32,37 @@ export function renderStashTab() {
       grid.appendChild(itemDisplay(item, (itm) => showStashItemActions(itm)));
     }
     container.appendChild(grid);
+  }
+
+  // Divider
+  container.appendChild(el('div', { class: 'divider' }));
+
+  // Materials
+  container.appendChild(el('div', { class: 'section-title', text: 'Materials' }));
+  const matsBySkill = {};
+  for (const [matId, mat] of Object.entries(MATERIALS)) {
+    const count = G.materials[matId] || 0;
+    if (count <= 0) continue;
+    const skillName = SKILLS[mat.skill]?.name || mat.skill;
+    if (!matsBySkill[skillName]) matsBySkill[skillName] = [];
+    matsBySkill[skillName].push({ id: matId, ...mat, count });
+  }
+
+  if (Object.keys(matsBySkill).length === 0) {
+    container.appendChild(el('p', { class: 'text-dim', text: 'No materials. Train gathering skills to collect!' }));
+  } else {
+    for (const [skillName, mats] of Object.entries(matsBySkill)) {
+      container.appendChild(el('div', { class: 'text-dim', text: skillName, style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-top: 6px; margin-bottom: 3px;' }));
+      const grid = el('div', { style: 'display: flex; flex-wrap: wrap; gap: 4px;' });
+      for (const mat of mats) {
+        grid.appendChild(el('span', {
+          text: `${mat.icon} ${mat.name} x${mat.count}`,
+          style: 'font-size: 10px; background: var(--bg-dark); padding: 2px 6px; border-radius: 4px; white-space: nowrap;',
+          class: mat.rare ? 'rarity-text-rare' : 'text-bright',
+        }));
+      }
+      container.appendChild(grid);
+    }
   }
 
   // Divider

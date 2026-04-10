@@ -1,6 +1,6 @@
 // === Voidborn — Main Entry Point ===
 
-import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear } from './state.js';
+import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear, processSkillAction } from './state.js';
 import { CLASSES, STATS, STAT_DESC, STAT_DEFAULTS, STARTING_STAT_POINTS } from './config.js';
 import { el, uid } from './utils.js';
 import { initRouter, registerTab, switchTab, renderActiveTab } from './ui/router.js';
@@ -11,6 +11,7 @@ import { renderPartyTab } from './ui/tabs/party.js';
 import { renderStashTab } from './ui/tabs/stash.js';
 import { renderTownTab } from './ui/tabs/town.js';
 import { renderBountiesTab } from './ui/tabs/bounties.js';
+import { renderSkillsTab } from './ui/tabs/skills.js';
 
 // Initialize game
 function init() {
@@ -18,6 +19,7 @@ function init() {
   registerTab('raid', renderRaidTab);
   registerTab('party', renderPartyTab);
   registerTab('stash', renderStashTab);
+  registerTab('skills', renderSkillsTab);
   registerTab('town', renderTownTab);
   registerTab('bounties', renderBountiesTab);
 
@@ -62,6 +64,19 @@ function init() {
       renderHUD();
     }
   }, 60000);
+
+  // Skill training tick every 2 minutes (120 seconds)
+  setInterval(() => {
+    if (G.trainingQueues.length === 0) return;
+    for (const queue of G.trainingQueues) {
+      if (queue.actionsLeft > 0) {
+        processSkillAction(queue.skillId, queue.heroId);
+        queue.actionsLeft--;
+      }
+    }
+    G.trainingQueues = G.trainingQueues.filter(q => q.actionsLeft > 0);
+    saveGame();
+  }, 120000);
 }
 
 // Character creation screen

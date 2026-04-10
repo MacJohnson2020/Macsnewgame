@@ -524,3 +524,178 @@ export const BOUNTY_TEMPLATES = [
   { type: 'clear_floor', desc: 'Reach floor {count} in {zone}', countRange: [6, 10], rep: 35, gold: 50 },
   { type: 'no_death', desc: 'Extract from {zone} with no deaths', rep: 40, gold: 60 },
 ];
+
+// === Skills System ===
+
+// XP needed for each skill level (RuneScape-style exponential)
+export function skillXpForLevel(level) {
+  if (level <= 1) return 0;
+  return Math.floor(100 * Math.pow(level, 2.2));
+}
+
+// Training action tiers (same for all skills)
+export const SKILL_TIERS = [
+  { tier: 1, level: 1,  time: 2,  xp: 10 },
+  { tier: 2, level: 20, time: 5,  xp: 30 },
+  { tier: 3, level: 40, time: 10, xp: 75 },
+  { tier: 4, level: 60, time: 15, xp: 150 },
+  { tier: 5, level: 80, time: 20, xp: 300 },
+];
+
+export const SKILL_MAX_LEVEL = 100;
+export const SKILL_AFK_MAX = 60; // max 60 min AFK training
+
+export const SKILLS = {
+  // Gathering
+  mining:      { id: 'mining',      name: 'Mining',      icon: '\u26CF\uFE0F', type: 'gathering', statBonus: 'STR', desc: 'Mine ore and gems' },
+  herbalism:   { id: 'herbalism',   name: 'Herbalism',   icon: '\uD83C\uDF3F', type: 'gathering', statBonus: 'WIS', desc: 'Gather herbs and reagents' },
+  woodcutting: { id: 'woodcutting', name: 'Woodcutting', icon: '\uD83E\uDE93', type: 'gathering', statBonus: 'CON', desc: 'Chop logs and forage fruit' },
+  fishing:     { id: 'fishing',     name: 'Fishing',     icon: '\uD83C\uDFA3', type: 'gathering', statBonus: 'WIS', desc: 'Catch fish for cooking' },
+  // Crafting
+  smithing:    { id: 'smithing',    name: 'Smithing',    icon: '\uD83D\uDD28', type: 'crafting',  statBonus: 'CON', desc: 'Forge weapons and armor' },
+  alchemy:     { id: 'alchemy',     name: 'Alchemy',     icon: '\u2697\uFE0F', type: 'crafting',  statBonus: 'INT', desc: 'Brew potions and poisons' },
+  enchanting:  { id: 'enchanting',  name: 'Enchanting',  icon: '\u2728',       type: 'crafting',  statBonus: 'INT', desc: 'Add substats to gear' },
+  runecrafting:{ id: 'runecrafting', name: 'Runecrafting', icon: '\uD83D\uDD2E', type: 'crafting', statBonus: 'INT', desc: 'Craft runes, arrows, throwables' },
+  cooking:     { id: 'cooking',     name: 'Cooking',     icon: '\uD83C\uDF73', type: 'crafting',  statBonus: 'CON', desc: 'Cook food for healing and buffs' },
+  // Training
+  agility:     { id: 'agility',     name: 'Agility',     icon: '\uD83C\uDFC3', type: 'training',  statBonus: 'DEX', desc: 'Train speed and reflexes' },
+  leadership:  { id: 'leadership',  name: 'Leadership',  icon: '\uD83D\uDC51', type: 'training',  statBonus: 'CHA', desc: 'Develop command presence' },
+  faith:       { id: 'faith',       name: 'Faith',       icon: '\uD83D\uDE4F', type: 'training',  statBonus: 'WIS', desc: 'Deepen spiritual power' },
+};
+
+// Training actions (for training skills — no materials needed)
+export const TRAINING_ACTIONS = {
+  agility: [
+    { id: 'sprints',         name: 'Sprints',          level: 1 },
+    { id: 'obstacle_course', name: 'Obstacle Course',  level: 20 },
+    { id: 'rooftop_running', name: 'Rooftop Running',  level: 40 },
+    { id: 'void_dash',       name: 'Void Dash',        level: 60 },
+    { id: 'shadow_step',     name: 'Shadow Step',      level: 80 },
+  ],
+  leadership: [
+    { id: 'campfire_stories', name: 'Campfire Stories', level: 1 },
+    { id: 'command_drills',   name: 'Command Drills',  level: 20 },
+    { id: 'battle_speeches',  name: 'Battle Speeches', level: 40 },
+    { id: 'war_council',      name: 'War Council',     level: 60 },
+    { id: 'inspire_masses',   name: 'Inspire Masses',  level: 80 },
+  ],
+  faith: [
+    { id: 'prayer',      name: 'Prayer',      level: 1 },
+    { id: 'meditation',  name: 'Meditation',   level: 20 },
+    { id: 'pilgrimage',  name: 'Pilgrimage',   level: 40 },
+    { id: 'communion',   name: 'Communion',     level: 60 },
+    { id: 'ascension',   name: 'Ascension',    level: 80 },
+  ],
+};
+
+// Materials — gathered from gathering skills
+export const MATERIALS = {
+  // Mining — ore
+  copper_ore: { name: 'Copper Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 1 },
+  iron_ore: { name: 'Iron Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 10 },
+  steel_ore: { name: 'Steel Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 20 },
+  mithril_ore: { name: 'Mithril Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 30 },
+  adamant_ore: { name: 'Adamant Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 40 },
+  void_ore: { name: 'Void Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 50 },
+  obsidian_ore: { name: 'Obsidian Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 60 },
+  dragon_ore: { name: 'Dragon Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 70 },
+  abyssal_ore: { name: 'Abyssal Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 80 },
+  celestial_ore: { name: 'Celestial Ore', icon: '\uD83E\uDEA8', skill: 'mining', level: 90 },
+  // Mining — gems (rare)
+  chipped_topaz: { name: 'Chipped Topaz', icon: '\uD83D\uDC8E', skill: 'mining', level: 1, rare: true, dropPct: 5 },
+  cloudy_jade: { name: 'Cloudy Jade', icon: '\uD83D\uDC8E', skill: 'mining', level: 10, rare: true, dropPct: 4.5 },
+  rough_ruby: { name: 'Rough Ruby', icon: '\uD83D\uDC8E', skill: 'mining', level: 20, rare: true, dropPct: 4 },
+  flawed_sapphire: { name: 'Flawed Sapphire', icon: '\uD83D\uDC8E', skill: 'mining', level: 30, rare: true, dropPct: 3.5 },
+  clear_emerald: { name: 'Clear Emerald', icon: '\uD83D\uDC8E', skill: 'mining', level: 40, rare: true, dropPct: 3 },
+  void_shard: { name: 'Void Shard', icon: '\uD83D\uDC8E', skill: 'mining', level: 50, rare: true, dropPct: 2.5 },
+  shadow_opal: { name: 'Shadow Opal', icon: '\uD83D\uDC8E', skill: 'mining', level: 60, rare: true, dropPct: 2 },
+  dragon_eye: { name: 'Dragon Eye', icon: '\uD83D\uDC8E', skill: 'mining', level: 70, rare: true, dropPct: 1.5 },
+  abyssal_pearl: { name: 'Abyssal Pearl', icon: '\uD83D\uDC8E', skill: 'mining', level: 80, rare: true, dropPct: 1 },
+  celestial_diamond: { name: 'Celestial Diamond', icon: '\uD83D\uDC8E', skill: 'mining', level: 90, rare: true, dropPct: 1 },
+  // Herbalism — herbs
+  gravemoss: { name: 'Gravemoss', icon: '\uD83C\uDF3F', skill: 'herbalism', level: 1 },
+  rotleaf: { name: 'Rotleaf', icon: '\uD83C\uDF3F', skill: 'herbalism', level: 10 },
+  nightshade: { name: 'Nightshade', icon: '\uD83C\uDF3F', skill: 'herbalism', level: 20 },
+  blightcap: { name: 'Blightcap', icon: '\uD83C\uDF44', skill: 'herbalism', level: 30 },
+  voidbloom: { name: 'Voidbloom', icon: '\uD83C\uDF3A', skill: 'herbalism', level: 40 },
+  wraithpetal: { name: 'Wraithpetal', icon: '\uD83C\uDF3A', skill: 'herbalism', level: 50 },
+  doomthorn: { name: 'Doomthorn', icon: '\uD83C\uDF35', skill: 'herbalism', level: 60 },
+  soulroot: { name: 'Soulroot', icon: '\uD83C\uDF3F', skill: 'herbalism', level: 70 },
+  abyssal_fern: { name: 'Abyssal Fern', icon: '\uD83C\uDF3F', skill: 'herbalism', level: 80 },
+  celestial_lotus: { name: 'Celestial Lotus', icon: '\uD83C\uDF38', skill: 'herbalism', level: 90 },
+  // Herbalism — rare drops
+  weak_healing_vial: { name: 'Weak Healing Vial', icon: '\u2764\uFE0F', skill: 'herbalism', level: 1, rare: true, dropPct: 5, consumable: { effect: 'heal', value: 10 } },
+  minor_antidote_vial: { name: 'Minor Antidote Vial', icon: '\uD83C\uDF3F', skill: 'herbalism', level: 10, rare: true, dropPct: 4.5, consumable: { effect: 'cure', value: 0 } },
+  poison_coating: { name: 'Poison Coating', icon: '\u2620\uFE0F', skill: 'herbalism', level: 20, rare: true, dropPct: 4 },
+  small_damage_brew: { name: 'Small Damage Brew', icon: '\u2694\uFE0F', skill: 'herbalism', level: 30, rare: true, dropPct: 3.5, consumable: { effect: 'buff_damage', value: 10 } },
+  void_mana_sip: { name: 'Void Mana Sip', icon: '\uD83D\uDCA7', skill: 'herbalism', level: 40, rare: true, dropPct: 3, consumable: { effect: 'mana', value: 8 } },
+  bleed_coating: { name: 'Bleed Coating', icon: '\uD83E\uDE78', skill: 'herbalism', level: 50, rare: true, dropPct: 2.5 },
+  thorn_oil: { name: 'Thorn Oil', icon: '\uD83C\uDF35', skill: 'herbalism', level: 60, rare: true, dropPct: 2 },
+  small_resist_brew: { name: 'Small Resist Brew', icon: '\uD83D\uDEE1\uFE0F', skill: 'herbalism', level: 70, rare: true, dropPct: 1.5, consumable: { effect: 'buff_resist', value: 15 } },
+  abyssal_coating: { name: 'Abyssal Coating', icon: '\uD83D\uDE08', skill: 'herbalism', level: 80, rare: true, dropPct: 1 },
+  celestial_tear: { name: 'Celestial Tear', icon: '\u2728', skill: 'herbalism', level: 90, rare: true, dropPct: 1 },
+  // Woodcutting — logs
+  deadwood_log: { name: 'Deadwood Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 1, fuelUses: 1 },
+  rotwood_log: { name: 'Rotwood Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 10, fuelUses: 2 },
+  darkoak_log: { name: 'Darkoak Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 20, fuelUses: 3 },
+  blightwood_log: { name: 'Blightwood Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 30, fuelUses: 4 },
+  ironbark_log: { name: 'Ironbark Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 40, fuelUses: 5 },
+  voidwood_log: { name: 'Voidwood Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 50, fuelUses: 6 },
+  ashwood_log: { name: 'Ashwood Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 60, fuelUses: 7 },
+  soulwood_log: { name: 'Soulwood Log', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 70, fuelUses: 8 },
+  abyssal_timber: { name: 'Abyssal Timber', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 80, fuelUses: 9 },
+  celestial_branch: { name: 'Celestial Branch', icon: '\uD83E\uDEB5', skill: 'woodcutting', level: 90, fuelUses: 10 },
+  // Woodcutting — rare food drops (edible raw)
+  shriveled_berries: { name: 'Shriveled Berries', icon: '\uD83C\uDF47', skill: 'woodcutting', level: 1, rare: true, dropPct: 5, consumable: { effect: 'heal', value: 5 } },
+  bark_nuts: { name: 'Bark Nuts', icon: '\uD83C\uDF30', skill: 'woodcutting', level: 10, rare: true, dropPct: 4.5, consumable: { effect: 'heal', value: 8 } },
+  wild_mushroom: { name: 'Wild Mushroom', icon: '\uD83C\uDF44', skill: 'woodcutting', level: 20, rare: true, dropPct: 4, consumable: { effect: 'mana', value: 5 } },
+  blightsap_fruit: { name: 'Blightsap Fruit', icon: '\uD83C\uDF52', skill: 'woodcutting', level: 30, rare: true, dropPct: 3.5, consumable: { effect: 'buff_damage', value: 5 } },
+  ironbark_acorn: { name: 'Ironbark Acorn', icon: '\uD83C\uDF30', skill: 'woodcutting', level: 40, rare: true, dropPct: 3, consumable: { effect: 'buff_armor', value: 5 } },
+  void_fig: { name: 'Void Fig', icon: '\uD83C\uDF52', skill: 'woodcutting', level: 50, rare: true, dropPct: 2.5, consumable: { effect: 'heal', value: 12 } },
+  smoked_plum: { name: 'Smoked Plum', icon: '\uD83C\uDF51', skill: 'woodcutting', level: 60, rare: true, dropPct: 2, consumable: { effect: 'mana', value: 8 } },
+  soulberry: { name: 'Soulberry', icon: '\uD83C\uDF53', skill: 'woodcutting', level: 70, rare: true, dropPct: 1.5, consumable: { effect: 'buff_resist', value: 8 } },
+  abyssal_truffle: { name: 'Abyssal Truffle', icon: '\uD83C\uDF44', skill: 'woodcutting', level: 80, rare: true, dropPct: 1, consumable: { effect: 'heal', value: 18 } },
+  starfruit: { name: 'Starfruit', icon: '\u2B50', skill: 'woodcutting', level: 90, rare: true, dropPct: 1, consumable: { effect: 'heal_both', value: 10 } },
+  // Fishing — fish (must be cooked)
+  bone_minnow: { name: 'Bone Minnow', icon: '\uD83D\uDC1F', skill: 'fishing', level: 1 },
+  sewer_eel: { name: 'Sewer Eel', icon: '\uD83D\uDC1F', skill: 'fishing', level: 10 },
+  pale_carp: { name: 'Pale Carp', icon: '\uD83D\uDC1F', skill: 'fishing', level: 20 },
+  blightfin: { name: 'Blightfin', icon: '\uD83D\uDC20', skill: 'fishing', level: 30 },
+  ironjaw_trout: { name: 'Ironjaw Trout', icon: '\uD83D\uDC20', skill: 'fishing', level: 40 },
+  void_angler: { name: 'Void Angler', icon: '\uD83D\uDC21', skill: 'fishing', level: 50 },
+  ashen_pike: { name: 'Ashen Pike', icon: '\uD83D\uDC21', skill: 'fishing', level: 60 },
+  soulfish: { name: 'Soulfish', icon: '\uD83D\uDC20', skill: 'fishing', level: 70 },
+  abyssal_leviathan: { name: 'Abyssal Leviathan', icon: '\uD83D\uDC33', skill: 'fishing', level: 80 },
+  celestial_koi: { name: 'Celestial Koi', icon: '\uD83D\uDC20', skill: 'fishing', level: 90 },
+  // Fishing — rare drops
+  cracked_shell: { name: 'Cracked Shell', icon: '\uD83D\uDC1A', skill: 'fishing', level: 1, rare: true, dropPct: 5 },
+  murky_pearl: { name: 'Murky Pearl', icon: '\uD83D\uDC8E', skill: 'fishing', level: 10, rare: true, dropPct: 4.5 },
+  rotted_kelp: { name: 'Rotted Kelp', icon: '\uD83C\uDF3F', skill: 'fishing', level: 20, rare: true, dropPct: 4 },
+  blight_roe: { name: 'Blight Roe', icon: '\uD83E\uDDE3', skill: 'fishing', level: 30, rare: true, dropPct: 3.5 },
+  jagged_scale: { name: 'Jagged Scale', icon: '\uD83D\uDEE1\uFE0F', skill: 'fishing', level: 40, rare: true, dropPct: 3 },
+  void_ink: { name: 'Void Ink', icon: '\uD83C\uDF11', skill: 'fishing', level: 50, rare: true, dropPct: 2.5 },
+  ember_coral: { name: 'Ember Coral', icon: '\uD83D\uDD25', skill: 'fishing', level: 60, rare: true, dropPct: 2 },
+  ghostfin: { name: 'Ghostfin', icon: '\uD83D\uDC7B', skill: 'fishing', level: 70, rare: true, dropPct: 1.5 },
+  deep_sea_fang: { name: 'Deep Sea Fang', icon: '\uD83E\uDDB7', skill: 'fishing', level: 80, rare: true, dropPct: 1 },
+  golden_scale: { name: 'Golden Scale', icon: '\u2B50', skill: 'fishing', level: 90, rare: true, dropPct: 1 },
+  // Crafting reagents (from rare drops, used in enchanting/runecrafting)
+  smoldering_ember: { name: 'Smoldering Ember', icon: '\uD83D\uDD25', skill: 'woodcutting', level: 60, rare: true, dropPct: 2 },
+  soul_essence: { name: 'Soul Essence', icon: '\uD83D\uDC7B', skill: 'herbalism', level: 70, rare: true, dropPct: 1.5 },
+  void_amber: { name: 'Void Amber', icon: '\uD83D\uDD2E', skill: 'woodcutting', level: 50, rare: true, dropPct: 2.5 },
+  hollow_reed: { name: 'Hollow Reed', icon: '\uD83C\uDF3E', skill: 'woodcutting', level: 30, rare: true, dropPct: 3.5 },
+  living_heartwood: { name: 'Living Heartwood', icon: '\uD83C\uDF33', skill: 'woodcutting', level: 90, rare: true, dropPct: 1 },
+};
+
+// Get materials for a gathering skill at a given level (returns primary + possible rare)
+export function getGatherableAt(skillId, level) {
+  const mats = Object.entries(MATERIALS)
+    .filter(([, m]) => m.skill === skillId && m.level <= level && !m.rare)
+    .sort((a, b) => b[1].level - a[1].level);
+  return mats.length > 0 ? mats[0] : null; // highest tier you can gather
+}
+
+export function getRareDropsAt(skillId, level) {
+  return Object.entries(MATERIALS)
+    .filter(([, m]) => m.skill === skillId && m.level <= level && m.rare)
+    .sort((a, b) => b[1].level - a[1].level);
+}

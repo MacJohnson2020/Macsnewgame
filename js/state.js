@@ -2,7 +2,9 @@
 
 import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZE, MAX_ENERGY, GEAR_SLOTS,
   SECURE_CONTAINER_BASE, SECURE_PER_VAULT, SECURE_CONTAINER_MAX,
-  RECRUIT_BASE_COST, RECRUIT_POOL_BASE, RECRUIT_REFRESH_MS, HERO_NAMES, STARTING_STAT_POINTS } from './config.js';
+  RECRUIT_BASE_COST, RECRUIT_POOL_BASE, RECRUIT_REFRESH_MS, HERO_NAMES, STARTING_STAT_POINTS,
+  SKILLS, SKILL_MAX_LEVEL, SKILL_AFK_MAX, SKILL_TIERS, skillXpForLevel,
+  MATERIALS, getGatherableAt, getRareDropsAt } from './config.js';
 import { uid, deepClone, pick, randInt } from './utils.js';
 
 const SAVE_KEY = 'voidborn_save';
@@ -37,11 +39,15 @@ export function createHero(name, classId, stats) {
   return hero;
 }
 
-// Recalculate derived stats for a hero (includes gear substat bonuses)
+// Recalculate derived stats for a hero (includes gear substat + skill bonuses)
 export function recalcHero(hero) {
   const cls = CLASSES[hero.classId];
-  const conMod = Math.floor((hero.stats.CON - 10) / 2);
-  const intMod = Math.floor((hero.stats.INT - 10) / 2);
+  // Apply skill stat bonuses
+  const skillBonuses = getSkillStatBonuses();
+  const effectiveCON = hero.stats.CON + (skillBonuses.CON || 0);
+  const effectiveINT = hero.stats.INT + (skillBonuses.INT || 0);
+  const conMod = Math.floor((effectiveCON - 10) / 2);
+  const intMod = Math.floor((effectiveINT - 10) / 2);
 
   // Base + level + stat bonuses
   let maxHp = cls.hpBase + cls.hpPerLevel * (hero.level - 1) + conMod * 2;
@@ -125,6 +131,11 @@ export function newGameState() {
     recruitPool: [],
     lastRecruitRefresh: Date.now(),
 
+    // Skills (all 12, each has xp + level)
+    skills: Object.fromEntries(Object.keys(SKILLS).map(id => [id, { xp: 0, level: 1 }])),
+    materials: {}, // { material_id: count }
+    trainingQueues: [], // [{heroId, skillId, startTime, actionsLeft}]
+
     // Factions & Bounties
     factionRep: {
       delvers_guild: 0,
@@ -193,6 +204,9 @@ function migrate(data) {
   if (!s.recruitPool) s.recruitPool = [];
   if (!s.lastRecruitRefresh) s.lastRecruitRefresh = Date.now();
   if (!s.secureContainer) s.secureContainer = [];
+  if (!s.skills) s.skills = Object.fromEntries(Object.keys(SKILLS).map(id => [id, { xp: 0, level: 1 }]));
+  if (!s.materials) s.materials = {};
+  if (!s.trainingQueues) s.trainingQueues = [];
   if (!s.factionRep) s.factionRep = { delvers_guild: 0, iron_covenant: 0, shadow_market: 0, holy_order: 0, void_seekers: 0 };
   if (!s.activeBounties) s.activeBounties = [];
   if (s.completedBounties === undefined) s.completedBounties = 0;
@@ -231,7 +245,7 @@ export function calcOfflineProgress() {
   const elapsed = now - G.lastOnline;
   const minutes = elapsed / 60000;
 
-  const progress = { gold: 0, energy: 0, minutes: Math.floor(minutes) };
+  const progress = { gold: 0, energy: 0, minutes: Math.floor(minutes), skillActions: 0 };
 
   // Foundry: gold per minute
   if (G.buildings.foundry > 0) {
@@ -247,8 +261,112 @@ export function calcOfflineProgress() {
   );
   G.energy = Math.min(G.energy + progress.energy, G.maxEnergy);
 
+  // Skill training — process queued actions (capped at AFK max)
+  const cappedMinutes = Math.min(minutes, SKILL_AFK_MAX);
+  for (const queue of G.trainingQueues) {
+    if (queue.actionsLeft <= 0) continue;
+    const actionTime = 2; // 2 min per action
+    const actionsDone = Math.min(queue.actionsLeft, Math.floor(cappedMinutes / actionTime));
+    if (actionsDone > 0) {
+      for (let i = 0; i < actionsDone; i++) {
+        processSkillAction(queue.skillId, queue.heroId);
+        queue.actionsLeft--;
+        progress.skillActions++;
+      }
+    }
+  }
+  // Remove finished queues
+  G.trainingQueues = G.trainingQueues.filter(q => q.actionsLeft > 0);
+
   G.lastOnline = now;
   return progress;
+}
+
+// Process a single skill action (gathering/training)
+export function processSkillAction(skillId, heroId) {
+  const skillDef = SKILLS[skillId];
+  if (!skillDef) return;
+  const skill = G.skills[skillId];
+  if (!skill || skill.level >= SKILL_MAX_LEVEL) return;
+
+  // Get tier for XP
+  const tier = [...SKILL_TIERS].reverse().find(t => skill.level >= t.level) || SKILL_TIERS[0];
+
+  // Award XP
+  skill.xp += tier.xp;
+
+  // Level up check
+  while (skill.level < SKILL_MAX_LEVEL) {
+    const needed = skillXpForLevel(skill.level + 1);
+    if (skill.xp < needed) break;
+    skill.xp -= needed;
+    skill.level++;
+  }
+
+  // Gathering: produce materials
+  if (skillDef.type === 'gathering') {
+    const mat = getGatherableAt(skillId, skill.level);
+    if (mat) {
+      const [matId] = mat;
+      G.materials[matId] = (G.materials[matId] || 0) + 1;
+    }
+    // Rare drop check
+    const rares = getRareDropsAt(skillId, skill.level);
+    if (rares.length > 0) {
+      const [rareId, rareDef] = rares[0]; // highest tier rare
+      if (Math.random() * 100 < rareDef.dropPct) {
+        G.materials[rareId] = (G.materials[rareId] || 0) + 1;
+      }
+    }
+  }
+}
+
+// Start training a skill
+export function startTraining(heroId, skillId) {
+  // Check workshop slots
+  const maxSlots = 1 + Math.floor(G.buildings.workshop / 3);
+  if (G.trainingQueues.length >= maxSlots) return false;
+
+  // Check hero not already training
+  if (G.trainingQueues.find(q => q.heroId === heroId)) return false;
+
+  // Check hero not in active raid
+  if (G.activeRaid && G.activeRaid.party.includes(heroId)) return false;
+
+  const maxActions = Math.floor(SKILL_AFK_MAX / 2); // 30 actions max (60 min / 2 min each)
+  G.trainingQueues.push({
+    heroId,
+    skillId,
+    startTime: Date.now(),
+    actionsLeft: maxActions,
+  });
+  return true;
+}
+
+// Stop training for a hero
+export function stopTraining(heroId) {
+  G.trainingQueues = G.trainingQueues.filter(q => q.heroId !== heroId);
+}
+
+// Check if hero is currently training
+export function isHeroTraining(heroId) {
+  return G.trainingQueues.some(q => q.heroId === heroId);
+}
+
+// Get skill stat bonuses (every 10 levels = +1)
+export function getSkillStatBonuses() {
+  const bonuses = { STR: 0, DEX: 0, CON: 0, INT: 0, WIS: 0, CHA: 0 };
+  for (const [skillId, skillDef] of Object.entries(SKILLS)) {
+    const level = G.skills[skillId]?.level || 1;
+    const stat = skillDef.statBonus;
+    bonuses[stat] += Math.floor(level / 10);
+  }
+  return bonuses;
+}
+
+// Get workshop training slot count
+export function getTrainingSlots() {
+  return Math.min(4, 1 + Math.floor(G.buildings.workshop / 3));
 }
 
 // Get a hero by ID
