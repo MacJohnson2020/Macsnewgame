@@ -88,7 +88,8 @@ export function stepToNode(raid, nodeId) {
     .find(c => raid.corruption >= c.threshold) || CORRUPTION_LEVELS[0];
 
   const zone = ZONES.find(z => z.id === raid.zoneId);
-  const encounter = generateEncounter(node, zone, raid.partyLevel, raid.corruption);
+  const aliveParty = raid.party.map(id => getHero(id)).filter(h => h && h.alive);
+  const encounter = generateEncounter(node, zone, raid.partyLevel, raid.corruption, aliveParty.length);
 
   if (encounter.type === 'combat') {
     const party = raid.party.map(id => getHero(id)).filter(h => h && h.alive);

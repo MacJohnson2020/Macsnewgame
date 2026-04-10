@@ -1138,21 +1138,34 @@ function usedInvQuick(hero) {
 function renderCombatVictory(container, raid) {
   const combat = raid.combat;
 
+  // Outnumbered bonus: more enemies than party = better rewards
+  const aliveDuringFight = raid.party.map(id => getHero(id)).filter(Boolean).length;
+  const enemyCount = combat.enemies.length;
+  const outnumberedRatio = enemyCount / Math.max(1, aliveDuringFight);
+  const rewardMult = outnumberedRatio > 1 ? 1 + (outnumberedRatio - 1) * 0.5 : 1; // +50% per extra enemy ratio
+  const bonusXp = Math.round(combat.xpEarned * (rewardMult - 1));
+  combat.xpEarned = Math.round(combat.xpEarned * rewardMult);
+
+  const outnumberedText = rewardMult > 1 ? ` (${Math.round((rewardMult-1)*100)}% outnumbered bonus!)` : '';
+
   container.appendChild(el('div', { class: 'encounter-card' }, [
     el('div', { class: 'encounter-icon', text: '\u2694\uFE0F' }),
     el('div', { class: 'encounter-title text-success', text: 'Victory!' }),
-    el('div', { class: 'encounter-desc', text: `Earned ${combat.xpEarned} XP` }),
+    el('div', { class: 'encounter-desc', text: `Earned ${combat.xpEarned} XP${outnumberedText}` }),
   ]));
 
-  // Generate victory loot
+  // Generate victory loot — more enemies = more loot rolls
   const zone = ZONES.find(z => z.id === raid.zoneId);
   const lootItems = [];
-  const gold = generateGold(zone?.lootLevel || 1);
+  const baseGold = generateGold(zone?.lootLevel || 1);
+  const gold = Math.round(baseGold * rewardMult);
   raid.goldCollected += gold;
   G.gold += gold;
 
+  // Each enemy has a drop chance, outnumbered bonus adds extra roll chance
+  const dropChance = Math.min(0.7, 0.4 + (rewardMult - 1) * 0.15);
   for (const enemy of combat.enemies) {
-    if (Math.random() < 0.4) {
+    if (Math.random() < dropChance) {
       if (Math.random() < 0.7) {
         lootItems.push(generateGear(zone?.lootLevel || 1));
       } else {
@@ -1161,7 +1174,7 @@ function renderCombatVictory(container, raid) {
     }
   }
 
-  container.appendChild(el('div', { class: 'text-success', text: `+${gold} gold`, style: 'text-align: center; font-weight: 700; margin: 8px 0;' }));
+  container.appendChild(el('div', { class: 'text-success', text: `+${gold} gold${outnumberedText}`, style: 'text-align: center; font-weight: 700; margin: 8px 0;' }));
 
   if (lootItems.length > 0) {
     const lootDiv = el('div', { class: 'loot-items' });

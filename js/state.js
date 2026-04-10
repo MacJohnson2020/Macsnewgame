@@ -280,8 +280,8 @@ export function giveStarterGear(hero) {
       body: { name: 'Tattered Robes', icon: '\uD83E\uDDE5', size: 2, armor: 2, magicResist: 7 },
     },
     bard: {
-      weapon: { name: 'Rusty Dagger', icon: '\uD83D\uDDE1\uFE0F', weaponType: 'dagger', size: 1, damageType: 'physical', twoHanded: false, dmgMin: 3, dmgMax: 6, accuracy: 16 },
-      body: { name: 'Traveler\'s Clothes', icon: '\uD83E\uDDE5', size: 2, armor: 3, magicResist: 4 },
+      weapon: { name: 'Rusty Dagger', icon: '\uD83D\uDDE1\uFE0F', weaponType: 'dagger', size: 1, damageType: 'physical', twoHanded: false, dmgMin: 4, dmgMax: 7, accuracy: 18 },
+      body: { name: 'Traveler\'s Clothes', icon: '\uD83E\uDDE5', size: 2, armor: 4, magicResist: 5 },
     },
   };
 
