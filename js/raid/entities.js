@@ -98,6 +98,12 @@ export function getDamageStat(hero) {
   return statMod(hero.stats.STR);
 }
 
+// Get damage multiplier from buffs (Rage, Inspire, etc.)
+export function getDamageMultiplier(entity) {
+  const buffPct = getBuffValue(entity, 'damage');
+  return 1 + buffPct / 100;
+}
+
 // Get armor/magic penetration
 export function getPenetration(hero) {
   return {
@@ -134,7 +140,7 @@ function getSubstatTotal(hero, substatId) {
 }
 
 // Get buff/debuff value for a stat
-function getBuffValue(entity, stat) {
+export function getBuffValue(entity, stat) {
   let val = 0;
   if (entity.buffs) {
     for (const b of entity.buffs) {

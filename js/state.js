@@ -37,13 +37,31 @@ export function createHero(name, classId, stats) {
   return hero;
 }
 
-// Recalculate derived stats for a hero
+// Recalculate derived stats for a hero (includes gear substat bonuses)
 export function recalcHero(hero) {
   const cls = CLASSES[hero.classId];
   const conMod = Math.floor((hero.stats.CON - 10) / 2);
   const intMod = Math.floor((hero.stats.INT - 10) / 2);
-  hero.maxHp = cls.hpBase + cls.hpPerLevel * (hero.level - 1) + conMod * 2;
-  hero.maxMp = cls.mpBase + cls.mpPerLevel * (hero.level - 1) + intMod * 2;
+
+  // Base + level + stat bonuses
+  let maxHp = cls.hpBase + cls.hpPerLevel * (hero.level - 1) + conMod * 2;
+  let maxMp = cls.mpBase + cls.mpPerLevel * (hero.level - 1) + intMod * 2;
+
+  // Add gear substat bonuses (maxHp, maxMp)
+  if (hero.gear) {
+    for (const slot of GEAR_SLOTS) {
+      const item = hero.gear[slot];
+      if (item && item.substats) {
+        for (const sub of item.substats) {
+          if (sub.id === 'maxHp') maxHp += sub.value;
+          if (sub.id === 'maxMp') maxMp += sub.value;
+        }
+      }
+    }
+  }
+
+  hero.maxHp = maxHp;
+  hero.maxMp = maxMp;
   hero.hp = Math.min(hero.hp, hero.maxHp);
   hero.mp = Math.min(hero.mp, hero.maxMp);
 }
@@ -107,6 +125,17 @@ export function newGameState() {
     recruitPool: [],
     lastRecruitRefresh: Date.now(),
 
+    // Factions & Bounties
+    factionRep: {
+      delvers_guild: 0,
+      iron_covenant: 0,
+      shadow_market: 0,
+      holy_order: 0,
+      void_seekers: 0,
+    },
+    activeBounties: [],  // [{id, factionId, type, desc, target, count, progress, rep, gold}]
+    completedBounties: 0,
+
     // Meta
     deepestFloor: {},   // per zone: { zone_id: deepest_node }
     totalRaids: 0,
@@ -164,6 +193,9 @@ function migrate(data) {
   if (!s.recruitPool) s.recruitPool = [];
   if (!s.lastRecruitRefresh) s.lastRecruitRefresh = Date.now();
   if (!s.secureContainer) s.secureContainer = [];
+  if (!s.factionRep) s.factionRep = { delvers_guild: 0, iron_covenant: 0, shadow_market: 0, holy_order: 0, void_seekers: 0 };
+  if (!s.activeBounties) s.activeBounties = [];
+  if (s.completedBounties === undefined) s.completedBounties = 0;
   // Add autoBattle to existing heroes + migrate class IDs
   for (const hero of (s.heroes || [])) {
     if (hero.autoBattle === undefined) hero.autoBattle = null;
