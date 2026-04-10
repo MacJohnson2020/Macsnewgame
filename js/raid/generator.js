@@ -112,8 +112,10 @@ function makeNode(floor, lane, type) {
     type,
     icon: '?',
     label: '',
+    difficulty: 0, // 0=none, 1=easy, 2=medium, 3=hard, 4=elite
     visited: false,
     revealed: true,
+    pruned: false, // removed from map after path choice
     data: null,
   };
   assignNodeVisuals(node);
@@ -149,20 +151,43 @@ function assignEncounters(nodes, zone, numFloors) {
     const encounter = weightedPick(adjusted);
     node.type = encounter.type;
     assignNodeVisuals(node);
+
+    // Set difficulty based on depth ratio (relative to zone)
+    const depth = node.floor / (numFloors - 1);
+    if (node.type === 'enemy') {
+      if (depth <= 0.4) { node.difficulty = 1; node.label = 'Easy'; }
+      else if (depth <= 0.65) { node.difficulty = 2; node.label = 'Medium'; }
+      else if (depth <= 0.85) { node.difficulty = 3; node.label = 'Hard'; }
+      else { node.difficulty = 4; node.label = 'ELITE'; node.icon = '\uD83D\uDC79'; }
+    }
+    if (node.type === 'trap') {
+      node.difficulty = depth <= 0.5 ? 1 : 2;
+    }
   }
 }
 
 function assignNodeVisuals(node) {
   switch (node.type) {
     case 'enemy':    node.icon = '\uD83D\uDC80'; node.label = 'Enemy'; break;
-    case 'chest':    node.icon = '\uD83D\uDCE6'; node.label = 'Chest'; break;
-    case 'trap':     node.icon = '\u26A0\uFE0F'; node.label = 'Trap'; break;
-    case 'shrine':   node.icon = '\u2728';       node.label = 'Shrine'; break;
+    case 'chest':
+    case 'trap':
+    case 'shrine':
+    case 'event':
+      // Mystery nodes — don't reveal type until visited
+      node.icon = '\u2753'; node.label = 'Mystery'; node.mystery = true; break;
     case 'merchant': node.icon = '\uD83D\uDED2'; node.label = 'Merchant'; break;
-    case 'event':    node.icon = '\u2753';       node.label = 'Event'; break;
     case 'empty':    node.icon = '\u00B7';       node.label = 'Rest'; break;
     case 'extraction': node.icon = '\u2705';     node.label = 'Extract'; break;
     case 'start':    node.icon = '\uD83D\uDEAA'; node.label = 'Start'; break;
+  }
+  // Assign difficulty based on depth ratio (relative to zone, not absolute floor)
+  // This makes difficulty scale properly regardless of zone size
+  if (node.type === 'enemy') {
+    // Use node.floor but we need numFloors context — set a default, will be overridden in assignEncounters
+    node.difficulty = 1;
+  }
+  if (node.type === 'trap') {
+    node.difficulty = 1;
   }
 }
 
@@ -179,6 +204,35 @@ export function getParent(path, nodeId) {
   const edge = path.edges.find(e => e.to === nodeId);
   if (!edge) return null;
   return path.nodes.find(n => n.id === edge.from);
+}
+
+// After choosing a node, prune all nodes on the same floor that weren't chosen
+// and any nodes only reachable through pruned nodes
+export function pruneUnreachable(path, chosenNodeId) {
+  const chosenNode = path.nodes.find(n => n.id === chosenNodeId);
+  if (!chosenNode) return;
+
+  // Mark all other nodes on the same floor as pruned
+  const sameFloor = path.nodes.filter(n => n.floor === chosenNode.floor && n.id !== chosenNodeId);
+  for (const node of sameFloor) {
+    node.pruned = true;
+  }
+
+  // Now forward-propagate: for each future floor, check if nodes are still reachable
+  for (let floor = chosenNode.floor + 1; floor < path.numFloors; floor++) {
+    const floorNodes = path.columns[floor];
+    for (const node of floorNodes) {
+      // Check if any non-pruned parent connects to this node
+      const parents = path.edges
+        .filter(e => e.to === node.id)
+        .map(e => path.nodes.find(n => n.id === e.from))
+        .filter(Boolean);
+      const hasLiveParent = parents.some(p => !p.pruned);
+      if (!hasLiveParent) {
+        node.pruned = true;
+      }
+    }
+  }
 }
 
 // No-op (all nodes visible in Slay the Spire style)

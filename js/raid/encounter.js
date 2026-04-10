@@ -1,6 +1,6 @@
 // === Voidborn — Encounter Resolution ===
 
-import { ZONES, CORRUPTION_LEVELS } from '../config.js';
+import { ZONES, CORRUPTION_LEVELS, ENEMIES } from '../config.js';
 import { createEnemy, generateGear, generateConsumable, generateGold } from './entities.js';
 import { pick, randInt, rollChance, rand } from '../utils.js';
 
@@ -8,7 +8,7 @@ import { pick, randInt, rollChance, rand } from '../utils.js';
 export function generateEncounter(node, zone, partyLevel, corruption) {
   switch (node.type) {
     case 'enemy':
-      return generateEnemyEncounter(zone, partyLevel, corruption, node.branch === 'risky');
+      return generateEnemyEncounter(zone, partyLevel, corruption, node.branch === 'risky', node.difficulty);
     case 'chest':
       return generateChestEncounter(zone, partyLevel, node.branch === 'risky');
     case 'trap':
@@ -30,19 +30,37 @@ export function generateEncounter(node, zone, partyLevel, corruption) {
   }
 }
 
-function generateEnemyEncounter(zone, partyLevel, corruption, isRisky) {
-  const enemyCount = isRisky ? randInt(2, 3) : randInt(1, 2);
+function generateEnemyEncounter(zone, partyLevel, corruption, isRisky, difficulty = 1) {
+  // Scale enemy count by difficulty: easy=1, medium=1-2, hard=2, elite=2-3
+  let enemyCount;
+  if (difficulty <= 1) {
+    enemyCount = 1;
+  } else if (difficulty === 2) {
+    enemyCount = isRisky ? 2 : randInt(1, 2);
+  } else if (difficulty === 3) {
+    enemyCount = isRisky ? randInt(2, 3) : 2;
+  } else {
+    enemyCount = isRisky ? 3 : randInt(2, 3);
+  }
 
   // Add extra enemies from corruption
   const corruptionLevel = CORRUPTION_LEVELS.filter(c => corruption >= c.threshold).pop();
   const extraSpawns = corruptionLevel ? corruptionLevel.extraSpawns : 0;
   const totalEnemies = Math.min(enemyCount + Math.floor(extraSpawns / 2), 4);
 
+  // Filter enemies by tier based on difficulty
+  const maxTier = difficulty <= 1 ? 1 : difficulty <= 2 ? 2 : 3;
+  const eligibleEnemies = zone.enemies.filter(id => {
+    const template = ENEMIES[id];
+    return template && (template.tier || 1) <= maxTier;
+  });
+  const enemyPool = eligibleEnemies.length > 0 ? eligibleEnemies : zone.enemies;
+
   const enemies = [];
   for (let i = 0; i < totalEnemies; i++) {
-    // Small chance for elite in risky branches
-    const useElite = isRisky && rollChance(20) && zone.elites.length > 0;
-    const typeId = useElite ? pick(zone.elites) : pick(zone.enemies);
+    // Elite only on difficulty 4+ or risky branches deep in
+    const useElite = (difficulty >= 4 || (isRisky && difficulty >= 3 && rollChance(20))) && zone.elites.length > 0;
+    const typeId = useElite ? pick(zone.elites) : pick(enemyPool);
     enemies.push(createEnemy(typeId, partyLevel));
   }
 

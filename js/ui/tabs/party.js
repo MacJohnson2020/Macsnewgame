@@ -1,6 +1,6 @@
 // === Voidborn — Party Tab ===
 
-import { G, getHero, recalcHero, usedInventory } from '../../state.js';
+import { G, getHero, recalcHero, usedInventory, refreshRecruitPool, shouldRefreshRecruits, hireRecruit, saveGame } from '../../state.js';
 import { CLASSES, STATS, STAT_DESC, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
 import { el } from '../../utils.js';
 import { heroCard, progressBar, statRow, btn, toast, itemDetail } from '../components.js';
@@ -21,7 +21,74 @@ export function renderPartyTab() {
     container.appendChild(renderHeroDetail(hero));
   }
 
+  // Recruitment section
+  container.appendChild(el('div', { class: 'divider' }));
+  container.appendChild(renderRecruitment());
+
   return container;
+}
+
+function renderRecruitment() {
+  const section = el('div', { class: 'flex-col gap-sm' });
+  section.appendChild(el('div', { class: 'section-title', text: 'Tavern — Recruit Heroes' }));
+
+  // Auto-refresh pool if needed
+  if (shouldRefreshRecruits() || G.recruitPool.length === 0) {
+    refreshRecruitPool();
+  }
+
+  if (G.recruitPool.length === 0) {
+    section.appendChild(el('p', { class: 'text-dim', text: 'No recruits available. Check back later.' }));
+    return section;
+  }
+
+  // Refresh timer
+  const elapsed = Date.now() - G.lastRecruitRefresh;
+  const remaining = Math.max(0, 10 * 60 * 1000 - elapsed);
+  const mins = Math.ceil(remaining / 60000);
+  section.appendChild(el('div', { class: 'text-dim', text: `New recruits in ${mins} min`, style: 'font-size: 11px; margin-bottom: 4px;' }));
+
+  for (const recruit of G.recruitPool) {
+    const cls = CLASSES[recruit.classId];
+    const card = el('div', { class: 'card', style: 'margin-bottom: 8px;' });
+
+    card.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 6px;' }, [
+      el('span', { text: cls.icon, style: 'font-size: 24px;' }),
+      el('div', { style: 'flex: 1;' }, [
+        el('div', { class: 'text-bright', text: recruit.name, style: 'font-weight: 700;' }),
+        el('div', { class: 'text-dim', text: `Level 1 ${cls.name}`, style: 'font-size: 12px;' }),
+      ]),
+      el('span', { class: 'text-warning', text: `${recruit.cost}g`, style: 'font-weight: 700;' }),
+    ]));
+
+    // Stats preview
+    const statsRow = el('div', { style: 'display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;' });
+    for (const stat of STATS) {
+      const val = recruit.stats[stat];
+      const diff = val - 10;
+      const color = diff > 0 ? 'text-success' : diff < 0 ? 'text-danger' : 'text-dim';
+      statsRow.appendChild(el('span', { class: color, text: `${stat}:${val}`, style: 'font-size: 11px;' }));
+    }
+    card.appendChild(statsRow);
+
+    const canAfford = G.gold >= recruit.cost;
+    card.appendChild(btn(
+      canAfford ? `Hire (${recruit.cost}g)` : `Need ${recruit.cost}g`,
+      canAfford ? 'btn-primary btn-sm btn-block' : 'btn-sm btn-block',
+      canAfford ? () => {
+        const hero = hireRecruit(recruit.id);
+        if (hero) {
+          toast(`${hero.name} joins your party!`, 'success');
+          renderActiveTab();
+          renderHUD();
+        }
+      } : null
+    ));
+
+    section.appendChild(card);
+  }
+
+  return section;
 }
 
 function renderHeroDetail(hero) {

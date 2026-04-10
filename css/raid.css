@@ -5,15 +5,19 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: var(--gap-sm) 0;
+  padding: var(--gap-md) 0;
   width: 100%;
+  background: linear-gradient(180deg, rgba(10,10,20,0.8) 0%, rgba(18,18,30,0.4) 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: var(--gap-md);
 }
 
 .spire-floor {
   display: flex;
   align-items: center;
   gap: var(--gap-sm);
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
 .spire-floor-label {
@@ -23,6 +27,7 @@
   color: var(--text-dim);
   text-align: center;
   flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .spire-nodes {
@@ -30,7 +35,7 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  gap: var(--gap-xs);
+  gap: var(--gap-sm);
 }
 
 .spire-node {
@@ -38,81 +43,92 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
   border: 2px solid var(--border);
   background: var(--bg-card);
   cursor: default;
   transition: all 0.2s;
   position: relative;
+  gap: 1px;
 }
 
 .spire-node-icon { font-size: 18px; line-height: 1; }
-.spire-node-label { font-size: 8px; color: var(--text-dim); margin-top: 1px; }
+.spire-node-label { font-size: 8px; color: var(--text-dim); }
+.spire-node-diff { font-size: 6px; letter-spacing: 1px; line-height: 1; }
 
 .spire-node.current {
   border-color: var(--accent);
-  background: rgba(123, 104, 238, 0.25);
+  background: rgba(123, 104, 238, 0.2);
   box-shadow: 0 0 14px rgba(123, 104, 238, 0.4);
   animation: pulse 2s ease-in-out infinite;
 }
 
 .spire-node.visited {
-  opacity: 0.35;
-  border-color: var(--border);
+  opacity: 0.25;
+  border-style: dashed;
 }
 
 .spire-node.available {
   border-color: var(--accent);
   cursor: pointer;
+  background: rgba(123, 104, 238, 0.08);
 }
 
 .spire-node.available:hover {
   background: rgba(123, 104, 238, 0.2);
-  transform: scale(1.15);
-  box-shadow: 0 0 10px rgba(123, 104, 238, 0.3);
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(123, 104, 238, 0.3);
 }
 
 .spire-node.future {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 .spire-node.extraction {
   border-color: var(--success);
-  background: rgba(46, 204, 113, 0.1);
+  background: rgba(46, 204, 113, 0.08);
 }
 
 .spire-node.extraction.available {
   box-shadow: 0 0 12px rgba(46, 204, 113, 0.3);
+  background: rgba(46, 204, 113, 0.15);
 }
 
-.spire-node.enemy { border-color: var(--danger); }
-.spire-node.enemy.future { border-color: rgba(231, 76, 60, 0.4); }
-.spire-node.chest { border-color: var(--warning); }
-.spire-node.shrine { border-color: var(--info); }
-.spire-node.merchant { border-color: #8e44ad; }
+.spire-node.enemy { border-color: rgba(231, 76, 60, 0.7); }
+.spire-node.enemy.hard { border-color: var(--danger); background: rgba(231, 76, 60, 0.08); }
+.spire-node.enemy.elite { border-color: #ff4444; background: rgba(255, 68, 68, 0.12); box-shadow: 0 0 8px rgba(255, 68, 68, 0.2); }
+.spire-node.chest { border-color: rgba(243, 156, 18, 0.7); }
+.spire-node.shrine { border-color: rgba(52, 152, 219, 0.7); }
+.spire-node.merchant { border-color: rgba(142, 68, 173, 0.7); }
+.spire-node.trap { border-color: rgba(243, 156, 18, 0.5); }
 
 /* Connection lines */
 .spire-connections {
-  height: 20px;
+  height: 24px;
   position: relative;
-  margin-left: 44px; /* offset for floor label */
+  margin-left: 44px;
 }
 
 .spire-svg {
   width: 100%;
   height: 100%;
+  overflow: visible;
 }
 
 .spire-line {
   stroke: var(--border);
-  stroke-width: 1.5;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.5;
 }
 
 .spire-line.active {
   stroke: var(--accent);
   stroke-width: 2;
+  stroke-dasharray: none;
+  opacity: 1;
 }
 
 @keyframes pulse {

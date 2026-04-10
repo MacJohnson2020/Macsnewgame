@@ -410,6 +410,77 @@ export function previewAttack(attacker, target, isHero = true) {
   };
 }
 
+// Hero Auto-Battle AI
+export function heroAutoBattle(combat, hero) {
+  if (!hero.alive) return;
+
+  // Check if stunned
+  if (hero.debuffs?.some(d => d.stat === 'stunned')) {
+    combat.log.push({ type: 'ability', text: `${hero.name} is stunned and cannot act!`, class: 'ability' });
+    return;
+  }
+
+  const mode = hero.autoBattle;
+  const cls = CLASSES[hero.classId];
+  const enemies = combat.enemies.filter(e => e.alive);
+  const allies = combat.party.filter(h => h.alive);
+  if (enemies.length === 0) return;
+
+  // Find usable abilities (enough MP, not on CD, level unlocked)
+  const usable = cls.abilities.filter(a =>
+    hero.level >= a.level &&
+    hero.mp >= a.mpCost &&
+    !(hero.abilityCooldowns[a.id] > 0)
+  );
+
+  if (mode === 'aggressive') {
+    // Use highest-damage ability first, else basic attack on lowest-HP enemy
+    const dmgAbility = usable.filter(a => a.dmgMult).sort((a, b) => b.dmgMult - a.dmgMult)[0];
+    const target = [...enemies].sort((a, b) => a.hp - b.hp)[0];
+
+    if (dmgAbility) {
+      abilityAction(combat, hero, dmgAbility.id, target);
+    } else {
+      attackAction(combat, hero, target);
+    }
+  } else if (mode === 'defensive') {
+    // Heal low-HP ally with items, or use defensive abilities, or attack
+    const lowAlly = allies.find(h => h.hp / h.maxHp < 0.4);
+    const healItem = hero.inventory.find(i => i.isConsumable && i.effect === 'heal');
+
+    if (lowAlly && healItem) {
+      useItemAction(combat, hero, healItem, lowAlly);
+    } else {
+      // Use stun/debuff abilities
+      const defAbility = usable.find(a => a.effect === 'stun' || a.debuff);
+      const target = [...enemies].sort((a, b) => b.hp - a.hp)[0]; // attack strongest
+
+      if (defAbility) {
+        abilityAction(combat, hero, defAbility.id, target);
+      } else {
+        attackAction(combat, hero, target);
+      }
+    }
+  } else if (mode === 'supportive') {
+    // Buff/debuff first, then heal, then attack weakest
+    const buffAbility = usable.find(a => a.buff || a.selfBuff);
+    const debuffAbility = usable.find(a => a.debuff || a.effect === 'stun');
+    const lowAlly = allies.find(h => h.hp / h.maxHp < 0.5);
+    const healItem = hero.inventory.find(i => i.isConsumable && i.effect === 'heal');
+    const target = [...enemies].sort((a, b) => a.hp - b.hp)[0];
+
+    if (buffAbility) {
+      abilityAction(combat, hero, buffAbility.id, target);
+    } else if (debuffAbility) {
+      abilityAction(combat, hero, debuffAbility.id, target);
+    } else if (lowAlly && healItem) {
+      useItemAction(combat, hero, healItem, lowAlly);
+    } else {
+      attackAction(combat, hero, target);
+    }
+  }
+}
+
 // Enemy AI: pick action for an enemy's turn
 export function enemyAI(combat, enemy) {
   // Check if stunned

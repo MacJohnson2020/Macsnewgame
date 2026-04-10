@@ -1,6 +1,6 @@
 // === Voidborn — Stash Tab ===
 
-import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame } from '../../state.js';
+import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame, secureContainerCapacity, secureContainerUsed, canSecure } from '../../state.js';
 import { CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
 import { el } from '../../utils.js';
 import { itemDisplay, itemDetail, btn, statRow, toast, progressBar } from '../components.js';
@@ -37,6 +37,29 @@ export function renderStashTab() {
       grid.appendChild(itemDisplay(item, (itm) => showStashItemActions(itm)));
     }
     container.appendChild(grid);
+  }
+
+  // Divider
+  container.appendChild(el('div', { class: 'divider' }));
+
+  // Secure Container
+  container.appendChild(el('div', { class: 'section-title', text: 'Secure Container' }));
+  const secUsed = secureContainerUsed();
+  const secCap = secureContainerCapacity();
+  container.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 4px;' }, [
+    el('span', { class: 'text-dim', text: `${secUsed}/${secCap} units`, style: 'font-size: 12px;' }),
+    progressBar(secUsed, secCap, '', false),
+  ]));
+  container.appendChild(el('div', { class: 'text-dim', text: 'Items here are never lost, even on full wipe.', style: 'font-size: 11px; margin-bottom: 6px; font-style: italic;' }));
+
+  if (G.secureContainer.length === 0) {
+    container.appendChild(el('p', { class: 'text-dim', text: 'Empty. Move valuable items here from stash.' }));
+  } else {
+    const secGrid = el('div', { class: 'grid-3' });
+    for (const item of G.secureContainer) {
+      secGrid.appendChild(itemDisplay(item, (itm) => showSecureItemActions(itm)));
+    }
+    container.appendChild(secGrid);
   }
 
   return container;
@@ -240,6 +263,19 @@ function showStashItemActions(item) {
     }
   }
 
+  // Move to secure container
+  if (canSecure(item)) {
+    actions.appendChild(btn('Move to Secure Container', 'btn-success btn-sm btn-block', () => {
+      const idx = G.stash.findIndex(i => i.id === item.id);
+      if (idx >= 0) G.stash.splice(idx, 1);
+      G.secureContainer.push(item);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+      toast(`Secured ${item.name}`, 'success');
+    }));
+  }
+
   // Discard
   actions.appendChild(btn('Discard', 'btn-danger btn-sm btn-block', () => {
     const idx = G.stash.findIndex(i => i.id === item.id);
@@ -248,6 +284,31 @@ function showStashItemActions(item) {
     saveGame();
     renderActiveTab();
   }));
+
+  actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
+  modal.appendChild(actions);
+  document.body.appendChild(modal);
+}
+
+// Show actions for a secure container item
+function showSecureItemActions(item) {
+  const modal = createModal();
+  modal.appendChild(itemDetail(item));
+
+  const actions = el('div', { class: 'flex-col gap-sm', style: 'margin-top: 8px;' });
+
+  // Move back to stash
+  if (canStash(item)) {
+    actions.appendChild(btn('Move to Stash', 'btn-primary btn-sm btn-block', () => {
+      const idx = G.secureContainer.findIndex(i => i.id === item.id);
+      if (idx >= 0) G.secureContainer.splice(idx, 1);
+      G.stash.push(item);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+      toast(`Moved ${item.name} to stash`, 'info');
+    }));
+  }
 
   actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
   modal.appendChild(actions);
