@@ -275,7 +275,21 @@ export const HERO_INVENTORY_SIZE = 25;
 export const BASE_STASH_SIZE = 30;
 export const STASH_PER_VAULT_LEVEL = 10;
 export const SECURE_CONTAINER_BASE = 2;
+export const SECURE_PER_VAULT = 1;
+export const SECURE_CONTAINER_MAX = 6;
 
 // Energy
 export const MAX_ENERGY = 100;
 export const ENERGY_REGEN_BASE = 1; // per minute
+
+// Recruitment
+export const RECRUIT_BASE_COST = 100;
+export const RECRUIT_POOL_BASE = 2;
+export const RECRUIT_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
+
+export const HERO_NAMES = [
+  'Aldric', 'Brynn', 'Caelum', 'Dara', 'Elric', 'Fynn', 'Gwen', 'Hilda',
+  'Ivar', 'Jorin', 'Kael', 'Lyra', 'Morven', 'Nyx', 'Orin', 'Petra',
+  'Riven', 'Sable', 'Thane', 'Una', 'Vex', 'Wren', 'Xara', 'Yara', 'Zev',
+  'Ashwin', 'Bron', 'Corrin', 'Dusk', 'Ember', 'Flint', 'Gareth', 'Hex',
+];

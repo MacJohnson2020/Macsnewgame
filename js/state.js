@@ -1,7 +1,9 @@
 // === Voidborn — Game State Management ===
 
-import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZE, MAX_ENERGY, GEAR_SLOTS } from './config.js';
-import { uid, deepClone } from './utils.js';
+import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZE, MAX_ENERGY, GEAR_SLOTS,
+  SECURE_CONTAINER_BASE, SECURE_PER_VAULT, SECURE_CONTAINER_MAX,
+  RECRUIT_BASE_COST, RECRUIT_POOL_BASE, RECRUIT_REFRESH_MS, HERO_NAMES, STARTING_STAT_POINTS } from './config.js';
+import { uid, deepClone, pick, randInt } from './utils.js';
 
 const SAVE_KEY = 'voidborn_save';
 const SAVE_VERSION = 1;
@@ -30,6 +32,7 @@ export function createHero(name, classId, stats) {
     dots: [],
     isMain: false,
     alive: true,
+    autoBattle: null, // null = manual, 'aggressive', 'defensive', 'supportive'
   };
   return hero;
 }
@@ -100,6 +103,10 @@ export function newGameState() {
     // Secure container (shared, items never lost)
     secureContainer: [],
 
+    // Recruitment
+    recruitPool: [],
+    lastRecruitRefresh: Date.now(),
+
     // Meta
     deepestFloor: {},   // per zone: { zone_id: deepest_node }
     totalRaids: 0,
@@ -152,7 +159,15 @@ export function loadGame() {
 
 // Migration (for future version bumps)
 function migrate(data) {
-  // v1 -> v2 migrations would go here
+  const s = data.state;
+  // Add missing fields for saves from Phase 1
+  if (!s.recruitPool) s.recruitPool = [];
+  if (!s.lastRecruitRefresh) s.lastRecruitRefresh = Date.now();
+  if (!s.secureContainer) s.secureContainer = [];
+  // Add autoBattle to existing heroes
+  for (const hero of (s.heroes || [])) {
+    if (hero.autoBattle === undefined) hero.autoBattle = null;
+  }
   data.state.version = SAVE_VERSION;
 }
 
@@ -224,4 +239,80 @@ export function healAllHeroes() {
     hero.dots = [];
     hero.abilityCooldowns = {};
   }
+}
+
+// === Secure Container ===
+
+export function secureContainerCapacity() {
+  return Math.min(SECURE_CONTAINER_BASE + G.buildings.vault * SECURE_PER_VAULT, SECURE_CONTAINER_MAX);
+}
+
+export function secureContainerUsed() {
+  return G.secureContainer.reduce((sum, item) => sum + item.size, 0);
+}
+
+export function canSecure(item) {
+  return secureContainerUsed() + item.size <= secureContainerCapacity();
+}
+
+// === Recruitment ===
+
+export function refreshRecruitPool() {
+  const classIds = Object.keys(CLASSES);
+  const poolSize = RECRUIT_POOL_BASE + G.buildings.tavern;
+  const pool = [];
+  const usedNames = G.heroes.map(h => h.name);
+
+  for (let i = 0; i < poolSize; i++) {
+    const classId = pick(classIds);
+    const cls = CLASSES[classId];
+
+    // Pick unused name
+    let name;
+    for (let tries = 0; tries < 50; tries++) {
+      name = pick(HERO_NAMES);
+      if (!usedNames.includes(name) && !pool.find(r => r.name === name)) break;
+    }
+    usedNames.push(name);
+
+    // Generate stats with slight variance — tavern level boosts quality
+    const bonus = Math.floor(G.buildings.tavern * 0.5);
+    const stats = { ...STAT_DEFAULTS };
+    let points = STARTING_STAT_POINTS + bonus;
+    while (points > 0) {
+      const stat = pick(['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']);
+      stats[stat]++;
+      points--;
+    }
+
+    // Cost based on total stats + tavern modifier
+    const totalStats = Object.values(stats).reduce((a, b) => a + b, 0);
+    const mainHero = getMainHero();
+    const chaDiscount = mainHero ? Math.floor(mainHero.stats.CHA / 5) : 0;
+    const cost = Math.max(50, RECRUIT_BASE_COST + (totalStats - 60) * 5 - chaDiscount * 3);
+
+    pool.push({ name, classId, stats, cost, id: uid() });
+  }
+
+  G.recruitPool = pool;
+  G.lastRecruitRefresh = Date.now();
+}
+
+export function shouldRefreshRecruits() {
+  return Date.now() - G.lastRecruitRefresh >= RECRUIT_REFRESH_MS;
+}
+
+export function hireRecruit(recruitId) {
+  const recruit = G.recruitPool.find(r => r.id === recruitId);
+  if (!recruit) return null;
+  if (G.gold < recruit.cost) return null;
+
+  G.gold -= recruit.cost;
+  const hero = createHero(recruit.name, recruit.classId, recruit.stats);
+  G.heroes.push(hero);
+
+  // Remove from pool
+  G.recruitPool = G.recruitPool.filter(r => r.id !== recruitId);
+  saveGame();
+  return hero;
 }

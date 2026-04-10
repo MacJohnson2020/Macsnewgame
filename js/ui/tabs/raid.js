@@ -9,7 +9,7 @@ import { renderHUD } from '../hud.js';
 import { setNavVisible } from '../router.js';
 import { startRaid, getAvailableNodes, stepToNode, resolveEncounter, extractRaid, clearRaid, isPartyWiped, RAID_PHASE } from '../../raid/loop.js';
 import { renderPath, renderPathOverview } from '../../raid/pathRenderer.js';
-import { getCurrentCombatant, nextTurn, attackAction, abilityAction, useItemAction, fleeAction, previewAttack, enemyAI } from '../../raid/combat.js';
+import { getCurrentCombatant, nextTurn, attackAction, abilityAction, useItemAction, fleeAction, previewAttack, enemyAI, heroAutoBattle } from '../../raid/combat.js';
 import { generateGear, generateConsumable, generateGold } from '../../raid/entities.js';
 
 export function renderRaidTab() {
@@ -412,7 +412,20 @@ function renderCombat(container, raid) {
   // Current turn actions
   const current = getCurrentCombatant(combat);
   if (current && current.type === 'hero') {
-    container.appendChild(renderHeroActions(raid, combat, current.entity));
+    if (current.entity.autoBattle) {
+      // Auto-battle hero — resolve automatically
+      container.appendChild(el('p', { class: 'text-accent', text: `${current.entity.name} (auto: ${current.entity.autoBattle})...`, style: 'text-align: center; margin: 8px 0;' }));
+      setTimeout(() => {
+        if (current.entity.alive) {
+          heroAutoBattle(combat, current.entity);
+        }
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
+      }, 400);
+    } else {
+      container.appendChild(renderHeroActions(raid, combat, current.entity));
+    }
   } else if (current && current.type === 'enemy') {
     // Enemy turn — auto-resolve
     container.appendChild(el('p', { class: 'text-warning', text: `${current.entity.name}'s turn...`, style: 'text-align: center; margin: 8px 0;' }));
@@ -523,6 +536,31 @@ function renderHeroActions(raid, combat, hero) {
   utilRow.appendChild(fleeBtn);
 
   actions.appendChild(utilRow);
+
+  // Auto-battle toggle
+  const autoRow = el('div', { style: 'display: flex; gap: 4px; margin-top: 6px; justify-content: center;' });
+  autoRow.appendChild(el('span', { class: 'text-dim', text: 'Auto:', style: 'font-size: 10px; align-self: center;' }));
+  const modes = [
+    { id: null, label: 'Manual' },
+    { id: 'aggressive', label: 'Aggr' },
+    { id: 'defensive', label: 'Def' },
+    { id: 'supportive', label: 'Supp' },
+  ];
+  for (const mode of modes) {
+    const active = hero.autoBattle === mode.id;
+    const modeBtn = el('button', {
+      class: `btn-sm ${active ? 'btn-primary' : ''}`,
+      text: mode.label,
+      style: `font-size: 10px; padding: 3px 8px; ${active ? '' : 'opacity: 0.6;'}`,
+    });
+    modeBtn.onclick = () => {
+      hero.autoBattle = mode.id;
+      saveGame();
+      renderActiveTab();
+    };
+    autoRow.appendChild(modeBtn);
+  }
+  actions.appendChild(autoRow);
 
   return actions;
 }
@@ -841,13 +879,47 @@ function renderCombatDefeat(container, raid) {
   if (alive.length > 0) {
     container.appendChild(el('p', { class: 'text-warning', text: `${alive.map(h => h.name).join(', ')} survived. Dead heroes drop all items.`, style: 'text-align: center;' }));
 
-    // Drop dead heroes' items
+    // Collect all dropped items from dead heroes
+    const droppedItems = [];
     for (const hero of party.filter(h => !h.alive)) {
       for (const item of hero.inventory) {
-        container.appendChild(el('p', { class: 'text-danger', text: `${hero.name} dropped: ${item.name}`, style: 'font-size: 12px;' }));
+        droppedItems.push({ item, fromHero: hero.name });
+      }
+      for (const slot of GEAR_SLOTS) {
+        if (hero.gear[slot]) {
+          droppedItems.push({ item: hero.gear[slot], fromHero: hero.name });
+        }
       }
       hero.inventory = [];
       hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
+    }
+
+    // Show interactive pickup UI for dropped items
+    if (droppedItems.length > 0) {
+      container.appendChild(el('div', { class: 'text-dim', text: 'Dropped Items — pick up or leave:', style: 'font-weight: 600; margin: 8px 0 4px;' }));
+      const lootDiv = el('div', { class: 'loot-items' });
+      for (const drop of droppedItems) {
+        const lootRow = el('div', { class: 'loot-item' }, [
+          el('div', { class: 'loot-item-info' }, [
+            el('span', { text: drop.item.icon }),
+            el('span', { class: `rarity-text-${drop.item.rarity || 'common'}`, text: drop.item.name, style: 'font-size: 12px;' }),
+            el('span', { class: 'loot-item-size', text: `${drop.item.size}u` }),
+          ]),
+        ]);
+        for (const survivor of alive) {
+          if (canCarry(survivor, drop.item)) {
+            lootRow.appendChild(btn(`\uD83C\uDF92 ${survivor.name}`, 'btn-sm', () => {
+              survivor.inventory.push(drop.item);
+              raid.itemsCollected.push(drop.item);
+              lootRow.remove();
+              saveGame();
+              toast(`${survivor.name} picked up ${drop.item.name}`, 'success');
+            }));
+          }
+        }
+        lootDiv.appendChild(lootRow);
+      }
+      container.appendChild(lootDiv);
     }
 
     container.appendChild(btn('Continue (weakened)', 'btn-primary btn-block', () => {
