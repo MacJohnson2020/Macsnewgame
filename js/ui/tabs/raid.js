@@ -1,7 +1,7 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
 import { G, getHero, saveGame, canCarry } from '../../state.js';
-import { ZONES, CLASSES, GEAR_SLOTS } from '../../config.js';
+import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -140,22 +140,47 @@ function renderExploring(container, raid) {
     container.appendChild(el('p', { class: 'text-warning', text: 'Dead end! You must extract or go back.' }));
   }
 
-  // Party status with equip buttons
+  // Party status with inventory
   container.appendChild(el('div', { class: 'divider' }));
   container.appendChild(el('div', { class: 'text-dim', text: 'Party', style: 'font-weight: 600; margin-bottom: 4px;' }));
   for (const heroId of raid.party) {
     const hero = getHero(heroId);
     if (!hero) continue;
+    const cls = CLASSES[hero.classId];
+    const used = usedInvQuick(hero);
+
     const cardEl = heroCard(hero);
-    // Add equip button per hero
-    const gearCount = hero.inventory.filter(i => i.slot && !i.isConsumable).length;
-    if (gearCount > 0 || hero.inventory.length > 0) {
-      const equipRow = el('div', { style: 'margin-top: 4px; display: flex; gap: 4px;' });
-      equipRow.appendChild(btn(`\uD83D\uDEE1\uFE0F Equip (${gearCount})`, 'btn-sm', () => {
-        showRaidEquipMenu(container, hero, raid);
-      }));
-      cardEl.appendChild(equipRow);
+
+    // Show inventory items
+    if (hero.inventory.length > 0) {
+      const invDiv = el('div', { style: 'margin-top: 6px;' });
+      invDiv.appendChild(el('div', { class: 'text-dim', text: `Backpack (${used}/${hero.inventoryCapacity}u)`, style: 'font-size: 10px; font-weight: 600; margin-bottom: 3px;' }));
+      const itemRow = el('div', { style: 'display: flex; flex-wrap: wrap; gap: 3px;' });
+      for (const item of hero.inventory) {
+        const pill = el('span', {
+          class: `rarity-text-${item.rarity || 'common'}`,
+          text: `${item.icon} ${item.name}`,
+          style: 'font-size: 10px; background: var(--bg-dark); padding: 2px 5px; border-radius: 4px; white-space: nowrap;',
+        });
+        itemRow.appendChild(pill);
+      }
+      invDiv.appendChild(itemRow);
+      cardEl.appendChild(invDiv);
     }
+
+    // Equip + Use Item buttons
+    const actionRow = el('div', { style: 'margin-top: 6px; display: flex; gap: 4px;' });
+    actionRow.appendChild(btn('\uD83D\uDEE1\uFE0F Equip', 'btn-sm', () => {
+      showRaidEquipScreen(hero, raid);
+    }));
+    const consumables = hero.inventory.filter(i => i.isConsumable);
+    if (consumables.length > 0) {
+      actionRow.appendChild(btn(`\uD83C\uDF1F Items (${consumables.length})`, 'btn-sm', () => {
+        showRaidUseItemScreen(hero, raid);
+      }));
+    }
+    cardEl.appendChild(actionRow);
+
     container.appendChild(cardEl);
   }
 
@@ -656,7 +681,164 @@ function showItemPicker(parent, combat, hero, raid) {
   parent.appendChild(picker);
 }
 
-// Equip menu during raid (combat or exploration)
+// Full-screen equip screen during raid
+function showRaidEquipScreen(hero, raid) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const screen = el('div', { class: 'flex-col gap-md' });
+  const cls = CLASSES[hero.classId];
+  const used = usedInvQuick(hero);
+
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: `${cls.icon} ${hero.name} — Equipment`, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: `Lv.${hero.level} ${cls.name} | ${used}/${hero.inventoryCapacity}u`, style: 'font-size: 12px; margin-top: 4px;' }),
+  ]));
+
+  // Current gear by slot
+  const isTwoHanded = hero.gear.weapon && hero.gear.weapon.twoHanded;
+
+  for (const slot of GEAR_SLOTS) {
+    const equipped = hero.gear[slot];
+    const available = hero.inventory.filter(i => i.slot === slot && !i.isConsumable);
+    const blocked = slot === 'offhand' && isTwoHanded;
+
+    const slotDiv = el('div', { class: 'card', style: 'margin-bottom: 6px; padding: 8px;' });
+    const slotInfo = GEAR_SLOT_INFO[slot];
+
+    if (equipped) {
+      const equipRow = el('div', { class: 'flex gap-sm', style: 'align-items: center;' }, [
+        el('span', { class: 'text-dim', text: slotInfo.name, style: 'font-size: 10px; font-weight: 700; width: 54px; text-transform: uppercase;' }),
+        el('span', { text: equipped.icon }),
+        el('span', { class: `rarity-text-${equipped.rarity}`, text: equipped.name, style: 'font-size: 12px; flex: 1;' }),
+      ]);
+      // Unequip button
+      equipRow.appendChild(btn('Unequip', 'btn-sm', () => {
+        hero.gear[slot] = null;
+        hero.inventory.push(equipped);
+        saveGame();
+        showRaidEquipScreen(hero, raid);
+        toast(`Unequipped ${equipped.name}`, 'info');
+      }));
+      slotDiv.appendChild(equipRow);
+    } else if (blocked) {
+      slotDiv.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; opacity: 0.4;' }, [
+        el('span', { class: 'text-dim', text: slotInfo.name, style: 'font-size: 10px; font-weight: 700; width: 54px; text-transform: uppercase;' }),
+        el('span', { class: 'text-dim', text: '(2-handed weapon equipped)', style: 'font-size: 11px;' }),
+      ]));
+    } else {
+      slotDiv.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; opacity: 0.5;' }, [
+        el('span', { class: 'text-dim', text: slotInfo.name, style: 'font-size: 10px; font-weight: 700; width: 54px; text-transform: uppercase;' }),
+        el('span', { text: slotInfo.icon }),
+        el('span', { class: 'text-dim', text: 'Empty', style: 'font-size: 11px;' }),
+      ]));
+    }
+
+    // Show equippable items from backpack
+    for (const item of available) {
+      let meetsReqs = true;
+      if (item.statReq) {
+        for (const [stat, val] of Object.entries(item.statReq)) {
+          if ((hero.stats[stat] || 0) < val) meetsReqs = false;
+        }
+      }
+
+      const eqRow = el('div', { style: 'margin-top: 4px; margin-left: 54px; display: flex; align-items: center; gap: 6px;' });
+      eqRow.appendChild(el('span', { text: item.icon }));
+      eqRow.appendChild(el('span', { class: `rarity-text-${item.rarity}`, text: item.name, style: 'font-size: 11px; flex: 1;' }));
+
+      if (meetsReqs) {
+        eqRow.appendChild(btn('Equip', 'btn-sm btn-success', () => {
+          const idx = hero.inventory.findIndex(i => i.id === item.id);
+          if (idx >= 0) hero.inventory.splice(idx, 1);
+          if (hero.gear[slot]) hero.inventory.push(hero.gear[slot]);
+          hero.gear[slot] = item;
+          saveGame();
+          showRaidEquipScreen(hero, raid);
+          toast(`Equipped ${item.name}`, 'success');
+        }));
+      } else {
+        eqRow.appendChild(el('span', { class: 'text-danger', text: 'Req not met', style: 'font-size: 10px;' }));
+      }
+      slotDiv.appendChild(eqRow);
+    }
+
+    // Only show slots that have something equipped or something available
+    if (equipped || available.length > 0 || blocked) {
+      screen.appendChild(slotDiv);
+    }
+  }
+
+  // Back button
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
+}
+
+// Full-screen item use during exploration
+function showRaidUseItemScreen(hero, raid) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const screen = el('div', { class: 'flex-col gap-md' });
+  const cls = CLASSES[hero.classId];
+
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: `${cls.icon} ${hero.name} — Use Item`, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: `HP: ${hero.hp}/${hero.maxHp} | MP: ${hero.mp}/${hero.maxMp}`, style: 'font-size: 12px; margin-top: 4px;' }),
+  ]));
+
+  const consumables = hero.inventory.filter(i => i.isConsumable);
+  if (consumables.length === 0) {
+    screen.appendChild(el('p', { class: 'text-dim', text: 'No usable items.' }));
+  } else {
+    for (const item of consumables) {
+      const row = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;' });
+      row.appendChild(el('span', { text: item.icon, style: 'font-size: 22px;' }));
+      row.appendChild(el('div', { style: 'flex: 1;' }, [
+        el('div', { class: 'text-bright', text: item.name, style: 'font-size: 13px; font-weight: 600;' }),
+        el('div', { class: 'text-dim', text: item.desc, style: 'font-size: 11px;' }),
+      ]));
+
+      if (item.effect === 'heal' && hero.hp < hero.maxHp) {
+        row.appendChild(btn('Use', 'btn-sm btn-success', () => {
+          hero.hp = Math.min(hero.maxHp, hero.hp + item.value);
+          const idx = hero.inventory.findIndex(i => i.id === item.id);
+          if (idx >= 0) hero.inventory.splice(idx, 1);
+          saveGame();
+          toast(`${hero.name} healed ${item.value} HP`, 'success');
+          showRaidUseItemScreen(hero, raid);
+        }));
+      } else if (item.effect === 'mana' && hero.mp < hero.maxMp) {
+        row.appendChild(btn('Use', 'btn-sm btn-success', () => {
+          hero.mp = Math.min(hero.maxMp, hero.mp + item.value);
+          const idx = hero.inventory.findIndex(i => i.id === item.id);
+          if (idx >= 0) hero.inventory.splice(idx, 1);
+          saveGame();
+          toast(`${hero.name} restored ${item.value} MP`, 'success');
+          showRaidUseItemScreen(hero, raid);
+        }));
+      } else if (item.effect === 'cure') {
+        row.appendChild(btn('Use', 'btn-sm btn-success', () => {
+          hero.dots = [];
+          const idx = hero.inventory.findIndex(i => i.id === item.id);
+          if (idx >= 0) hero.inventory.splice(idx, 1);
+          saveGame();
+          toast(`${hero.name} cured!`, 'success');
+          showRaidUseItemScreen(hero, raid);
+        }));
+      } else {
+        row.appendChild(el('span', { class: 'text-dim', text: 'N/A', style: 'font-size: 10px;' }));
+      }
+
+      screen.appendChild(row);
+    }
+  }
+
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
+}
+
+// Old inline equip menu kept for combat use
 function showRaidEquipMenu(parent, hero, raid) {
   const old = parent.querySelector('.equip-picker');
   if (old) old.remove();
@@ -664,7 +846,6 @@ function showRaidEquipMenu(parent, hero, raid) {
   const picker = el('div', { class: 'equip-picker card', style: 'margin-top: 6px;' });
   picker.appendChild(el('div', { class: 'text-bright', text: `${hero.name} — Equipment`, style: 'font-size: 12px; font-weight: 700; margin-bottom: 4px;' }));
 
-  // Current gear
   for (const slot of GEAR_SLOTS) {
     const equipped = hero.gear[slot];
     const available = hero.inventory.filter(i => i.slot === slot && !i.isConsumable);
@@ -676,7 +857,6 @@ function showRaidEquipMenu(parent, hero, raid) {
       row.appendChild(el('div', { class: 'text-dim', text: `  Equipped: ${equipped.icon} ${equipped.name}`, style: 'font-size: 11px;' }));
     }
 
-    // Show equippable items from backpack
     for (const item of available) {
       let meetsReqs = true;
       if (item.statReq) {
@@ -700,7 +880,7 @@ function showRaidEquipMenu(parent, hero, raid) {
       row.appendChild(eqBtn);
     }
 
-    picker.appendChild(row);
+    if (equipped || available.length > 0) picker.appendChild(row);
   }
 
   picker.appendChild(btn('Close', 'btn-sm', () => picker.remove()));

@@ -178,21 +178,21 @@ export const CONSUMABLES = {
 // Enemy types by zone
 export const ENEMIES = {
   // Rust Crypts
-  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 15,  armor: 3,  mr: 2,  acc: 12, dmg: [3, 6],   speed: 12, xp: 8 },
-  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 25,  armor: 8,  mr: 3,  acc: 14, dmg: [5, 9],   speed: 8,  xp: 15 },
-  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 35,  armor: 6,  mr: 5,  acc: 16, dmg: [7, 12],  speed: 10, xp: 22 },
-  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 60,  armor: 18, mr: 8,  acc: 18, dmg: [10, 16], speed: 6,  xp: 45, elite: true },
+  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 12,  armor: 2,  mr: 1,  acc: 10, dmg: [2, 5],   speed: 12, xp: 8,  tier: 1 },
+  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 20,  armor: 5,  mr: 2,  acc: 12, dmg: [4, 7],   speed: 8,  xp: 15, tier: 2 },
+  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 30,  armor: 5,  mr: 4,  acc: 14, dmg: [5, 10],  speed: 10, xp: 22, tier: 3 },
+  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 50,  armor: 14, mr: 6,  acc: 16, dmg: [8, 14],  speed: 6,  xp: 45, elite: true, tier: 4 },
 
   // Neon Depths
-  void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20 },
-  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30 },
-  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true },
-  tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true },
+  void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1 },
+  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2 },
+  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3 },
+  tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true, tier: 4 },
 
   // Void Marshes
-  marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35 },
-  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true },
-  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true },
+  marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35, tier: 1 },
+  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2 },
+  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4 },
 };
 
 // Zones

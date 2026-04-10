@@ -208,11 +208,13 @@ function giveStarterGear(hero) {
       break;
   }
 
-  const potion = { id: uid(), consumableId: 'health_potion', name: 'Health Potion', icon: '\u2764\uFE0F', size: 1, rarity: 'common', isConsumable: true, effect: 'heal', value: 30, desc: 'Restore 30 HP' };
-
   hero.gear.weapon = weapon;
   hero.gear.body = body;
-  hero.inventory.push(potion);
+
+  // 3 starter health potions
+  for (let i = 0; i < 3; i++) {
+    hero.inventory.push({ id: uid(), consumableId: 'health_potion', name: 'Health Potion', icon: '\u2764\uFE0F', size: 1, rarity: 'common', isConsumable: true, effect: 'heal', value: 30, desc: 'Restore 30 HP' });
+  }
 }
 
 function getUidHelper() {
