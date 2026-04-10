@@ -33,6 +33,8 @@ export function renderPath(raid, onNodeClick) {
       const isAvailable = !node.visited && floor === currentFloor + 1 && isReachableFrom(raid, currentId, node.id);
       const isPast = node.visited;
       const isFuture = floor > currentFloor + 1;
+      // Node is on the next floor but NOT reachable from current position
+      const isLocked = !node.visited && floor === currentFloor + 1 && !isReachableFrom(raid, currentId, node.id);
 
       // Hide non-combat node types until visited
       const hiddenTypes = ['chest', 'trap', 'shrine', 'merchant', 'event'];
@@ -43,6 +45,7 @@ export function renderPath(raid, onNodeClick) {
       if (isPast) classes += ' visited';
       if (isAvailable) classes += ' available';
       if (isFuture) classes += ' future';
+      if (isLocked) classes += ' locked';
       if (node.type === 'extraction') classes += ' extraction';
       if (!isMystery) {
         if (node.type === 'enemy') classes += ' enemy';
