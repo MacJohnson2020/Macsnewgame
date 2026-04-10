@@ -2,7 +2,7 @@
 
 import { G, getHero, saveGame } from '../state.js';
 import { ZONES, CORRUPTION_LEVELS, xpForLevel } from '../config.js';
-import { generateRaidPath, getChildren } from './generator.js';
+import { generateRaidPath, getChildren, pruneUnreachable } from './generator.js';
 import { generateEncounter, resolveEventChoice, applyTrap, applyShrine } from './encounter.js';
 import { createCombatState } from './combat.js';
 import { generateGold } from './entities.js';
@@ -78,6 +78,9 @@ export function stepToNode(raid, nodeId) {
   node.visited = true;
   raid.steps++;
   raid.path.currentFloor = node.floor;
+
+  // Prune paths no longer reachable
+  pruneUnreachable(raid.path, nodeId);
   raid.corruption += ZONES.find(z => z.id === raid.zoneId)?.corruptionRate || 1;
 
   raid.corruptionLevel = [...CORRUPTION_LEVELS]

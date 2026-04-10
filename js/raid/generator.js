@@ -112,8 +112,10 @@ function makeNode(floor, lane, type) {
     type,
     icon: '?',
     label: '',
+    difficulty: 0, // 0=none, 1=easy, 2=medium, 3=hard, 4=elite
     visited: false,
     revealed: true,
+    pruned: false, // removed from map after path choice
     data: null,
   };
   assignNodeVisuals(node);
@@ -164,6 +166,16 @@ function assignNodeVisuals(node) {
     case 'extraction': node.icon = '\u2705';     node.label = 'Extract'; break;
     case 'start':    node.icon = '\uD83D\uDEAA'; node.label = 'Start'; break;
   }
+  // Assign difficulty based on floor depth
+  if (node.type === 'enemy') {
+    if (node.floor <= 3) { node.difficulty = 1; node.label = 'Easy'; }
+    else if (node.floor <= 6) { node.difficulty = 2; node.label = 'Medium'; }
+    else if (node.floor <= 9) { node.difficulty = 3; node.label = 'Hard'; }
+    else { node.difficulty = 4; node.label = 'ELITE'; node.icon = '\uD83D\uDC79'; }
+  }
+  if (node.type === 'trap') {
+    node.difficulty = node.floor <= 4 ? 1 : 2;
+  }
 }
 
 // Get nodes reachable from a given node (children in the next floor)
@@ -179,6 +191,35 @@ export function getParent(path, nodeId) {
   const edge = path.edges.find(e => e.to === nodeId);
   if (!edge) return null;
   return path.nodes.find(n => n.id === edge.from);
+}
+
+// After choosing a node, prune all nodes on the same floor that weren't chosen
+// and any nodes only reachable through pruned nodes
+export function pruneUnreachable(path, chosenNodeId) {
+  const chosenNode = path.nodes.find(n => n.id === chosenNodeId);
+  if (!chosenNode) return;
+
+  // Mark all other nodes on the same floor as pruned
+  const sameFloor = path.nodes.filter(n => n.floor === chosenNode.floor && n.id !== chosenNodeId);
+  for (const node of sameFloor) {
+    node.pruned = true;
+  }
+
+  // Now forward-propagate: for each future floor, check if nodes are still reachable
+  for (let floor = chosenNode.floor + 1; floor < path.numFloors; floor++) {
+    const floorNodes = path.columns[floor];
+    for (const node of floorNodes) {
+      // Check if any non-pruned parent connects to this node
+      const parents = path.edges
+        .filter(e => e.to === node.id)
+        .map(e => path.nodes.find(n => n.id === e.from))
+        .filter(Boolean);
+      const hasLiveParent = parents.some(p => !p.pruned);
+      if (!hasLiveParent) {
+        node.pruned = true;
+      }
+    }
+  }
 }
 
 // No-op (all nodes visible in Slay the Spire style)
