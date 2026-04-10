@@ -151,6 +151,18 @@ function assignEncounters(nodes, zone, numFloors) {
     const encounter = weightedPick(adjusted);
     node.type = encounter.type;
     assignNodeVisuals(node);
+
+    // Set difficulty based on depth ratio (relative to zone)
+    const depthRatio = node.floor / (numFloors - 1);
+    if (node.type === 'enemy') {
+      if (depthRatio <= 0.4) { node.difficulty = 1; node.label = 'Easy'; }
+      else if (depthRatio <= 0.65) { node.difficulty = 2; node.label = 'Medium'; }
+      else if (depthRatio <= 0.85) { node.difficulty = 3; node.label = 'Hard'; }
+      else { node.difficulty = 4; node.label = 'ELITE'; node.icon = '\uD83D\uDC79'; }
+    }
+    if (node.type === 'trap') {
+      node.difficulty = depthRatio <= 0.5 ? 1 : 2;
+    }
   }
 }
 
@@ -158,23 +170,24 @@ function assignNodeVisuals(node) {
   switch (node.type) {
     case 'enemy':    node.icon = '\uD83D\uDC80'; node.label = 'Enemy'; break;
     case 'chest':    node.icon = '\uD83D\uDCE6'; node.label = 'Chest'; break;
-    case 'trap':     node.icon = '\u26A0\uFE0F'; node.label = 'Trap'; break;
-    case 'shrine':   node.icon = '\u2728';       node.label = 'Shrine'; break;
+    case 'trap':
+    case 'shrine':
+    case 'event':
+      // Mystery nodes — don't reveal type until visited
+      node.icon = '\u2753'; node.label = 'Mystery'; node.mystery = true; break;
     case 'merchant': node.icon = '\uD83D\uDED2'; node.label = 'Merchant'; break;
-    case 'event':    node.icon = '\u2753';       node.label = 'Event'; break;
     case 'empty':    node.icon = '\u00B7';       node.label = 'Rest'; break;
     case 'extraction': node.icon = '\u2705';     node.label = 'Extract'; break;
     case 'start':    node.icon = '\uD83D\uDEAA'; node.label = 'Start'; break;
   }
-  // Assign difficulty based on floor depth
+  // Assign difficulty based on depth ratio (relative to zone, not absolute floor)
+  // This makes difficulty scale properly regardless of zone size
   if (node.type === 'enemy') {
-    if (node.floor <= 3) { node.difficulty = 1; node.label = 'Easy'; }
-    else if (node.floor <= 6) { node.difficulty = 2; node.label = 'Medium'; }
-    else if (node.floor <= 9) { node.difficulty = 3; node.label = 'Hard'; }
-    else { node.difficulty = 4; node.label = 'ELITE'; node.icon = '\uD83D\uDC79'; }
+    // Use node.floor but we need numFloors context — set a default, will be overridden in assignEncounters
+    node.difficulty = 1;
   }
   if (node.type === 'trap') {
-    node.difficulty = node.floor <= 4 ? 1 : 2;
+    node.difficulty = 1;
   }
 }
 

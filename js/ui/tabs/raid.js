@@ -168,8 +168,37 @@ function renderExploring(container, raid) {
       cardEl.appendChild(invDiv);
     }
 
-    // Equip + Use Item buttons
-    const actionRow = el('div', { style: 'margin-top: 6px; display: flex; gap: 4px;' });
+    // Quick heal button + Equip + Items
+    const actionRow = el('div', { style: 'margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;' });
+
+    // Quick consume: show heal button if hero is hurt and has a health potion
+    if (hero.alive && hero.hp < hero.maxHp) {
+      const healPotion = hero.inventory.find(i => i.isConsumable && i.effect === 'heal');
+      if (healPotion) {
+        actionRow.appendChild(btn(`\u2764\uFE0F Heal`, 'btn-sm btn-success', () => {
+          hero.hp = Math.min(hero.maxHp, hero.hp + healPotion.value);
+          const idx = hero.inventory.findIndex(i => i.id === healPotion.id);
+          if (idx >= 0) hero.inventory.splice(idx, 1);
+          saveGame();
+          toast(`${hero.name} healed ${healPotion.value} HP`, 'success');
+          renderActiveTab();
+        }));
+      }
+    }
+    if (hero.alive && hero.mp < hero.maxMp) {
+      const manaPotion = hero.inventory.find(i => i.isConsumable && i.effect === 'mana');
+      if (manaPotion) {
+        actionRow.appendChild(btn(`\uD83D\uDCA7 Mana`, 'btn-sm', () => {
+          hero.mp = Math.min(hero.maxMp, hero.mp + manaPotion.value);
+          const idx = hero.inventory.findIndex(i => i.id === manaPotion.id);
+          if (idx >= 0) hero.inventory.splice(idx, 1);
+          saveGame();
+          toast(`${hero.name} restored ${manaPotion.value} MP`, 'success');
+          renderActiveTab();
+        }));
+      }
+    }
+
     actionRow.appendChild(btn('\uD83D\uDEE1\uFE0F Equip', 'btn-sm', () => {
       showRaidEquipScreen(hero, raid);
     }));
@@ -743,9 +772,19 @@ function showRaidEquipScreen(hero, raid) {
         }
       }
 
-      const eqRow = el('div', { style: 'margin-top: 4px; margin-left: 54px; display: flex; align-items: center; gap: 6px;' });
+      const eqRow = el('div', { style: 'margin-top: 4px; margin-left: 54px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;' });
       eqRow.appendChild(el('span', { text: item.icon }));
-      eqRow.appendChild(el('span', { class: `rarity-text-${item.rarity}`, text: item.name, style: 'font-size: 11px; flex: 1;' }));
+      eqRow.appendChild(el('span', { class: `rarity-text-${item.rarity}`, text: item.name, style: 'font-size: 11px;' }));
+
+      // Stat comparison vs currently equipped
+      const compareDiv = el('span', { style: 'font-size: 10px; display: flex; gap: 4px; flex: 1;' });
+      const diffs = compareItems(item, equipped);
+      for (const d of diffs) {
+        const color = d.val > 0 ? 'text-success' : d.val < 0 ? 'text-danger' : 'text-dim';
+        const sign = d.val > 0 ? '+' : '';
+        compareDiv.appendChild(el('span', { class: color, text: `${sign}${d.val} ${d.stat}` }));
+      }
+      eqRow.appendChild(compareDiv);
 
       if (meetsReqs) {
         eqRow.appendChild(btn('Equip', 'btn-sm btn-success', () => {
@@ -952,6 +991,20 @@ function showTradeFrom(menu, fromHero, allHeroes, raid) {
   }
 
   menu.appendChild(btn('Back', 'btn-sm btn-block', () => { menu.remove(); }));
+}
+
+// Compare two items (new vs currently equipped) for stat diffs
+function compareItems(newItem, oldItem) {
+  const diffs = [];
+  const stats = ['dmgMin', 'dmgMax', 'accuracy', 'armor', 'magicResist'];
+  const labels = { dmgMin: 'MinDmg', dmgMax: 'MaxDmg', accuracy: 'Acc', armor: 'Armor', magicResist: 'MR' };
+  for (const stat of stats) {
+    const newVal = newItem[stat] || 0;
+    const oldVal = oldItem ? (oldItem[stat] || 0) : 0;
+    const diff = newVal - oldVal;
+    if (diff !== 0) diffs.push({ stat: labels[stat], val: diff });
+  }
+  return diffs;
 }
 
 function usedInvQuick(hero) {

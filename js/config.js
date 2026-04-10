@@ -178,10 +178,10 @@ export const CONSUMABLES = {
 // Enemy types by zone
 export const ENEMIES = {
   // Rust Crypts
-  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 12,  armor: 2,  mr: 1,  acc: 10, dmg: [2, 5],   speed: 12, xp: 8,  tier: 1 },
-  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 20,  armor: 5,  mr: 2,  acc: 12, dmg: [4, 7],   speed: 8,  xp: 15, tier: 2 },
-  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 30,  armor: 5,  mr: 4,  acc: 14, dmg: [5, 10],  speed: 10, xp: 22, tier: 3 },
-  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 50,  armor: 14, mr: 6,  acc: 16, dmg: [8, 14],  speed: 6,  xp: 45, elite: true, tier: 4 },
+  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 10,  armor: 1,  mr: 1,  acc: 8,  dmg: [2, 4],   speed: 12, xp: 10, tier: 1 },
+  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 16,  armor: 3,  mr: 2,  acc: 10, dmg: [3, 6],   speed: 8,  xp: 18, tier: 2 },
+  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 24,  armor: 4,  mr: 3,  acc: 12, dmg: [4, 8],   speed: 10, xp: 25, tier: 3 },
+  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 40,  armor: 10, mr: 5,  acc: 14, dmg: [7, 12],  speed: 6,  xp: 45, elite: true, tier: 4 },
 
   // Neon Depths
   void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1 },

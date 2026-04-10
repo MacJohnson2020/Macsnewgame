@@ -42,9 +42,11 @@ export function renderPath(raid, onNodeClick) {
       if (node.type === 'extraction') classes += ' extraction';
       if (node.type === 'enemy') classes += ' enemy';
       if (node.type === 'chest') classes += ' chest';
-      if (node.type === 'shrine') classes += ' shrine';
-      if (node.type === 'merchant') classes += ' merchant';
-      if (node.type === 'trap') classes += ' trap';
+      if (!node.mystery) {
+        if (node.type === 'shrine') classes += ' shrine';
+        if (node.type === 'merchant') classes += ' merchant';
+        if (node.type === 'trap') classes += ' trap';
+      }
       // Difficulty
       if (node.difficulty >= 3) classes += ' hard';
       if (node.difficulty >= 4) classes += ' elite';
