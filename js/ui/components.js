@@ -157,12 +157,27 @@ export function enemyCard(enemy, onClick = null) {
     el('span', { class: 'combatant-icon', text: enemy.icon }),
     el('div', { class: 'combatant-info' }, [
       el('span', { class: 'combatant-name', text: enemy.name }),
-      el('span', { class: 'combatant-class', text: enemy.elite ? 'ELITE' : '' }),
+      el('span', { class: 'combatant-class', text: [
+        enemy.elite ? 'ELITE' : '',
+        ...(enemy.tags || []),
+      ].filter(Boolean).join(' \u00B7 ') }),
     ]),
   ]));
 
   const hpBar = progressBar(enemy.hp, enemy.maxHp, 'hp', true);
   c.appendChild(el('div', { class: 'combatant-hp' }, [hpBar]));
+
+  // Weakness/resistance indicators
+  if (enemy.alive && ((enemy.weakTo && enemy.weakTo.length) || (enemy.resistTo && enemy.resistTo.length))) {
+    const infoRow = el('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px;' });
+    for (const w of (enemy.weakTo || [])) {
+      infoRow.appendChild(el('span', { class: 'text-success', text: `Weak: ${w}`, style: 'font-size: 9px; background: rgba(46,204,113,0.1); padding: 1px 4px; border-radius: 3px;' }));
+    }
+    for (const r of (enemy.resistTo || [])) {
+      infoRow.appendChild(el('span', { class: 'text-danger', text: `Resist: ${r}`, style: 'font-size: 9px; background: rgba(231,76,60,0.1); padding: 1px 4px; border-radius: 3px;' }));
+    }
+    c.appendChild(infoRow);
+  }
 
   if (onClick) {
     c.style.cursor = 'pointer';
@@ -190,9 +205,14 @@ export function corruptionBar(corruption, corruptionLevel) {
 function getConfig() {
   return {
     CLASSES: {
-      fighter: { icon: '\u2694\uFE0F', name: 'Fighter' },
+      berserker: { icon: '\uD83E\uDE93', name: 'Berserker' },
       rogue: { icon: '\uD83D\uDDE1\uFE0F', name: 'Rogue' },
-      mage: { icon: '\uD83E\uDDD9', name: 'Mage' },
+      arcanist: { icon: '\uD83D\uDD2E', name: 'Arcanist' },
+      cleric: { icon: '\u2695\uFE0F', name: 'Cleric' },
+      paladin: { icon: '\uD83D\uDEE1\uFE0F', name: 'Paladin' },
+      ranger: { icon: '\uD83C\uDFF9', name: 'Ranger' },
+      necromancer: { icon: '\uD83D\uDC80', name: 'Necromancer' },
+      bard: { icon: '\uD83C\uDFB6', name: 'Bard' },
     },
   };
 }

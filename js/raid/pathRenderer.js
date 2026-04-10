@@ -33,37 +33,49 @@ export function renderPath(raid, onNodeClick) {
       const isAvailable = !node.visited && floor === currentFloor + 1 && isReachableFrom(raid, currentId, node.id);
       const isPast = node.visited;
       const isFuture = floor > currentFloor + 1;
+      // Node is on the next floor but NOT reachable from current position
+      const isLocked = !node.visited && floor === currentFloor + 1 && !isReachableFrom(raid, currentId, node.id);
+
+      // Hide non-combat node types until visited
+      const hiddenTypes = ['chest', 'trap', 'shrine', 'merchant', 'event'];
+      const isMystery = hiddenTypes.includes(node.type) && !isPast && !isCurrent;
 
       let classes = 'spire-node';
       if (isCurrent) classes += ' current';
       if (isPast) classes += ' visited';
       if (isAvailable) classes += ' available';
       if (isFuture) classes += ' future';
+      if (isLocked) classes += ' locked';
       if (node.type === 'extraction') classes += ' extraction';
-      if (node.type === 'enemy') classes += ' enemy';
-      if (!node.mystery) {
+      if (!isMystery) {
+        if (node.type === 'enemy') classes += ' enemy';
         if (node.type === 'chest') classes += ' chest';
         if (node.type === 'shrine') classes += ' shrine';
         if (node.type === 'merchant') classes += ' merchant';
         if (node.type === 'trap') classes += ' trap';
       }
       // Difficulty
-      if (node.difficulty >= 3) classes += ' hard';
-      if (node.difficulty >= 4) classes += ' elite';
+      if (node.difficulty >= 3 && !isMystery) classes += ' hard';
+      if (node.difficulty >= 4 && !isMystery) classes += ' elite';
 
       const nodeEl = el('div', { class: classes });
-      nodeEl.appendChild(el('span', { class: 'spire-node-icon', text: node.icon }));
+
+      // Show mystery icon/label for hidden nodes
+      const displayIcon = isMystery ? '\u2753' : node.icon;
+      const displayLabel = isMystery ? '???' : node.label;
+
+      nodeEl.appendChild(el('span', { class: 'spire-node-icon', text: displayIcon }));
 
       // Show label with difficulty for enemies
-      let labelText = node.label;
-      if (node.type === 'enemy' && node.difficulty > 0) {
+      let labelText = displayLabel;
+      if (!isMystery && node.type === 'enemy' && node.difficulty > 0) {
         const diffNames = ['', 'Easy', 'Med', 'Hard', 'ELITE'];
         labelText = diffNames[node.difficulty];
       }
       nodeEl.appendChild(el('span', { class: 'spire-node-label', text: labelText }));
 
-      // Difficulty dots
-      if (node.difficulty > 0 && node.type === 'enemy') {
+      // Difficulty dots (only for visible enemies)
+      if (!isMystery && node.difficulty > 0 && node.type === 'enemy') {
         const dots = '\u25CF'.repeat(node.difficulty);
         const dotColor = node.difficulty <= 1 ? 'var(--success)' : node.difficulty <= 2 ? 'var(--warning)' : 'var(--danger)';
         nodeEl.appendChild(el('span', { class: 'spire-node-diff', text: dots, style: `color:${dotColor}` }));

@@ -1,6 +1,6 @@
 // === Voidborn — Entity (Hero/Enemy) stat calculations ===
 
-import { CLASSES, ENEMIES, WEAPON_TYPES, OFFHAND_TYPES, BODY_TYPES, SLOT_TYPES, RARITIES, GEAR_SLOTS } from '../config.js';
+import { CLASSES, ENEMIES, WEAPON_TYPES, OFFHAND_TYPES, BODY_TYPES, SLOT_TYPES, RARITIES, GEAR_SLOTS, DAMAGE_TYPES } from '../config.js';
 import { statMod, randInt, pick, weightedPick, uid } from '../utils.js';
 
 // Get hero's total accuracy
@@ -47,6 +47,38 @@ export function getMagicResist(hero) {
     if (hero.gear[slot] && hero.gear[slot].magicResist) mr += hero.gear[slot].magicResist;
   }
   return Math.max(0, mr);
+}
+
+// Get defense for a specific damage type / element
+// Enemies with weakTo/resistTo get halved/doubled defense
+export function getDefense(entity, damageType) {
+  let base;
+  if (!damageType || damageType === 'physical') {
+    base = entity.armor !== undefined ? entity.armor : getArmor(entity);
+  } else if (damageType === 'magic') {
+    base = entity.magicResist !== undefined && !entity.gear ? entity.magicResist : getMagicResist(entity);
+  } else {
+    // Elemental — check the DAMAGE_TYPES config for which resist to use
+    const dtConfig = DAMAGE_TYPES[damageType];
+    if (!dtConfig) return 0;
+    const resistKey = dtConfig.resist;
+
+    if (entity.gear) {
+      base = getSubstatTotal(entity, resistKey) + (entity[resistKey] || 0);
+    } else {
+      base = entity[resistKey] || 0;
+    }
+  }
+
+  // Apply weakness/resistance for enemies
+  if (entity.weakTo && entity.weakTo.includes(damageType)) {
+    base = Math.floor(base * 0.5); // defense halved → takes ~50% more damage
+  }
+  if (entity.resistTo && entity.resistTo.includes(damageType)) {
+    base = Math.floor(base * 2); // defense doubled → takes ~50% less damage
+  }
+
+  return Math.max(0, base);
 }
 
 // Get hero's weapon damage range
@@ -138,6 +170,10 @@ export function createEnemy(typeId, zoneLevel = 1) {
     xp: Math.round(template.xp * levelScale),
     elite: template.elite || false,
     magic: template.magic || false,
+    damageType: template.damageType || (template.magic ? 'magic' : 'physical'),
+    tags: template.tags || [],
+    weakTo: template.weakTo || [],
+    resistTo: template.resistTo || [],
     alive: true,
     buffs: [],
     debuffs: [],
@@ -226,10 +262,18 @@ export function generateGear(level, forcedRarity = null) {
     { id: 'critChance', name: 'Crit Chance', range: [2, 8], suffix: '%' },
     { id: 'maxHp', name: 'Max HP', range: [5, 25] },
     { id: 'maxMp', name: 'Max MP', range: [3, 15] },
+    // Elemental resists (rarer — only appear on uncommon+ gear)
+    { id: 'fireResist', name: 'Fire Resist', range: [3, 12], minRarity: 1 },
+    { id: 'iceResist', name: 'Ice Resist', range: [3, 12], minRarity: 1 },
+    { id: 'lightningResist', name: 'Lightning Resist', range: [3, 12], minRarity: 1 },
+    { id: 'demonicResist', name: 'Demonic Resist', range: [3, 12], minRarity: 1 },
+    { id: 'holyResist', name: 'Holy Resist', range: [3, 12], minRarity: 1 },
   ];
+  const rarityTier = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+  const itemTier = rarityTier[rarity.id] || 0;
   const usedIds = new Set();
   for (let i = 0; i < rarity.substatCount; i++) {
-    const available = SUBSTATS.filter(s => !usedIds.has(s.id));
+    const available = SUBSTATS.filter(s => !usedIds.has(s.id) && (!s.minRarity || itemTier >= s.minRarity));
     if (available.length === 0) break;
     const sub = pick(available);
     usedIds.add(sub.id);

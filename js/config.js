@@ -18,20 +18,20 @@ export const STAT_POINTS_PER_LEVEL = 2;
 
 // Classes
 export const CLASSES = {
-  fighter: {
-    id: 'fighter',
-    name: 'Fighter',
-    icon: '\u2694\uFE0F',
-    desc: 'Frontline melee — high STR, heavy armor, weapon mastery',
-    hpBase: 40,
-    hpPerLevel: 8,
-    mpBase: 10,
+  berserker: {
+    id: 'berserker',
+    name: 'Berserker',
+    icon: '\uD83E\uDE93',
+    desc: 'Reckless melee — high STR/CON, massive damage, takes more hits',
+    hpBase: 45,
+    hpPerLevel: 9,
+    mpBase: 8,
     mpPerLevel: 2,
     abilities: [
-      { id: 'power_strike', name: 'Power Strike', desc: 'Deal 150% weapon damage', mpCost: 3, level: 1, dmgMult: 1.5 },
-      { id: 'shield_bash', name: 'Shield Bash', desc: 'Deal damage and stun for 1 turn', mpCost: 5, level: 3, dmgMult: 0.8, effect: 'stun' },
-      { id: 'rally', name: 'Rally', desc: 'Boost party accuracy by 20% for 3 turns', mpCost: 6, level: 5, buff: { stat: 'accuracy', pct: 20, turns: 3 } },
-      { id: 'cleave', name: 'Cleave', desc: 'Hit all enemies for 80% damage', mpCost: 8, level: 8, dmgMult: 0.8, aoe: true },
+      { id: 'reckless_strike', name: 'Reckless Strike', desc: 'Deal 200% damage, apply Bleed', mpCost: 3, level: 1, dmgMult: 2.0, applyDot: 'physical' },
+      { id: 'rage', name: 'Rage', desc: 'Boost own damage by 40% for 3 turns', mpCost: 4, level: 3, selfBuff: { stat: 'damage', pct: 40, turns: 3 } },
+      { id: 'blood_frenzy', name: 'Blood Frenzy', desc: 'Hit all enemies, apply Bleed', mpCost: 6, level: 5, dmgMult: 1.0, aoe: true, applyDot: 'physical' },
+      { id: 'defy_death', name: 'Defy Death', desc: 'Deal 250% damage, heal 30% dealt', mpCost: 10, level: 8, dmgMult: 2.5, lifesteal: 30 },
     ],
   },
   rogue: {
@@ -50,20 +50,101 @@ export const CLASSES = {
       { id: 'assassinate', name: 'Assassinate', desc: 'Deal 300% damage to targets below 25% HP', mpCost: 10, level: 8, dmgMult: 3.0, executeThreshold: 25 },
     ],
   },
-  mage: {
-    id: 'mage',
-    name: 'Mage',
-    icon: '\uD83E\uDDD9',
-    desc: 'Arcane caster — high INT, AoE spells, glass cannon',
-    hpBase: 25,
+  arcanist: {
+    id: 'arcanist',
+    name: 'Arcanist',
+    icon: '\uD83D\uDD2E',
+    desc: 'Arcane scholar — high INT, AoE spells, shields and devastation',
+    hpBase: 30,
     hpPerLevel: 4,
-    mpBase: 30,
+    mpBase: 35,
+    mpPerLevel: 6,
+    abilities: [
+      { id: 'arcane_blast', name: 'Arcane Blast', desc: 'Deal 130% magic damage to all, apply Poison', mpCost: 6, level: 1, dmgMult: 1.3, aoe: true, magic: true, applyDot: 'magic' },
+      { id: 'frost_bolt', name: 'Frost Bolt', desc: 'Deal 160% ice damage, apply Frostbite', mpCost: 4, level: 3, dmgMult: 1.6, element: 'ice', applyDot: 'ice' },
+      { id: 'arcane_shield', name: 'Arcane Shield', desc: 'Gain +50% magic resist for 3 turns', mpCost: 5, level: 5, selfBuff: { stat: 'magicResist', pct: 50, turns: 3 } },
+      { id: 'meteor', name: 'Meteor', desc: 'Deal 250% fire damage to all enemies', mpCost: 15, level: 8, dmgMult: 2.5, aoe: true, element: 'fire' },
+    ],
+  },
+  cleric: {
+    id: 'cleric',
+    name: 'Cleric',
+    icon: '\u2695\uFE0F',
+    desc: 'Divine healer — high WIS, heals, buffs, smites undead',
+    hpBase: 32,
+    hpPerLevel: 6,
+    mpBase: 25,
     mpPerLevel: 5,
     abilities: [
-      { id: 'fireball', name: 'Fireball', desc: 'Deal 120% magic damage to all enemies', mpCost: 6, level: 1, dmgMult: 1.2, aoe: true, magic: true, element: 'fire' },
-      { id: 'frost_bolt', name: 'Frost Bolt', desc: 'Deal 150% magic damage, slow target 1 turn', mpCost: 4, level: 3, dmgMult: 1.5, magic: true, element: 'ice', effect: 'slow' },
-      { id: 'arcane_shield', name: 'Arcane Shield', desc: 'Gain +50% magic resist for 3 turns', mpCost: 5, level: 5, selfBuff: { stat: 'magicResist', pct: 50, turns: 3 } },
-      { id: 'meteor', name: 'Meteor', desc: 'Deal 250% magic damage to all enemies', mpCost: 15, level: 8, dmgMult: 2.5, aoe: true, magic: true, element: 'fire' },
+      { id: 'smite', name: 'Smite', desc: 'Deal 150% holy damage to one enemy', mpCost: 4, level: 1, dmgMult: 1.5, element: 'holy' },
+      { id: 'heal', name: 'Heal', desc: 'Restore 40% of an ally\'s max HP', mpCost: 4, level: 1, healAlly: true, healPct: 40 },
+      { id: 'group_heal', name: 'Group Heal', desc: 'Heal all allies for 25% max HP', mpCost: 8, level: 5, healAlly: true, healPct: 25, aoe: true },
+      { id: 'divine_shield', name: 'Divine Shield', desc: 'Boost party armor by 30% for 3 turns', mpCost: 10, level: 8, buff: { stat: 'armor', pct: 30, turns: 3 } },
+    ],
+  },
+  paladin: {
+    id: 'paladin',
+    name: 'Paladin',
+    icon: '\uD83D\uDEE1\uFE0F',
+    desc: 'Holy tank — STR/WIS, heavy armor, protects allies',
+    hpBase: 42,
+    hpPerLevel: 8,
+    mpBase: 15,
+    mpPerLevel: 3,
+    abilities: [
+      { id: 'holy_strike', name: 'Holy Strike', desc: 'Deal 140% weapon damage', mpCost: 3, level: 1, dmgMult: 1.4 },
+      { id: 'lay_on_hands', name: 'Lay on Hands', desc: 'Heal an ally for 50% of their max HP', mpCost: 6, level: 3, healAlly: true, healPct: 50 },
+      { id: 'taunt', name: 'Taunt', desc: 'Force all enemies to target you for 2 turns', mpCost: 5, level: 5, selfBuff: { stat: 'taunt', pct: 1, turns: 2 } },
+      { id: 'divine_smite', name: 'Divine Smite', desc: 'Deal 200% holy damage, +50% vs elites', mpCost: 10, level: 8, dmgMult: 2.0, element: 'holy' },
+    ],
+  },
+  ranger: {
+    id: 'ranger',
+    name: 'Ranger',
+    icon: '\uD83C\uDFF9',
+    desc: 'Ranged hunter — DEX/WIS, bows, traps, precision shots',
+    hpBase: 30,
+    hpPerLevel: 5,
+    mpBase: 18,
+    mpPerLevel: 3,
+    abilities: [
+      { id: 'precision_shot', name: 'Precision Shot', desc: 'Deal 180% damage, +20% crit', mpCost: 4, level: 1, dmgMult: 1.8, critBonus: 20 },
+      { id: 'volley', name: 'Volley', desc: 'Hit all enemies for 80% damage', mpCost: 6, level: 3, dmgMult: 0.8, aoe: true },
+      { id: 'snare_trap', name: 'Snare Trap', desc: 'Stun target and deal 100% damage', mpCost: 5, level: 5, dmgMult: 1.0, effect: 'stun' },
+      { id: 'headshot', name: 'Headshot', desc: 'Deal 300% damage to targets below 30% HP', mpCost: 10, level: 8, dmgMult: 3.0, executeThreshold: 30 },
+    ],
+  },
+  necromancer: {
+    id: 'necromancer',
+    name: 'Necromancer',
+    icon: '\uD83D\uDC80',
+    desc: 'Dark caster — INT/CON, drains life, curses, death magic',
+    hpBase: 32,
+    hpPerLevel: 5,
+    mpBase: 28,
+    mpPerLevel: 5,
+    abilities: [
+      { id: 'drain_life', name: 'Drain Life', desc: 'Deal 120% demonic damage, heal self for half', mpCost: 4, level: 1, dmgMult: 1.2, element: 'demonic', lifesteal: 50 },
+      { id: 'curse', name: 'Curse', desc: 'Reduce enemy armor and MR by 30% for 3 turns', mpCost: 5, level: 3, debuff: { stat: 'armor', pct: -30, turns: 3 }, aoe: false },
+      { id: 'death_coil', name: 'Death Coil', desc: 'Deal 150% demonic damage, apply Wither', mpCost: 6, level: 5, dmgMult: 1.5, element: 'demonic', applyDot: 'demonic' },
+      { id: 'soul_harvest', name: 'Soul Harvest', desc: 'Deal 180% demonic damage to all, heal per hit', mpCost: 12, level: 8, dmgMult: 1.8, aoe: true, element: 'demonic', lifesteal: 30 },
+    ],
+  },
+  bard: {
+    id: 'bard',
+    name: 'Bard',
+    icon: '\uD83C\uDFB6',
+    desc: 'Party buffer — high CHA, songs boost allies, debuff enemies',
+    hpBase: 32,
+    hpPerLevel: 5,
+    mpBase: 25,
+    mpPerLevel: 4,
+    abilities: [
+      { id: 'dissonance', name: 'Dissonance', desc: 'Deal 150% magic damage to one enemy', mpCost: 3, level: 1, dmgMult: 1.5, magic: true },
+      { id: 'inspire', name: 'Inspire', desc: 'Boost party damage by 25% for 3 turns', mpCost: 4, level: 1, buff: { stat: 'damage', pct: 25, turns: 3 } },
+      { id: 'war_song', name: 'War Song', desc: 'Boost party accuracy by 25% for 3 turns', mpCost: 5, level: 3, buff: { stat: 'accuracy', pct: 25, turns: 3 } },
+      { id: 'lullaby', name: 'Lullaby', desc: 'Stun all enemies for 1 turn', mpCost: 7, level: 5, effect: 'stun', aoe: true },
+      { id: 'encore', name: 'Encore', desc: 'Deal 120% lightning damage, reset ally cooldowns', mpCost: 12, level: 8, dmgMult: 1.2, element: 'lightning' },
     ],
   },
 };
@@ -72,6 +153,21 @@ export const CLASSES = {
 export function xpForLevel(level) {
   return Math.floor(50 * Math.pow(level, 1.8));
 }
+
+// === Damage Types & Elements ===
+// physical and magic are base types; elements are rarer
+export const DAMAGE_TYPES = {
+  physical:  { name: 'Physical',  icon: '\u2694\uFE0F',      resist: 'armor',          dot: { name: 'Bleed',     icon: '\uD83E\uDE78', dmgPer: 3 } },
+  magic:     { name: 'Magic',     icon: '\uD83D\uDD2E',      resist: 'magicResist',    dot: { name: 'Poison',    icon: '\u2620\uFE0F', dmgPer: 3 } },
+  fire:      { name: 'Fire',      icon: '\uD83D\uDD25',      resist: 'fireResist',     dot: { name: 'Burn',      icon: '\uD83D\uDD25', dmgPer: 4 } },
+  ice:       { name: 'Ice',       icon: '\u2744\uFE0F',      resist: 'iceResist',      dot: { name: 'Frostbite', icon: '\u2744\uFE0F', dmgPer: 2 } },
+  lightning: { name: 'Lightning', icon: '\u26A1',             resist: 'lightningResist', dot: null },
+  demonic:   { name: 'Demonic',   icon: '\uD83D\uDE08',      resist: 'demonicResist',  dot: { name: 'Wither',    icon: '\uD83D\uDE08', dmgPer: 3 } },
+  holy:      { name: 'Holy',      icon: '\u2728',             resist: 'holyResist',     dot: null },
+};
+
+// All elemental resistance IDs (for gear generation)
+export const ELEMENT_RESISTS = ['fireResist', 'iceResist', 'lightningResist', 'demonicResist', 'holyResist'];
 
 // Equipment slots (RuneScape style)
 export const GEAR_SLOTS = ['head','body','legs','weapon','offhand','hands','feet','cape','neck','ring','ammo'];
@@ -176,23 +272,37 @@ export const CONSUMABLES = {
 };
 
 // Enemy types by zone
+// tags: undead, beast, demon, construct, humanoid — used for weakness flavor
+// weakTo: these damage types deal 50% more damage (defense halved)
+// resistTo: these damage types deal 50% less damage (defense doubled)
 export const ENEMIES = {
   // Rust Crypts
-  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 10,  armor: 1,  mr: 1,  acc: 8,  dmg: [2, 4],   speed: 12, xp: 10, tier: 1 },
-  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 16,  armor: 3,  mr: 2,  acc: 10, dmg: [3, 6],   speed: 8,  xp: 18, tier: 2 },
-  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 24,  armor: 4,  mr: 3,  acc: 12, dmg: [4, 8],   speed: 10, xp: 25, tier: 3 },
-  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 40,  armor: 10, mr: 5,  acc: 14, dmg: [7, 12],  speed: 6,  xp: 45, elite: true, tier: 4 },
+  crypt_rat:    { name: 'Crypt Rat',     icon: '\uD83D\uDC00', hp: 10,  armor: 1,  mr: 1,  acc: 8,  dmg: [2, 4],   speed: 12, xp: 10, tier: 1,
+                  tags: ['beast'], weakTo: ['fire'], resistTo: [] },
+  skeleton:     { name: 'Skeleton',      icon: '\uD83D\uDC80', hp: 14,  armor: 2,  mr: 1,  acc: 9,  dmg: [2, 5],   speed: 8,  xp: 18, tier: 2,
+                  tags: ['undead'], weakTo: ['holy', 'fire'], resistTo: ['demonic', 'ice'] },
+  ghoul:        { name: 'Ghoul',         icon: '\uD83E\uDDDF', hp: 24,  armor: 4,  mr: 3,  acc: 12, dmg: [4, 8],   speed: 10, xp: 25, tier: 3,
+                  tags: ['undead'], weakTo: ['holy', 'fire'], resistTo: ['demonic'] },
+  crypt_guard:  { name: 'Crypt Guard',   icon: '\uD83D\uDC82', hp: 40,  armor: 10, mr: 5,  acc: 14, dmg: [7, 12],  speed: 6,  xp: 45, elite: true, tier: 4,
+                  tags: ['undead', 'construct'], weakTo: ['holy', 'lightning'], resistTo: ['demonic', 'physical'] },
 
   // Neon Depths
-  void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1 },
-  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2 },
-  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3 },
-  tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true, tier: 4 },
+  void_spider:  { name: 'Void Spider',   icon: '\uD83D\uDD77\uFE0F', hp: 30,  armor: 5,  mr: 10, acc: 20, dmg: [6, 11],  speed: 15, xp: 20, tier: 1,
+                  tags: ['beast'], weakTo: ['fire', 'ice'], resistTo: [] },
+  corrupted:    { name: 'Corrupted One',  icon: '\uD83D\uDE08', hp: 45,  armor: 12, mr: 12, acc: 18, dmg: [9, 15],  speed: 10, xp: 30, tier: 2, damageType: 'demonic',
+                  tags: ['demon'], weakTo: ['holy', 'lightning'], resistTo: ['demonic', 'fire'] },
+  neon_wraith:  { name: 'Neon Wraith',   icon: '\uD83D\uDC7B', hp: 35,  armor: 3,  mr: 22, acc: 22, dmg: [12, 18], speed: 14, xp: 35, magic: true, tier: 3, damageType: 'lightning',
+                  tags: ['undead'], weakTo: ['holy'], resistTo: ['lightning', 'ice'] },
+  tech_golem:   { name: 'Tech Golem',    icon: '\uD83E\uDD16', hp: 80,  armor: 25, mr: 15, acc: 14, dmg: [14, 22], speed: 4,  xp: 55, elite: true, tier: 4,
+                  tags: ['construct'], weakTo: ['lightning', 'ice'], resistTo: ['holy', 'demonic'] },
 
   // Void Marshes
-  marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35, tier: 1 },
-  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2 },
-  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4 },
+  marsh_lurker: { name: 'Marsh Lurker',  icon: '\uD83D\uDC0D', hp: 45,  armor: 10, mr: 8,  acc: 20, dmg: [10, 16], speed: 11, xp: 35, tier: 1,
+                  tags: ['beast'], weakTo: ['ice', 'fire'], resistTo: [] },
+  bog_witch:    { name: 'Bog Witch',     icon: '\uD83E\uDDD9', hp: 40,  armor: 4,  mr: 25, acc: 24, dmg: [14, 20], speed: 9,  xp: 45, magic: true, tier: 2, damageType: 'fire',
+                  tags: ['humanoid'], weakTo: ['ice', 'holy'], resistTo: ['fire'] },
+  void_beast:   { name: 'Void Beast',    icon: '\uD83D\uDC32', hp: 100, armor: 20, mr: 18, acc: 22, dmg: [18, 28], speed: 8,  xp: 80, elite: true, tier: 4, damageType: 'demonic',
+                  tags: ['demon', 'beast'], weakTo: ['holy'], resistTo: ['demonic', 'fire'] },
 };
 
 // Zones

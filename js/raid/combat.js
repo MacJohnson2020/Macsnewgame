@@ -1,7 +1,7 @@
 // === Voidborn — Combat System (Chance-to-Hit, Party Turn-Based) ===
 
-import { getAccuracy, getArmor, getMagicResist, getWeaponDamage, getDamageStat, getPenetration, getCritChance, getInitiative } from './entities.js';
-import { CLASSES } from '../config.js';
+import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getPenetration, getCritChance, getInitiative } from './entities.js';
+import { CLASSES, DAMAGE_TYPES } from '../config.js';
 import { calcHitChance, calcDamage, rollChance, randInt, clamp, statMod } from '../utils.js';
 
 // Combat state
@@ -145,15 +145,10 @@ export function attackAction(combat, attacker, target) {
       pen = penStats.armorPen;
     }
   } else {
-    // Enemy attacking hero
+    // Enemy attacking hero — use element-aware defense
     accuracy = attacker.accuracy;
-    if (attacker.magic) {
-      defense = getMagicResist(target);
-      pen = 0;
-    } else {
-      defense = getArmor(target);
-      pen = 0;
-    }
+    defense = getDefense(target, attacker.damageType || (attacker.magic ? 'magic' : 'physical'));
+    pen = 0;
   }
 
   const hitChance = calcHitChance(accuracy, defense, pen);
@@ -192,16 +187,22 @@ export function attackAction(combat, attacker, target) {
   damage = Math.max(1, damage);
   target.hp -= damage;
 
+  // Check for weakness/resistance flavor
+  const atkType = isMagicWeapon ? 'magic' : 'physical';
+  const isWeak = target.weakTo && target.weakTo.includes(atkType);
+  const isResist = target.resistTo && target.resistTo.includes(atkType);
+  const weakTag = isWeak ? ' WEAK!' : isResist ? ' resisted' : '';
+
   if (isCrit) {
     combat.log.push({
       type: 'crit',
-      text: `${attacker.name} CRITS ${target.name} for ${damage} damage!`,
+      text: `${attacker.name} CRITS ${target.name} for ${damage} damage!${weakTag}`,
       class: 'crit',
     });
   } else {
     combat.log.push({
       type: 'damage',
-      text: `${attacker.name} hits ${target.name} for ${damage} damage (${hitChance}%)`,
+      text: `${attacker.name} hits ${target.name} for ${damage}${weakTag} (${hitChance}%)`,
       class: 'damage',
     });
   }
@@ -241,11 +242,13 @@ export function abilityAction(combat, hero, abilityId, target) {
 
     // Damage abilities
     if (ability.dmgMult) {
-      const isMagic = ability.magic || false;
+      // Determine damage type: element > magic flag > physical
+      const dmgType = ability.element || (ability.magic ? 'magic' : 'physical');
+      const isMagicStat = ability.magic || ability.element; // uses INT scaling if magic or elemental
       const accuracy = getAccuracy(hero) + (ability.critBonus || 0);
       const penStats = getPenetration(hero);
-      const defense = isMagic ? (t.magicResist || 0) : (t.armor || 0);
-      const pen = isMagic ? penStats.magicPen : penStats.armorPen;
+      const defense = getDefense(t, dmgType);
+      const pen = isMagicStat ? penStats.magicPen : penStats.armorPen;
 
       const hitChance = calcHitChance(accuracy, defense, pen);
       const hit = rollChance(hitChance);
@@ -277,16 +280,26 @@ export function abilityAction(combat, hero, abilityId, target) {
 
       // Crit
       const critChance = getCritChance(hero) + (ability.critBonus || 0);
+      const isAbilWeak = t.weakTo && t.weakTo.includes(dmgType);
+      const isAbilResist = t.resistTo && t.resistTo.includes(dmgType);
+      const abilWeakTag = isAbilWeak ? ' WEAK!' : isAbilResist ? ' resisted' : '';
       if (rollChance(critChance)) {
         damage *= 2;
-        combat.log.push({ type: 'crit', text: `  → ${t.name}: CRIT! ${damage} damage`, class: 'crit' });
+        combat.log.push({ type: 'crit', text: `  → ${t.name}: CRIT! ${damage}${abilWeakTag}`, class: 'crit' });
       } else {
-        combat.log.push({ type: 'damage', text: `  → ${t.name}: ${damage} damage`, class: 'damage' });
+        combat.log.push({ type: 'damage', text: `  → ${t.name}: ${damage}${abilWeakTag}`, class: 'damage' });
       }
 
       damage = Math.max(1, Math.round(damage));
       t.hp -= damage;
       results.push({ target: t, hit: true, damage });
+
+      // Lifesteal
+      if (ability.lifesteal && damage > 0) {
+        const healed = Math.round(damage * ability.lifesteal / 100);
+        hero.hp = Math.min(hero.maxHp, hero.hp + healed);
+        combat.log.push({ type: 'heal', text: `  ${hero.name} drains ${healed} HP`, class: 'heal' });
+      }
 
       if (t.hp <= 0) {
         t.hp = 0;
@@ -295,11 +308,23 @@ export function abilityAction(combat, hero, abilityId, target) {
       }
     }
 
-    // DoT effects
+    // DoT effects (legacy manual dot)
     if (ability.dot) {
       t.dots = t.dots || [];
       t.dots.push({ name: ability.name, damage: ability.dot.damage, turns: ability.dot.turns });
-      combat.log.push({ type: 'ability', text: `  → ${t.name} is poisoned! (${ability.dot.damage}/turn for ${ability.dot.turns} turns)`, class: 'ability' });
+      combat.log.push({ type: 'ability', text: `  → ${t.name} is afflicted! (${ability.dot.damage}/turn for ${ability.dot.turns} turns)`, class: 'ability' });
+    }
+
+    // Element-based DoT (applyDot references DAMAGE_TYPES)
+    if (ability.applyDot && !ability.dot) {
+      const dtConfig = DAMAGE_TYPES[ability.applyDot];
+      if (dtConfig && dtConfig.dot) {
+        const dotInfo = dtConfig.dot;
+        const dotDmg = dotInfo.dmgPer + Math.floor(hero.level / 3);
+        t.dots = t.dots || [];
+        t.dots.push({ name: dotInfo.name, damage: dotDmg, turns: 3 });
+        combat.log.push({ type: 'ability', text: `  → ${t.name}: ${dotInfo.name}! (${dotDmg}/turn for 3 turns)`, class: 'ability' });
+      }
     }
 
     // Debuff effects
@@ -326,6 +351,29 @@ export function abilityAction(combat, hero, abilityId, target) {
     hero.buffs = hero.buffs || [];
     hero.buffs.push({ stat: ability.selfBuff.stat, value: ability.selfBuff.pct, turns: ability.selfBuff.turns });
     combat.log.push({ type: 'ability', text: `  ${hero.name} gains +${ability.selfBuff.pct}% ${ability.selfBuff.stat}`, class: 'ability' });
+  }
+
+  // Heal ally abilities (Cleric/Paladin)
+  if (ability.healAlly) {
+    const healTargets = ability.aoe ? combat.party.filter(h => h.alive) : [target];
+    for (const t of healTargets) {
+      if (!t || !t.alive) continue;
+      const healed = Math.round(t.maxHp * ability.healPct / 100);
+      t.hp = Math.min(t.maxHp, t.hp + healed);
+      combat.log.push({ type: 'heal', text: `  → ${t.name} healed for ${healed} HP`, class: 'heal' });
+    }
+  }
+
+  // Encore: reset all ally cooldowns (Bard)
+  if (ability.id === 'encore') {
+    for (const ally of combat.party.filter(h => h.alive)) {
+      if (ally.abilityCooldowns) {
+        for (const key of Object.keys(ally.abilityCooldowns)) {
+          ally.abilityCooldowns[key] = 0;
+        }
+      }
+    }
+    combat.log.push({ type: 'ability', text: `  All ally cooldowns reset!`, class: 'ability' });
   }
 
   return { results };

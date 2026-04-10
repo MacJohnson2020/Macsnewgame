@@ -1,7 +1,7 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
-import { G, getHero, saveGame, canCarry, giveStarterGear } from '../../state.js';
-import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
+import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero } from '../../state.js';
+import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -634,9 +634,35 @@ function showAbilityTargetScreen(raid, combat, hero, ability) {
     el('div', { class: 'text-accent', text: `${ability.mpCost} MP | ${ability.aoe ? 'Hits all enemies' : 'Single target'}`, style: 'font-size: 11px; margin-top: 4px;' }),
   ]));
 
-  if (ability.aoe) {
+  if (ability.healAlly && !ability.aoe) {
+    // Single-target heal — target an ally
+    screen.appendChild(el('div', { class: 'text-dim', text: 'Pick an ally to heal:', style: 'font-weight: 600; margin-bottom: 4px;' }));
+
+    for (const ally of combat.party.filter(h => h.alive)) {
+      const healAmt = Math.round(ally.maxHp * ability.healPct / 100);
+      const tBtn = el('div', { class: 'combatant-card', style: 'cursor: pointer; margin-bottom: 6px;' });
+      const cls = CLASSES[ally.classId];
+      tBtn.appendChild(el('div', { class: 'combatant-header' }, [
+        el('span', { class: 'combatant-icon', text: cls.icon }),
+        el('div', { class: 'combatant-info' }, [
+          el('span', { class: 'combatant-name', text: ally.name }),
+          el('span', { class: 'combatant-class', text: `HP: ${ally.hp}/${ally.maxHp}` }),
+        ]),
+        el('span', { class: 'text-success', text: `+${healAmt} HP`, style: 'font-size: 11px;' }),
+      ]));
+      tBtn.appendChild(progressBar(ally.hp, ally.maxHp, 'hp', false));
+      tBtn.onclick = () => {
+        abilityAction(combat, hero, ability.id, ally);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
+      };
+      screen.appendChild(tBtn);
+    }
+  } else if (ability.aoe) {
     // AoE — confirm or back
-    screen.appendChild(el('div', { class: 'text-dim', text: 'This ability hits all enemies.', style: 'text-align: center; margin: 8px 0;' }));
+    const aoeText = ability.healAlly ? 'This ability heals all allies.' : 'This ability hits all enemies.';
+    screen.appendChild(el('div', { class: 'text-dim', text: aoeText, style: 'text-align: center; margin: 8px 0;' }));
     screen.appendChild(btn('Confirm', 'btn-primary btn-block btn-lg', () => {
       abilityAction(combat, hero, ability.id, null);
       nextTurn(combat);
@@ -994,6 +1020,99 @@ function showTradeFrom(menu, fromHero, allHeroes, raid) {
 }
 
 // Compare two items (new vs currently equipped) for stat diffs
+// Level-up stat allocation screen
+function showLevelUpScreen(heroes, index, raid) {
+  if (index >= heroes.length) {
+    // All heroes done — back to exploring
+    saveGame();
+    renderActiveTab();
+    return;
+  }
+
+  const hero = heroes[index];
+  const cls = CLASSES[hero.classId];
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  function render() {
+    content.innerHTML = '';
+    const screen = el('div', { class: 'flex-col gap-md' });
+
+    screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 16px;' }, [
+      el('div', { text: '\u2B50', style: 'font-size: 36px; text-align: center;' }),
+      el('div', { class: 'text-success', text: 'LEVEL UP!', style: 'font-size: 22px; font-weight: 900; text-align: center;' }),
+      el('div', { class: 'text-bright', text: `${cls.icon} ${hero.name} — Level ${hero.level}`, style: 'font-size: 16px; font-weight: 700; text-align: center; margin-top: 4px;' }),
+      el('div', { class: 'text-dim', text: `HP: ${hero.maxHp} | MP: ${hero.maxMp}`, style: 'font-size: 12px; text-align: center; margin-top: 2px;' }),
+    ]));
+
+    if (hero.statPoints > 0) {
+      screen.appendChild(el('div', { class: 'text-warning', text: `${hero.statPoints} stat points to allocate`, style: 'font-weight: 600; text-align: center; margin-bottom: 4px;' }));
+    }
+
+    const statsDiv = el('div', { class: 'card', style: 'padding: 12px;' });
+    for (const stat of STATS) {
+      const row = el('div', { class: 'stat-alloc' });
+      row.appendChild(el('span', { class: 'stat-alloc-name', text: stat }));
+      row.appendChild(el('span', { class: 'stat-alloc-desc', text: STAT_DESC[stat] }));
+
+      const controls = el('div', { class: 'stat-alloc-controls' });
+
+      const minusBtn = el('button', { class: 'stat-alloc-btn', text: '-' });
+      minusBtn.disabled = hero.stats[stat] <= 8;
+      minusBtn.onclick = () => {
+        if (hero.stats[stat] > 8) {
+          hero.stats[stat]--;
+          hero.statPoints++;
+          recalcHero(hero);
+          hero.hp = hero.maxHp;
+          hero.mp = hero.maxMp;
+          render();
+        }
+      };
+      controls.appendChild(minusBtn);
+
+      controls.appendChild(el('span', { class: 'stat-alloc-val', text: String(hero.stats[stat]) }));
+
+      const plusBtn = el('button', { class: 'stat-alloc-btn', text: '+' });
+      plusBtn.disabled = hero.statPoints <= 0;
+      plusBtn.onclick = () => {
+        if (hero.statPoints > 0) {
+          hero.stats[stat]++;
+          hero.statPoints--;
+          recalcHero(hero);
+          hero.hp = hero.maxHp;
+          hero.mp = hero.maxMp;
+          render();
+        }
+      };
+      controls.appendChild(plusBtn);
+
+      row.appendChild(controls);
+      statsDiv.appendChild(row);
+    }
+    screen.appendChild(statsDiv);
+
+    // Confirm button
+    const remaining = heroes.length - index - 1;
+    const label = hero.statPoints > 0
+      ? `Allocate all points first`
+      : remaining > 0
+        ? `Confirm — Next Hero (${remaining} more)`
+        : 'Confirm';
+
+    const confirmBtn = btn(label, 'btn-primary btn-block btn-lg', () => {
+      saveGame();
+      showLevelUpScreen(heroes, index + 1, raid);
+    });
+    confirmBtn.disabled = hero.statPoints > 0;
+    screen.appendChild(confirmBtn);
+
+    content.appendChild(screen);
+  }
+
+  render();
+}
+
 function compareItems(newItem, oldItem) {
   const diffs = [];
   const stats = ['dmgMin', 'dmgMax', 'accuracy', 'armor', 'magicResist'];
@@ -1019,21 +1138,34 @@ function usedInvQuick(hero) {
 function renderCombatVictory(container, raid) {
   const combat = raid.combat;
 
+  // Outnumbered bonus: more enemies than party = better rewards
+  const aliveDuringFight = raid.party.map(id => getHero(id)).filter(Boolean).length;
+  const enemyCount = combat.enemies.length;
+  const outnumberedRatio = enemyCount / Math.max(1, aliveDuringFight);
+  const rewardMult = outnumberedRatio > 1 ? 1 + (outnumberedRatio - 1) * 0.5 : 1; // +50% per extra enemy ratio
+  const bonusXp = Math.round(combat.xpEarned * (rewardMult - 1));
+  combat.xpEarned = Math.round(combat.xpEarned * rewardMult);
+
+  const outnumberedText = rewardMult > 1 ? ` (${Math.round((rewardMult-1)*100)}% outnumbered bonus!)` : '';
+
   container.appendChild(el('div', { class: 'encounter-card' }, [
     el('div', { class: 'encounter-icon', text: '\u2694\uFE0F' }),
     el('div', { class: 'encounter-title text-success', text: 'Victory!' }),
-    el('div', { class: 'encounter-desc', text: `Earned ${combat.xpEarned} XP` }),
+    el('div', { class: 'encounter-desc', text: `Earned ${combat.xpEarned} XP${outnumberedText}` }),
   ]));
 
-  // Generate victory loot
+  // Generate victory loot — more enemies = more loot rolls
   const zone = ZONES.find(z => z.id === raid.zoneId);
   const lootItems = [];
-  const gold = generateGold(zone?.lootLevel || 1);
+  const baseGold = generateGold(zone?.lootLevel || 1);
+  const gold = Math.round(baseGold * rewardMult);
   raid.goldCollected += gold;
   G.gold += gold;
 
+  // Each enemy has a drop chance, outnumbered bonus adds extra roll chance
+  const dropChance = Math.min(0.7, 0.4 + (rewardMult - 1) * 0.15);
   for (const enemy of combat.enemies) {
-    if (Math.random() < 0.4) {
+    if (Math.random() < dropChance) {
       if (Math.random() < 0.7) {
         lootItems.push(generateGear(zone?.lootLevel || 1));
       } else {
@@ -1042,7 +1174,7 @@ function renderCombatVictory(container, raid) {
     }
   }
 
-  container.appendChild(el('div', { class: 'text-success', text: `+${gold} gold`, style: 'text-align: center; font-weight: 700; margin: 8px 0;' }));
+  container.appendChild(el('div', { class: 'text-success', text: `+${gold} gold${outnumberedText}`, style: 'text-align: center; font-weight: 700; margin: 8px 0;' }));
 
   if (lootItems.length > 0) {
     const lootDiv = el('div', { class: 'loot-items' });
@@ -1072,8 +1204,9 @@ function renderCombatVictory(container, raid) {
     container.appendChild(lootDiv);
   }
 
-  // Distribute XP
+  // Distribute XP and check for level ups
   const survivors = raid.party.map(id => getHero(id)).filter(h => h && h.alive);
+  const leveledHeroes = [];
   if (survivors.length > 0 && combat.xpEarned > 0) {
     const xpEach = Math.floor(combat.xpEarned / survivors.length);
     for (const hero of survivors) {
@@ -1083,17 +1216,30 @@ function renderCombatVictory(container, raid) {
         hero.xp -= xpNeeded;
         hero.level++;
         hero.statPoints += 2;
-        toast(`${hero.name} leveled up to ${hero.level}!`, 'success');
+        recalcHero(hero);
+        hero.hp = hero.maxHp;
+        hero.mp = hero.maxMp;
+        leveledHeroes.push(hero);
       }
     }
   }
 
-  container.appendChild(btn('Continue', 'btn-primary btn-block', () => {
-    raid.combat = null;
-    raid.phase = RAID_PHASE.EXPLORING;
-    saveGame();
-    renderActiveTab();
-  }));
+  if (leveledHeroes.length > 0) {
+    // Show level-up screen before continuing
+    container.appendChild(btn('Continue — Level Up!', 'btn-success btn-block btn-lg', () => {
+      raid.combat = null;
+      raid.phase = RAID_PHASE.EXPLORING;
+      saveGame();
+      showLevelUpScreen(leveledHeroes, 0, raid);
+    }));
+  } else {
+    container.appendChild(btn('Continue', 'btn-primary btn-block', () => {
+      raid.combat = null;
+      raid.phase = RAID_PHASE.EXPLORING;
+      saveGame();
+      renderActiveTab();
+    }));
+  }
 
   return container;
 }

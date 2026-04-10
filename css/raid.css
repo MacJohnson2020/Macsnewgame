@@ -83,7 +83,15 @@
 }
 
 .spire-node.future {
-  opacity: 0.55;
+  opacity: 0.35;
+  filter: grayscale(60%);
+}
+
+.spire-node.locked {
+  opacity: 0.15;
+  filter: grayscale(100%);
+  border-style: dashed;
+  cursor: not-allowed;
 }
 
 .spire-node.extraction {

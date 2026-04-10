@@ -5,10 +5,10 @@ import { createEnemy, generateGear, generateConsumable, generateGold } from './e
 import { pick, randInt, rollChance, rand } from '../utils.js';
 
 // Generate encounter data for a node when stepped on
-export function generateEncounter(node, zone, partyLevel, corruption) {
+export function generateEncounter(node, zone, partyLevel, corruption, partySize = 1) {
   switch (node.type) {
     case 'enemy':
-      return generateEnemyEncounter(zone, partyLevel, corruption, node.branch === 'risky', node.difficulty);
+      return generateEnemyEncounter(zone, partyLevel, corruption, node.branch === 'risky', node.difficulty, partySize);
     case 'chest':
       return generateChestEncounter(zone, partyLevel, node.branch === 'risky');
     case 'trap':
@@ -30,8 +30,9 @@ export function generateEncounter(node, zone, partyLevel, corruption) {
   }
 }
 
-function generateEnemyEncounter(zone, partyLevel, corruption, isRisky, difficulty = 1) {
-  // Scale enemy count by difficulty: easy=1, medium=1-2, hard=2, elite=2-3
+function generateEnemyEncounter(zone, partyLevel, corruption, isRisky, difficulty = 1, partySize = 1) {
+  // Enemy count scales with difficulty — NOT capped by party size
+  // Outnumbered fights are harder but reward more XP and loot
   let enemyCount;
   if (difficulty <= 1) {
     enemyCount = 1;
