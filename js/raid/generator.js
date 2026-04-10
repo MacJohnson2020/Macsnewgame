@@ -173,9 +173,9 @@ function assignNodeVisuals(node) {
     case 'trap':
     case 'shrine':
     case 'event':
+    case 'merchant':
       // Mystery nodes — don't reveal type until visited
       node.icon = '\u2753'; node.label = 'Mystery'; node.mystery = true; break;
-    case 'merchant': node.icon = '\uD83D\uDED2'; node.label = 'Merchant'; break;
     case 'empty':    node.icon = '\u00B7';       node.label = 'Rest'; break;
     case 'extraction': node.icon = '\u2705';     node.label = 'Extract'; break;
     case 'start':    node.icon = '\uD83D\uDEAA'; node.label = 'Start'; break;
