@@ -547,7 +547,7 @@ function renderHeroActions(raid, combat, hero) {
     } else {
       abilBtn.onclick = () => {
         // Replace action panel with target selection
-        showAbilityTargetScreen(container, raid, combat, hero, ability);
+        showAbilityTargetScreen(raid, combat, hero, ability);
       };
     }
     abilRow.appendChild(abilBtn);
@@ -570,7 +570,7 @@ function renderHeroActions(raid, combat, hero) {
   const gearItems = hero.inventory.filter(i => i.slot && !i.isConsumable);
   const equipBtn = el('button', { class: 'combat-action-btn' });
   equipBtn.textContent = `\uD83D\uDEE1\uFE0F Equip${gearItems.length ? ` (${gearItems.length})` : ''}`;
-  equipBtn.onclick = () => showRaidEquipMenu(actions, hero, raid);
+  equipBtn.onclick = () => showRaidEquipScreen(hero, raid);
   utilRow.appendChild(equipBtn);
 
   // Flee
@@ -620,7 +620,7 @@ function renderHeroActions(raid, combat, hero) {
 }
 
 // Full-screen ability target selection
-function showAbilityTargetScreen(container, raid, combat, hero, ability) {
+function showAbilityTargetScreen(raid, combat, hero, ability) {
   // Clear the content area and show target selection
   const content = document.getElementById('content');
   content.innerHTML = '';

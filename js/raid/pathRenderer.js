@@ -41,8 +41,8 @@ export function renderPath(raid, onNodeClick) {
       if (isFuture) classes += ' future';
       if (node.type === 'extraction') classes += ' extraction';
       if (node.type === 'enemy') classes += ' enemy';
-      if (node.type === 'chest') classes += ' chest';
       if (!node.mystery) {
+        if (node.type === 'chest') classes += ' chest';
         if (node.type === 'shrine') classes += ' shrine';
         if (node.type === 'merchant') classes += ' merchant';
         if (node.type === 'trap') classes += ' trap';

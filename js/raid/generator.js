@@ -153,15 +153,15 @@ function assignEncounters(nodes, zone, numFloors) {
     assignNodeVisuals(node);
 
     // Set difficulty based on depth ratio (relative to zone)
-    const depthRatio = node.floor / (numFloors - 1);
+    const depth = node.floor / (numFloors - 1);
     if (node.type === 'enemy') {
-      if (depthRatio <= 0.4) { node.difficulty = 1; node.label = 'Easy'; }
-      else if (depthRatio <= 0.65) { node.difficulty = 2; node.label = 'Medium'; }
-      else if (depthRatio <= 0.85) { node.difficulty = 3; node.label = 'Hard'; }
+      if (depth <= 0.4) { node.difficulty = 1; node.label = 'Easy'; }
+      else if (depth <= 0.65) { node.difficulty = 2; node.label = 'Medium'; }
+      else if (depth <= 0.85) { node.difficulty = 3; node.label = 'Hard'; }
       else { node.difficulty = 4; node.label = 'ELITE'; node.icon = '\uD83D\uDC79'; }
     }
     if (node.type === 'trap') {
-      node.difficulty = depthRatio <= 0.5 ? 1 : 2;
+      node.difficulty = depth <= 0.5 ? 1 : 2;
     }
   }
 }
@@ -169,7 +169,7 @@ function assignEncounters(nodes, zone, numFloors) {
 function assignNodeVisuals(node) {
   switch (node.type) {
     case 'enemy':    node.icon = '\uD83D\uDC80'; node.label = 'Enemy'; break;
-    case 'chest':    node.icon = '\uD83D\uDCE6'; node.label = 'Chest'; break;
+    case 'chest':
     case 'trap':
     case 'shrine':
     case 'event':
