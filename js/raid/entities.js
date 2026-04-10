@@ -1,7 +1,15 @@
 // === Voidborn — Entity (Hero/Enemy) stat calculations ===
 
 import { CLASSES, ENEMIES, WEAPON_TYPES, OFFHAND_TYPES, BODY_TYPES, SLOT_TYPES, RARITIES, GEAR_SLOTS, DAMAGE_TYPES } from '../config.js';
+import { getSkillStatBonuses } from '../state.js';
 import { statMod, randInt, pick, weightedPick, uid } from '../utils.js';
+
+// Get effective stat value (base + skill bonuses)
+function effStat(hero, stat) {
+  if (!hero.stats) return 0;
+  const bonuses = getSkillStatBonuses();
+  return hero.stats[stat] + (bonuses[stat] || 0);
+}
 
 // Get hero's total accuracy
 export function getAccuracy(hero) {
@@ -11,18 +19,17 @@ export function getAccuracy(hero) {
     acc += weapon.accuracy || 0;
     // STR-based or DEX-based depending on weapon damage type
     if (weapon.damageType === 'physical') {
-      // Check if finesse (dagger, bow)
       const type = WEAPON_TYPES[weapon.weaponType];
       if (type && type.statReq.DEX) {
-        acc += statMod(hero.stats.DEX) * 2;
+        acc += statMod(effStat(hero, 'DEX')) * 2;
       } else {
-        acc += statMod(hero.stats.STR) * 2;
+        acc += statMod(effStat(hero, 'STR')) * 2;
       }
     } else {
-      acc += statMod(hero.stats.INT) * 2;
+      acc += statMod(effStat(hero, 'INT')) * 2;
     }
   } else {
-    acc += statMod(hero.stats.STR); // unarmed uses STR
+    acc += statMod(effStat(hero, 'STR'));
   }
   // Substat bonuses
   acc += getSubstatTotal(hero, 'accuracy');
@@ -42,7 +49,7 @@ export function getArmor(hero) {
 
 // Get hero's magic resist — sum from all gear slots + WIS
 export function getMagicResist(hero) {
-  let mr = statMod(hero.stats.WIS) * 2;
+  let mr = statMod(effStat(hero, 'WIS')) * 2;
   for (const slot of GEAR_SLOTS) {
     if (hero.gear[slot] && hero.gear[slot].magicResist) mr += hero.gear[slot].magicResist;
   }
@@ -91,11 +98,11 @@ export function getWeaponDamage(hero) {
 // Get stat bonus to damage
 export function getDamageStat(hero) {
   const weapon = hero.gear.weapon;
-  if (!weapon) return statMod(hero.stats.STR);
-  if (weapon.damageType === 'magic') return statMod(hero.stats.INT);
+  if (!weapon) return statMod(effStat(hero, 'STR'));
+  if (weapon.damageType === 'magic') return statMod(effStat(hero, 'INT'));
   const type = WEAPON_TYPES[weapon.weaponType];
-  if (type && type.statReq.DEX) return statMod(hero.stats.DEX);
-  return statMod(hero.stats.STR);
+  if (type && type.statReq.DEX) return statMod(effStat(hero, 'DEX'));
+  return statMod(effStat(hero, 'STR'));
 }
 
 // Get damage multiplier from buffs (Rage, Inspire, etc.)
@@ -115,14 +122,14 @@ export function getPenetration(hero) {
 // Get crit chance %
 export function getCritChance(hero) {
   let crit = 3; // base 3%
-  crit += statMod(hero.stats.DEX); // DEX adds crit
+  crit += statMod(effStat(hero, 'DEX')); // DEX adds crit
   crit += getSubstatTotal(hero, 'critChance');
   return Math.min(crit, 75); // cap at 75%
 }
 
 // Get initiative value (for turn order)
 export function getInitiative(hero) {
-  return hero.stats.DEX + (hero.gear.weapon ? 0 : -2);
+  return effStat(hero, 'DEX') + (hero.gear.weapon ? 0 : -2);
 }
 
 // Get total substat value across all gear

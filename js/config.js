@@ -699,3 +699,166 @@ export function getRareDropsAt(skillId, level) {
     .filter(([, m]) => m.skill === skillId && m.level <= level && m.rare)
     .sort((a, b) => b[1].level - a[1].level);
 }
+
+// === Crafting Recipes ===
+
+export const RECIPES = {
+  // --- SMITHING: Weapons ---
+  copper_weapon:    { name: 'Copper Weapon',    skill: 'smithing', level: 1,  xp: 15,  type: 'weapon', materials: { copper_ore: 3, deadwood_log: 1 } },
+  iron_weapon:      { name: 'Iron Weapon',      skill: 'smithing', level: 10, xp: 25,  type: 'weapon', materials: { iron_ore: 3, rotwood_log: 1 } },
+  steel_weapon:     { name: 'Steel Weapon',     skill: 'smithing', level: 20, xp: 40,  type: 'weapon', materials: { steel_ore: 4, darkoak_log: 2 } },
+  mithril_weapon:   { name: 'Mithril Weapon',   skill: 'smithing', level: 30, xp: 60,  type: 'weapon', materials: { mithril_ore: 5, blightwood_log: 2 } },
+  adamant_weapon:   { name: 'Adamant Weapon',   skill: 'smithing', level: 40, xp: 85,  type: 'weapon', materials: { adamant_ore: 6, ironbark_log: 3 } },
+  void_weapon:      { name: 'Void Weapon',      skill: 'smithing', level: 50, xp: 120, type: 'weapon', materials: { void_ore: 8, voidwood_log: 4 } },
+  obsidian_weapon:  { name: 'Obsidian Weapon',  skill: 'smithing', level: 60, xp: 160, type: 'weapon', materials: { obsidian_ore: 10, ashwood_log: 4 } },
+  dragon_weapon:    { name: 'Dragon Weapon',    skill: 'smithing', level: 70, xp: 210, type: 'weapon', materials: { dragon_ore: 12, soulwood_log: 5 } },
+  abyssal_weapon:   { name: 'Abyssal Weapon',   skill: 'smithing', level: 80, xp: 280, type: 'weapon', materials: { abyssal_ore: 15, abyssal_timber: 6 } },
+  celestial_weapon: { name: 'Celestial Weapon', skill: 'smithing', level: 90, xp: 400, type: 'weapon', materials: { celestial_ore: 20, celestial_branch: 8 } },
+  // --- SMITHING: Armor ---
+  copper_armor:     { name: 'Copper Armor',     skill: 'smithing', level: 1,  xp: 15,  type: 'armor', materials: { copper_ore: 5 } },
+  iron_armor:       { name: 'Iron Armor',       skill: 'smithing', level: 10, xp: 25,  type: 'armor', materials: { iron_ore: 5 } },
+  steel_armor:      { name: 'Steel Armor',      skill: 'smithing', level: 20, xp: 40,  type: 'armor', materials: { steel_ore: 6 } },
+  mithril_armor:    { name: 'Mithril Armor',    skill: 'smithing', level: 30, xp: 60,  type: 'armor', materials: { mithril_ore: 7 } },
+  adamant_armor:    { name: 'Adamant Armor',    skill: 'smithing', level: 40, xp: 85,  type: 'armor', materials: { adamant_ore: 8 } },
+  void_armor:       { name: 'Void Armor',       skill: 'smithing', level: 50, xp: 120, type: 'armor', materials: { void_ore: 10 } },
+  obsidian_armor:   { name: 'Obsidian Armor',   skill: 'smithing', level: 60, xp: 160, type: 'armor', materials: { obsidian_ore: 12 } },
+  dragon_armor:     { name: 'Dragon Armor',     skill: 'smithing', level: 70, xp: 210, type: 'armor', materials: { dragon_ore: 14 } },
+  abyssal_armor:    { name: 'Abyssal Armor',    skill: 'smithing', level: 80, xp: 280, type: 'armor', materials: { abyssal_ore: 18 } },
+  celestial_armor:  { name: 'Celestial Armor',  skill: 'smithing', level: 90, xp: 400, type: 'armor', materials: { celestial_ore: 24 } },
+
+  // --- ALCHEMY: 1-dose ---
+  weak_health_pot:   { name: 'Weak Health Potion',   skill: 'alchemy', level: 1,  xp: 10,  type: 'consumable', materials: { gravemoss: 3 }, output: { effect: 'heal', value: 15 } },
+  weak_mana_pot:     { name: 'Weak Mana Potion',     skill: 'alchemy', level: 5,  xp: 12,  type: 'consumable', materials: { gravemoss: 3 }, output: { effect: 'mana', value: 8 } },
+  antidote:          { name: 'Antidote',              skill: 'alchemy', level: 10, xp: 15,  type: 'consumable', materials: { rotleaf: 3 }, output: { effect: 'cure', value: 0 } },
+  minor_poison_vial: { name: 'Minor Poison Vial',    skill: 'alchemy', level: 15, xp: 18,  type: 'consumable', materials: { rotleaf: 2, nightshade: 1 }, output: { effect: 'weapon_poison', value: 3, turns: 2 } },
+  health_pot:        { name: 'Health Potion',         skill: 'alchemy', level: 20, xp: 25,  type: 'consumable', materials: { nightshade: 3 }, output: { effect: 'heal', value: 30 } },
+  mana_pot:          { name: 'Mana Potion',           skill: 'alchemy', level: 25, xp: 28,  type: 'consumable', materials: { nightshade: 3 }, output: { effect: 'mana', value: 15 } },
+  damage_brew:       { name: 'Damage Brew',           skill: 'alchemy', level: 30, xp: 35,  type: 'consumable', materials: { blightcap: 2 }, output: { effect: 'buff_damage', value: 10 } },
+  accuracy_brew:     { name: 'Accuracy Brew',         skill: 'alchemy', level: 35, xp: 38,  type: 'consumable', materials: { blightcap: 2 }, output: { effect: 'buff_accuracy', value: 10 } },
+  strong_poison_vial:{ name: 'Strong Poison Vial',    skill: 'alchemy', level: 40, xp: 45,  type: 'consumable', materials: { voidbloom: 2 }, output: { effect: 'weapon_poison', value: 5, turns: 3 } },
+  resist_brew:       { name: 'Resist Brew',           skill: 'alchemy', level: 45, xp: 50,  type: 'consumable', materials: { voidbloom: 3 }, output: { effect: 'buff_resist', value: 15 } },
+  greater_health_pot:{ name: 'Greater Health Potion', skill: 'alchemy', level: 50, xp: 65,  type: 'consumable', materials: { wraithpetal: 3 }, output: { effect: 'heal', value: 50 } },
+  greater_mana_pot:  { name: 'Greater Mana Potion',   skill: 'alchemy', level: 55, xp: 70,  type: 'consumable', materials: { wraithpetal: 3 }, output: { effect: 'mana', value: 25 } },
+  fire_bomb:         { name: 'Fire Bomb',             skill: 'alchemy', level: 60, xp: 85,  type: 'consumable', materials: { doomthorn: 2 }, output: { effect: 'throw_aoe', value: 15, element: 'fire' } },
+  ice_flask:         { name: 'Ice Flask',             skill: 'alchemy', level: 65, xp: 90,  type: 'consumable', materials: { doomthorn: 2 }, output: { effect: 'throw_stun', value: 12, element: 'ice' } },
+  elixir_power:      { name: 'Elixir of Power',      skill: 'alchemy', level: 70, xp: 110, type: 'consumable', materials: { soulroot: 3 }, output: { effect: 'buff_damage', value: 20 } },
+  elixir_fortitude:  { name: 'Elixir of Fortitude',  skill: 'alchemy', level: 75, xp: 115, type: 'consumable', materials: { soulroot: 3 }, output: { effect: 'buff_armor', value: 20 } },
+  supreme_health_pot:{ name: 'Supreme Health Potion', skill: 'alchemy', level: 80, xp: 150, type: 'consumable', materials: { abyssal_fern: 3 }, output: { effect: 'heal', value: 80 } },
+  supreme_mana_pot:  { name: 'Supreme Mana Potion',   skill: 'alchemy', level: 85, xp: 155, type: 'consumable', materials: { abyssal_fern: 3 }, output: { effect: 'mana', value: 40 } },
+  celestial_tonic:   { name: 'Celestial Tonic',       skill: 'alchemy', level: 90, xp: 200, type: 'consumable', materials: { celestial_lotus: 3 }, output: { effect: 'heal_both', value: 50 } },
+  void_elixir:       { name: 'Void Elixir',           skill: 'alchemy', level: 95, xp: 300, type: 'consumable', materials: { celestial_lotus: 2, celestial_tear: 1 }, output: { effect: 'buff_all', value: 25 } },
+  // --- ALCHEMY: Multi-dose (5x/7x cost) ---
+  weak_health_pot_4: { name: 'Weak Health Potion (4)', skill: 'alchemy', level: 22, xp: 60,  type: 'consumable', doses: 4, materials: { gravemoss: 21 }, output: { effect: 'heal', value: 15 } },
+  health_pot_4:      { name: 'Health Potion (4)',      skill: 'alchemy', level: 42, xp: 140, type: 'consumable', doses: 4, materials: { nightshade: 21 }, output: { effect: 'heal', value: 30 } },
+  antidote_4:        { name: 'Antidote (4)',           skill: 'alchemy', level: 32, xp: 80,  type: 'consumable', doses: 4, materials: { rotleaf: 21 }, output: { effect: 'cure', value: 0 } },
+  greater_health_3:  { name: 'Greater Health Pot (3)', skill: 'alchemy', level: 62, xp: 250, type: 'consumable', doses: 3, materials: { wraithpetal: 15 }, output: { effect: 'heal', value: 50 } },
+  damage_brew_3:     { name: 'Damage Brew (3)',        skill: 'alchemy', level: 52, xp: 140, type: 'consumable', doses: 3, materials: { blightcap: 10 }, output: { effect: 'buff_damage', value: 10 } },
+  supreme_health_4:  { name: 'Supreme Health Pot (4)', skill: 'alchemy', level: 92, xp: 800, type: 'consumable', doses: 4, materials: { abyssal_fern: 21 }, output: { effect: 'heal', value: 80 } },
+  elixir_power_3:    { name: 'Elixir of Power (3)',   skill: 'alchemy', level: 82, xp: 420, type: 'consumable', doses: 3, materials: { soulroot: 15 }, output: { effect: 'buff_damage', value: 20 } },
+
+  // --- ENCHANTING: Tier 1 (1 substat) ---
+  ench_minor_acc:      { name: 'Minor Accuracy',       skill: 'enchanting', level: 1,  xp: 15,  type: 'enchant', slots: 1, materials: { chipped_topaz: 2 }, substats: [{ id: 'accuracy', value: 3 }] },
+  ench_minor_hp:       { name: 'Minor Max HP',         skill: 'enchanting', level: 5,  xp: 15,  type: 'enchant', slots: 1, materials: { chipped_topaz: 2 }, substats: [{ id: 'maxHp', value: 5 }] },
+  ench_minor_armorpen: { name: 'Minor Armor Pen',      skill: 'enchanting', level: 10, xp: 20,  type: 'enchant', slots: 1, materials: { cloudy_jade: 2 }, substats: [{ id: 'armorPen', value: 3 }] },
+  ench_minor_mp:       { name: 'Minor Max MP',         skill: 'enchanting', level: 15, xp: 20,  type: 'enchant', slots: 1, materials: { cloudy_jade: 2 }, substats: [{ id: 'maxMp', value: 5 }] },
+  ench_minor_crit:     { name: 'Minor Crit',           skill: 'enchanting', level: 20, xp: 25,  type: 'enchant', slots: 1, materials: { rough_ruby: 2 }, substats: [{ id: 'critChance', value: 2 }] },
+  ench_minor_magicpen: { name: 'Minor Magic Pen',      skill: 'enchanting', level: 25, xp: 25,  type: 'enchant', slots: 1, materials: { rough_ruby: 2 }, substats: [{ id: 'magicPen', value: 3 }] },
+  ench_minor_fireres:  { name: 'Minor Fire Resist',    skill: 'enchanting', level: 30, xp: 30,  type: 'enchant', slots: 1, materials: { flawed_sapphire: 2 }, substats: [{ id: 'fireResist', value: 4 }] },
+  ench_minor_iceres:   { name: 'Minor Ice Resist',     skill: 'enchanting', level: 33, xp: 30,  type: 'enchant', slots: 1, materials: { flawed_sapphire: 2 }, substats: [{ id: 'iceResist', value: 4 }] },
+  ench_minor_lightres: { name: 'Minor Lightning Resist',skill: 'enchanting', level: 35, xp: 30,  type: 'enchant', slots: 1, materials: { flawed_sapphire: 2 }, substats: [{ id: 'lightningResist', value: 4 }] },
+  // --- ENCHANTING: Tier 2 (2 substats) ---
+  ench_keen_edge:    { name: 'Keen Edge',       skill: 'enchanting', level: 40, xp: 55,  type: 'enchant', slots: 2, materials: { clear_emerald: 3 }, substats: [{ id: 'accuracy', value: 6 }, { id: 'critChance', value: 3 }] },
+  ench_fortify:      { name: 'Fortification',   skill: 'enchanting', level: 43, xp: 55,  type: 'enchant', slots: 2, materials: { clear_emerald: 3 }, substats: [{ id: 'maxHp', value: 10 }, { id: 'armorPen', value: 3 }] },
+  ench_arcane_focus: { name: 'Arcane Focus',    skill: 'enchanting', level: 46, xp: 60,  type: 'enchant', slots: 2, materials: { clear_emerald: 3, void_ink: 1 }, substats: [{ id: 'maxMp', value: 5 }, { id: 'magicPen', value: 3 }] },
+  ench_void_touch:   { name: 'Void Touch',      skill: 'enchanting', level: 50, xp: 70,  type: 'enchant', slots: 2, materials: { void_shard: 3 }, substats: [{ id: 'armorPen', value: 5 }, { id: 'magicPen', value: 5 }] },
+  ench_flame_ward:   { name: 'Flame Ward',      skill: 'enchanting', level: 53, xp: 70,  type: 'enchant', slots: 2, materials: { void_shard: 3, smoldering_ember: 1 }, substats: [{ id: 'fireResist', value: 6 }, { id: 'maxHp', value: 8 }] },
+  ench_frost_ward:   { name: 'Frost Ward',      skill: 'enchanting', level: 56, xp: 70,  type: 'enchant', slots: 2, materials: { void_shard: 3, ember_coral: 1 }, substats: [{ id: 'iceResist', value: 6 }, { id: 'maxHp', value: 8 }] },
+  ench_storm_ward:   { name: 'Storm Ward',      skill: 'enchanting', level: 59, xp: 75,  type: 'enchant', slots: 2, materials: { shadow_opal: 3 }, substats: [{ id: 'lightningResist', value: 6 }, { id: 'accuracy', value: 6 }] },
+  ench_shadow_ward:  { name: 'Shadow Ward',     skill: 'enchanting', level: 62, xp: 75,  type: 'enchant', slots: 2, materials: { shadow_opal: 3, soul_essence: 1 }, substats: [{ id: 'demonicResist', value: 6 }, { id: 'critChance', value: 5 }] },
+  ench_holy_ward:    { name: 'Holy Ward',        skill: 'enchanting', level: 65, xp: 75,  type: 'enchant', slots: 2, materials: { shadow_opal: 3, ghostfin: 1 }, substats: [{ id: 'holyResist', value: 6 }, { id: 'maxHp', value: 8 }] },
+  // --- ENCHANTING: Tier 3 (3 substats) ---
+  ench_warlord:   { name: "Warlord's Enchant",   skill: 'enchanting', level: 70, xp: 130, type: 'enchant', slots: 3, materials: { dragon_eye: 4, thorn_oil: 1 }, substats: [{ id: 'accuracy', value: 10 }, { id: 'critChance', value: 6 }, { id: 'armorPen', value: 6 }] },
+  ench_archmage:  { name: "Archmage's Enchant",  skill: 'enchanting', level: 75, xp: 130, type: 'enchant', slots: 3, materials: { dragon_eye: 4, soul_essence: 1 }, substats: [{ id: 'maxMp', value: 8 }, { id: 'magicPen', value: 6 }, { id: 'critChance', value: 6 }] },
+  ench_guardian:  { name: "Guardian's Enchant",   skill: 'enchanting', level: 80, xp: 170, type: 'enchant', slots: 3, materials: { abyssal_pearl: 4, jagged_scale: 1 }, substats: [{ id: 'maxHp', value: 20 }, { id: 'armorPen', value: 6 }, { id: 'fireResist', value: 5 }] },
+  ench_voidwalk:  { name: "Voidwalker's Enchant", skill: 'enchanting', level: 85, xp: 170, type: 'enchant', slots: 3, materials: { abyssal_pearl: 4, deep_sea_fang: 1 }, substats: [{ id: 'demonicResist', value: 8 }, { id: 'lightningResist', value: 8 }, { id: 'critChance', value: 5 }] },
+  ench_dragon:    { name: "Dragon's Enchant",     skill: 'enchanting', level: 90, xp: 250, type: 'enchant', slots: 3, materials: { celestial_diamond: 5 }, substats: [{ id: 'accuracy', value: 12 }, { id: 'critChance', value: 8 }, { id: 'armorPen', value: 8 }] },
+  ench_abyssal:   { name: "Abyssal Enchant",      skill: 'enchanting', level: 95, xp: 250, type: 'enchant', slots: 3, materials: { celestial_diamond: 5, celestial_tear: 1 }, substats: [{ id: 'maxHp', value: 15 }, { id: 'magicPen', value: 8 }, { id: 'demonicResist', value: 8 }] },
+  ench_celestial: { name: "Celestial Blessing",   skill: 'enchanting', level: 99, xp: 400, type: 'enchant', slots: 3, materials: { celestial_diamond: 5, golden_scale: 1, living_heartwood: 1 }, substats: [{ id: 'maxHp', value: 25 }, { id: 'critChance', value: 10 }, { id: 'fireResist', value: 8 }] },
+
+  // --- RUNECRAFTING: Arrows ---
+  bone_arrows:      { name: 'Bone Arrows',      skill: 'runecrafting', level: 1,  xp: 12,  type: 'ammo', materials: { cracked_shell: 3, deadwood_log: 2 }, output: { subtype: 'arrows', accuracy: 2 } },
+  iron_arrows:      { name: 'Iron Arrows',      skill: 'runecrafting', level: 15, xp: 25,  type: 'ammo', materials: { jagged_scale: 3, rotwood_log: 2 }, output: { subtype: 'arrows', accuracy: 4, critChance: 2 } },
+  mithril_arrows:   { name: 'Mithril Arrows',   skill: 'runecrafting', level: 30, xp: 50,  type: 'ammo', materials: { hollow_reed: 5, blightwood_log: 3 }, output: { subtype: 'arrows', accuracy: 6, critChance: 3 } },
+  void_arrows:      { name: 'Void Arrows',      skill: 'runecrafting', level: 45, xp: 80,  type: 'ammo', materials: { void_ink: 5, voidwood_log: 3 }, output: { subtype: 'arrows', accuracy: 8, armorPen: 4 } },
+  abyssal_arrows:   { name: 'Abyssal Arrows',   skill: 'runecrafting', level: 60, xp: 130, type: 'ammo', materials: { deep_sea_fang: 5, ashwood_log: 3 }, output: { subtype: 'arrows', accuracy: 10, critChance: 5, armorPen: 3 } },
+  celestial_arrows: { name: 'Celestial Arrows', skill: 'runecrafting', level: 80, xp: 250, type: 'ammo', materials: { golden_scale: 5, celestial_branch: 5 }, output: { subtype: 'arrows', accuracy: 14, critChance: 7, armorPen: 5 } },
+  // --- RUNECRAFTING: Bolts ---
+  iron_bolts:     { name: 'Iron Bolts',     skill: 'runecrafting', level: 10, xp: 20,  type: 'ammo', materials: { iron_ore: 3, cracked_shell: 2 }, output: { subtype: 'bolts', accuracy: 3, dmgMin: 2 } },
+  mithril_bolts:  { name: 'Mithril Bolts',  skill: 'runecrafting', level: 35, xp: 55,  type: 'ammo', materials: { mithril_ore: 5, jagged_scale: 3 }, output: { subtype: 'bolts', accuracy: 5, dmgMin: 4 } },
+  void_bolts:     { name: 'Void Bolts',     skill: 'runecrafting', level: 55, xp: 100, type: 'ammo', materials: { void_ore: 5, void_ink: 3 }, output: { subtype: 'bolts', accuracy: 7, dmgMin: 6, armorPen: 3 } },
+  abyssal_bolts:  { name: 'Abyssal Bolts',  skill: 'runecrafting', level: 75, xp: 200, type: 'ammo', materials: { abyssal_ore: 5, deep_sea_fang: 3 }, output: { subtype: 'bolts', accuracy: 10, dmgMin: 8, armorPen: 5 } },
+  // --- RUNECRAFTING: Runes ---
+  fire_rune:      { name: 'Fire Rune',      skill: 'runecrafting', level: 5,  xp: 14,  type: 'ammo', materials: { chipped_topaz: 3, smoldering_ember: 1 }, output: { subtype: 'rune', magicPen: 3, fireResist: 3 } },
+  ice_rune:       { name: 'Ice Rune',       skill: 'runecrafting', level: 20, xp: 30,  type: 'ammo', materials: { rough_ruby: 3, rotted_kelp: 1 }, output: { subtype: 'rune', magicPen: 3, iceResist: 3 } },
+  lightning_rune: { name: 'Lightning Rune', skill: 'runecrafting', level: 40, xp: 65,  type: 'ammo', materials: { clear_emerald: 3, void_ink: 1 }, output: { subtype: 'rune', magicPen: 5, lightningResist: 4 } },
+  demonic_rune:   { name: 'Demonic Rune',   skill: 'runecrafting', level: 50, xp: 85,  type: 'ammo', materials: { void_shard: 3, soul_essence: 1 }, output: { subtype: 'rune', magicPen: 5, demonicResist: 4 } },
+  holy_rune:      { name: 'Holy Rune',      skill: 'runecrafting', level: 65, xp: 120, type: 'ammo', materials: { shadow_opal: 3, ghostfin: 1 }, output: { subtype: 'rune', magicPen: 5, holyResist: 4 } },
+  void_rune:      { name: 'Void Rune',      skill: 'runecrafting', level: 75, xp: 180, type: 'ammo', materials: { dragon_eye: 4, void_amber: 1 }, output: { subtype: 'rune', magicPen: 8 } },
+  celestial_rune: { name: 'Celestial Rune', skill: 'runecrafting', level: 90, xp: 350, type: 'ammo', materials: { celestial_diamond: 5, celestial_tear: 1 }, output: { subtype: 'rune', magicPen: 12 } },
+  // --- RUNECRAFTING: Throwables (crafts 3 per action) ---
+  rock:            { name: 'Rock (x3)',           skill: 'runecrafting', level: 5,  xp: 8,   type: 'throwable', qty: 3, materials: { copper_ore: 2 }, output: { effect: 'throw', value: 5, element: 'physical' } },
+  poison_dart:     { name: 'Poison Dart (x3)',    skill: 'runecrafting', level: 15, xp: 18,  type: 'throwable', qty: 3, materials: { iron_ore: 2, poison_coating: 1 }, output: { effect: 'throw_poison', value: 8, turns: 2 } },
+  flash_bomb:      { name: 'Flash Bomb (x3)',     skill: 'runecrafting', level: 25, xp: 30,  type: 'throwable', qty: 3, materials: { flawed_sapphire: 3 }, output: { effect: 'throw_debuff', value: 20, stat: 'accuracy', turns: 2 } },
+  fire_pot:        { name: 'Fire Pot (x3)',       skill: 'runecrafting', level: 35, xp: 45,  type: 'throwable', qty: 3, materials: { smoldering_ember: 3, mithril_ore: 2 }, output: { effect: 'throw_aoe', value: 15, element: 'fire' } },
+  frost_vial:      { name: 'Frost Vial (x3)',     skill: 'runecrafting', level: 45, xp: 60,  type: 'throwable', qty: 3, materials: { void_ink: 3, rotted_kelp: 2 }, output: { effect: 'throw_stun', value: 12, element: 'ice' } },
+  lightning_jar:   { name: 'Lightning Jar (x3)',  skill: 'runecrafting', level: 55, xp: 80,  type: 'throwable', qty: 3, materials: { void_shard: 3, ember_coral: 2 }, output: { effect: 'throw_aoe', value: 20, element: 'lightning' } },
+  shadow_bomb:     { name: 'Shadow Bomb (x3)',    skill: 'runecrafting', level: 65, xp: 100, type: 'throwable', qty: 3, materials: { shadow_opal: 3, soul_essence: 1 }, output: { effect: 'throw_aoe', value: 25, element: 'demonic' } },
+  holy_water:      { name: 'Holy Water (x3)',     skill: 'runecrafting', level: 75, xp: 140, type: 'throwable', qty: 3, materials: { dragon_eye: 3, ghostfin: 1 }, output: { effect: 'throw', value: 30, element: 'holy' } },
+  abyssal_grenade: { name: 'Abyssal Grenade (x3)',skill: 'runecrafting', level: 85, xp: 200, type: 'throwable', qty: 3, materials: { abyssal_pearl: 3, deep_sea_fang: 1 }, output: { effect: 'throw_aoe', value: 35, element: 'physical' } },
+  celestial_star:  { name: 'Celestial Star (x3)', skill: 'runecrafting', level: 95, xp: 320, type: 'throwable', qty: 3, materials: { celestial_diamond: 3, starfruit: 1 }, output: { effect: 'throw_stun', value: 40, element: 'holy' } },
+
+  // --- COOKING: Cooked Fish ---
+  grilled_minnow:     { name: 'Grilled Minnow',      skill: 'cooking', level: 1,  xp: 10,  type: 'food', materials: { bone_minnow: 1 }, fuel: 1, output: { effect: 'heal', value: 20 } },
+  smoked_eel:         { name: 'Smoked Eel',           skill: 'cooking', level: 10, xp: 18,  type: 'food', materials: { sewer_eel: 1 }, fuel: 1, output: { effect: 'heal', value: 30 } },
+  baked_carp:         { name: 'Baked Carp',           skill: 'cooking', level: 20, xp: 28,  type: 'food', materials: { pale_carp: 1 }, fuel: 1, output: { effect: 'heal', value: 40 } },
+  blightfin_stew:     { name: 'Blightfin Stew',      skill: 'cooking', level: 30, xp: 40,  type: 'food', materials: { blightfin: 2 }, fuel: 1, output: { effect: 'heal', value: 55 } },
+  ironjaw_feast:      { name: 'Ironjaw Feast',        skill: 'cooking', level: 40, xp: 55,  type: 'food', materials: { ironjaw_trout: 2 }, fuel: 1, output: { effect: 'heal', value: 70 } },
+  void_angler_fillet: { name: 'Void Angler Fillet',   skill: 'cooking', level: 50, xp: 75,  type: 'food', materials: { void_angler: 2 }, fuel: 1, output: { effect: 'heal', value: 90 } },
+  ashen_pike_roast:   { name: 'Ashen Pike Roast',     skill: 'cooking', level: 60, xp: 95,  type: 'food', materials: { ashen_pike: 2 }, fuel: 1, output: { effect: 'heal', value: 110 } },
+  soulfish_sashimi:   { name: 'Soulfish Sashimi',     skill: 'cooking', level: 70, xp: 120, type: 'food', materials: { soulfish: 2 }, fuel: 1, output: { effect: 'heal', value: 130 } },
+  leviathan_steak:    { name: 'Leviathan Steak',      skill: 'cooking', level: 80, xp: 160, type: 'food', materials: { abyssal_leviathan: 3 }, fuel: 1, output: { effect: 'heal', value: 160 } },
+  celestial_koi_plate:{ name: 'Celestial Koi Platter', skill: 'cooking', level: 90, xp: 250, type: 'food', materials: { celestial_koi: 3 }, fuel: 1, output: { effect: 'heal', value: 200 } },
+  // --- COOKING: Cooked Fruit ---
+  roasted_berries:    { name: 'Roasted Berries',      skill: 'cooking', level: 5,  xp: 12,  type: 'food', materials: { shriveled_berries: 2 }, fuel: 1, output: { effect: 'heal_both', value: 12 } },
+  toasted_bark_nuts:  { name: 'Toasted Bark Nuts',    skill: 'cooking', level: 15, xp: 20,  type: 'food', materials: { bark_nuts: 2 }, fuel: 1, output: { effect: 'buff_crit', value: 5 } },
+  mushroom_soup:      { name: 'Mushroom Soup',        skill: 'cooking', level: 25, xp: 30,  type: 'food', materials: { wild_mushroom: 2 }, fuel: 1, output: { effect: 'mana', value: 15 } },
+  blightsap_jam:      { name: 'Blightsap Jam',        skill: 'cooking', level: 35, xp: 42,  type: 'food', materials: { blightsap_fruit: 2 }, fuel: 1, output: { effect: 'buff_damage', value: 8 } },
+  ironbark_trail_mix: { name: 'Ironbark Trail Mix',   skill: 'cooking', level: 45, xp: 55,  type: 'food', materials: { ironbark_acorn: 2 }, fuel: 1, output: { effect: 'buff_armor', value: 8 } },
+  void_fig_tart:      { name: 'Void Fig Tart',        skill: 'cooking', level: 55, xp: 72,  type: 'food', materials: { void_fig: 2 }, fuel: 1, output: { effect: 'heal_both', value: 30 } },
+  smoked_plum_glaze:  { name: 'Smoked Plum Glaze',    skill: 'cooking', level: 65, xp: 92,  type: 'food', materials: { smoked_plum: 2 }, fuel: 1, output: { effect: 'mana', value: 25 } },
+  soulberry_pie:      { name: 'Soulberry Pie',        skill: 'cooking', level: 75, xp: 115, type: 'food', materials: { soulberry: 2 }, fuel: 1, output: { effect: 'buff_resist', value: 12 } },
+  abyssal_risotto:    { name: 'Abyssal Truffle Risotto', skill: 'cooking', level: 85, xp: 170, type: 'food', materials: { abyssal_truffle: 2 }, fuel: 1, output: { effect: 'heal_buff', value: 50, buff: 10 } },
+  starfruit_ambrosia: { name: 'Starfruit Ambrosia',   skill: 'cooking', level: 95, xp: 300, type: 'food', materials: { starfruit: 2 }, fuel: 1, output: { effect: 'heal_both_buff', value: 40, mana: 30, buff: 10 } },
+  // --- COOKING: Combo Meals ---
+  hunters_ration:     { name: "Hunter's Ration",      skill: 'cooking', level: 30, xp: 50,  type: 'food', materials: { blightfin: 1, wild_mushroom: 1 }, fuel: 1, output: { effect: 'heal_both', value: 40 } },
+  void_feast:         { name: 'Void Feast',           skill: 'cooking', level: 50, xp: 90,  type: 'food', materials: { void_angler: 1, void_fig: 1 }, fuel: 1, output: { effect: 'heal_both_buff', value: 60, mana: 20, buff: 5 } },
+  soul_banquet:       { name: 'Soul Banquet',         skill: 'cooking', level: 70, xp: 150, type: 'food', materials: { soulfish: 1, soulberry: 1 }, fuel: 1, output: { effect: 'heal_both_buff', value: 80, mana: 30, buff: 8 } },
+  celestial_banquet:  { name: 'Celestial Banquet',    skill: 'cooking', level: 90, xp: 300, type: 'food', materials: { celestial_koi: 1, starfruit: 1 }, fuel: 1, output: { effect: 'heal_both_buff', value: 120, mana: 50, buff: 12 } },
+};
+
+// Get available recipes for a skill at a given level
+export function getRecipesForSkill(skillId, level) {
+  return Object.entries(RECIPES)
+    .filter(([, r]) => r.skill === skillId && r.level <= level)
+    .sort((a, b) => a[1].level - b[1].level);
+}
+
+// Check if player has materials for a recipe
+export function canCraftRecipe(recipeId, materials) {
+  const recipe = RECIPES[recipeId];
+  if (!recipe) return false;
+  for (const [matId, needed] of Object.entries(recipe.materials)) {
+    if ((materials[matId] || 0) < needed) return false;
+  }
+  return true;
+}

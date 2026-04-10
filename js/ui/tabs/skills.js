@@ -1,8 +1,9 @@
 // === Voidborn — Skills Tab ===
 
 import { G, getHero, saveGame, startTraining, stopTraining, isHeroTraining, getTrainingSlots, processSkillAction, getSkillStatBonuses } from '../../state.js';
-import { SKILLS, SKILL_TIERS, SKILL_MAX_LEVEL, skillXpForLevel, MATERIALS, CLASSES } from '../../config.js';
-import { el } from '../../utils.js';
+import { SKILLS, SKILL_TIERS, SKILL_MAX_LEVEL, skillXpForLevel, MATERIALS, CLASSES, RECIPES, getRecipesForSkill, canCraftRecipe } from '../../config.js';
+import { el, uid } from '../../utils.js';
+import { generateGear } from '../../raid/entities.js';
 import { btn, toast, progressBar, statRow } from '../components.js';
 import { renderActiveTab } from '../router.js';
 import { renderHUD } from '../hud.js';
@@ -200,7 +201,169 @@ function showSkillDetail(skillDef) {
     }
   }
 
+  // Recipes (crafting skills)
+  if (skillDef.type === 'crafting') {
+    screen.appendChild(el('div', { class: 'divider' }));
+    screen.appendChild(el('div', { class: 'text-dim', text: 'Recipes:', style: 'font-weight: 600; margin-bottom: 4px;' }));
+
+    const recipes = getRecipesForSkill(skillDef.id, level);
+    if (recipes.length === 0) {
+      screen.appendChild(el('div', { class: 'text-dim', text: 'No recipes available at this level.', style: 'font-size: 11px;' }));
+    }
+
+    for (const [recipeId, recipe] of recipes) {
+      const canCraft = canCraftRecipe(recipeId, G.materials);
+      const card = el('div', { class: `card ${canCraft ? '' : ''}`, style: `margin-bottom: 4px; padding: 8px; ${canCraft ? '' : 'opacity: 0.5;'}` });
+
+      card.appendChild(el('div', { class: 'text-bright', text: `${recipe.name} (Lv.${recipe.level})`, style: 'font-size: 12px; font-weight: 600;' }));
+
+      // Material costs
+      const matRow = el('div', { style: 'display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px;' });
+      for (const [matId, needed] of Object.entries(recipe.materials)) {
+        const mat = MATERIALS[matId];
+        const have = G.materials[matId] || 0;
+        const enough = have >= needed;
+        matRow.appendChild(el('span', {
+          class: enough ? 'text-success' : 'text-danger',
+          text: `${mat ? mat.icon : ''} ${mat ? mat.name : matId}: ${have}/${needed}`,
+          style: 'font-size: 10px; background: var(--bg-dark); padding: 1px 4px; border-radius: 3px;',
+        }));
+      }
+      if (recipe.fuel) {
+        matRow.appendChild(el('span', { class: 'text-dim', text: `+ 1 fuel (log)`, style: 'font-size: 10px;' }));
+      }
+      card.appendChild(matRow);
+
+      // Output description
+      if (recipe.output) {
+        const desc = recipe.type === 'consumable' ? `${recipe.output.effect}: ${recipe.output.value || ''}${recipe.doses ? ` (${recipe.doses} doses)` : ''}`
+          : recipe.type === 'food' ? `${recipe.output.effect}: ${recipe.output.value || ''}`
+          : recipe.type === 'ammo' ? Object.entries(recipe.output).filter(([k]) => k !== 'subtype').map(([k,v]) => `+${v} ${k}`).join(', ')
+          : '';
+        if (desc) card.appendChild(el('div', { class: 'text-dim', text: desc, style: 'font-size: 10px; margin-top: 2px;' }));
+      }
+      if (recipe.substats) {
+        const subText = recipe.substats.map(s => `+${s.value} ${s.id}`).join(', ');
+        card.appendChild(el('div', { class: 'text-accent', text: subText, style: 'font-size: 10px; margin-top: 2px;' }));
+      }
+
+      if (canCraft) {
+        card.appendChild(btn('Craft', 'btn-sm btn-success', () => {
+          craftRecipe(recipeId, skillDef);
+          showSkillDetail(skillDef);
+        }));
+      }
+
+      screen.appendChild(card);
+    }
+
+    // Locked recipes preview
+    const locked = Object.entries(RECIPES)
+      .filter(([, r]) => r.skill === skillDef.id && r.level > level)
+      .sort((a, b) => a[1].level - b[1].level)
+      .slice(0, 3);
+    if (locked.length > 0) {
+      screen.appendChild(el('div', { class: 'text-dim', text: 'Upcoming:', style: 'font-weight: 600; margin-top: 8px; margin-bottom: 4px;' }));
+      for (const [, recipe] of locked) {
+        screen.appendChild(el('div', { class: 'text-dim', text: `Lv.${recipe.level}: ${recipe.name}`, style: 'font-size: 10px; opacity: 0.5;' }));
+      }
+    }
+  }
+
   // Back button
   screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
   content.appendChild(screen);
 }
+
+// Execute a crafting recipe
+function craftRecipe(recipeId, skillDef) {
+  const recipe = RECIPES[recipeId];
+  if (!recipe || !canCraftRecipe(recipeId, G.materials)) return;
+
+  // Consume materials
+  for (const [matId, needed] of Object.entries(recipe.materials)) {
+    G.materials[matId] -= needed;
+  }
+
+  // Consume fuel for cooking
+  if (recipe.fuel) {
+    const fuelUsed = consumeFuel();
+    if (!fuelUsed) { toast('No logs for fuel!', 'danger'); return; }
+  }
+
+  // Award XP
+  const skill = G.skills[skillDef.id];
+  if (skill && skill.level < SKILL_MAX_LEVEL) {
+    skill.xp += recipe.xp;
+    while (skill.level < SKILL_MAX_LEVEL) {
+      const needed = skillXpForLevel(skill.level + 1);
+      if (skill.xp < needed) break;
+      skill.xp -= needed;
+      skill.level++;
+      toast(`${skillDef.name} leveled to ${skill.level}!`, 'success');
+    }
+  }
+
+  // Produce output
+  const qty = recipe.doses || recipe.qty || 1;
+  for (let i = 0; i < qty; i++) {
+    if (recipe.type === 'consumable' || recipe.type === 'food' || recipe.type === 'throwable') {
+      G.stash.push({
+        id: uid(), name: recipe.name.replace(/ \(\d\)/, ''), icon: getRecipeIcon(recipe),
+        size: 1, rarity: 'common', isConsumable: true,
+        effect: recipe.output.effect, value: recipe.output.value || 0,
+        desc: `${recipe.output.effect}: ${recipe.output.value || ''}`,
+      });
+    } else if (recipe.type === 'ammo') {
+      G.stash.push({
+        id: uid(), name: recipe.name, icon: getRecipeIcon(recipe),
+        slot: 'ammo', size: 1, rarity: 'common', substats: [],
+        ...recipe.output,
+      });
+    } else if (recipe.type === 'weapon' || recipe.type === 'armor') {
+      // Smithing generates random gear at the recipe's tier
+      const item = generateGear(Math.ceil(recipe.level / 10));
+      // Force the correct slot type
+      if (recipe.type === 'armor' && !['body','head','legs','hands','feet','cape'].includes(item.slot)) {
+        item.slot = 'body'; // fallback
+      }
+      item.name = recipe.name.replace(' Weapon', '').replace(' Armor', '') + ' ' + (item.name.split(' ').pop());
+      G.stash.push(item);
+    } else if (recipe.type === 'enchant') {
+      // Enchants are stored as items in stash, applied later
+      G.stash.push({
+        id: uid(), name: recipe.name, icon: '\u2728',
+        size: 1, rarity: 'rare', isEnchant: true,
+        enchantSlots: recipe.slots, substats: recipe.substats,
+        desc: recipe.substats.map(s => `+${s.value} ${s.id}`).join(', '),
+      });
+    }
+  }
+
+  saveGame();
+  toast(`Crafted ${recipe.name}!`, 'success');
+}
+
+function getRecipeIcon(recipe) {
+  if (recipe.type === 'food') return '\uD83C\uDF73';
+  if (recipe.type === 'consumable') return '\u2697\uFE0F';
+  if (recipe.type === 'throwable') return '\uD83D\uDCA3';
+  if (recipe.type === 'ammo') return '\uD83C\uDFF9';
+  return '\uD83D\uDD28';
+}
+
+function consumeFuel() {
+  // Find best available log (highest fuel uses first)
+  const logMats = Object.entries(MATERIALS)
+    .filter(([, m]) => m.skill === 'woodcutting' && !m.rare && m.fuelUses)
+    .sort((a, b) => b[1].fuelUses - a[1].fuelUses);
+
+  for (const [matId] of logMats) {
+    if ((G.materials[matId] || 0) > 0) {
+      G.materials[matId]--;
+      return true;
+    }
+  }
+  return false;
+}
+
