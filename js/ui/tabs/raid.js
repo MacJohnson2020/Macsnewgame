@@ -634,9 +634,35 @@ function showAbilityTargetScreen(raid, combat, hero, ability) {
     el('div', { class: 'text-accent', text: `${ability.mpCost} MP | ${ability.aoe ? 'Hits all enemies' : 'Single target'}`, style: 'font-size: 11px; margin-top: 4px;' }),
   ]));
 
-  if (ability.aoe) {
+  if (ability.healAlly && !ability.aoe) {
+    // Single-target heal — target an ally
+    screen.appendChild(el('div', { class: 'text-dim', text: 'Pick an ally to heal:', style: 'font-weight: 600; margin-bottom: 4px;' }));
+
+    for (const ally of combat.party.filter(h => h.alive)) {
+      const healAmt = Math.round(ally.maxHp * ability.healPct / 100);
+      const tBtn = el('div', { class: 'combatant-card', style: 'cursor: pointer; margin-bottom: 6px;' });
+      const cls = CLASSES[ally.classId];
+      tBtn.appendChild(el('div', { class: 'combatant-header' }, [
+        el('span', { class: 'combatant-icon', text: cls.icon }),
+        el('div', { class: 'combatant-info' }, [
+          el('span', { class: 'combatant-name', text: ally.name }),
+          el('span', { class: 'combatant-class', text: `HP: ${ally.hp}/${ally.maxHp}` }),
+        ]),
+        el('span', { class: 'text-success', text: `+${healAmt} HP`, style: 'font-size: 11px;' }),
+      ]));
+      tBtn.appendChild(progressBar(ally.hp, ally.maxHp, 'hp', false));
+      tBtn.onclick = () => {
+        abilityAction(combat, hero, ability.id, ally);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
+      };
+      screen.appendChild(tBtn);
+    }
+  } else if (ability.aoe) {
     // AoE — confirm or back
-    screen.appendChild(el('div', { class: 'text-dim', text: 'This ability hits all enemies.', style: 'text-align: center; margin: 8px 0;' }));
+    const aoeText = ability.healAlly ? 'This ability heals all allies.' : 'This ability hits all enemies.';
+    screen.appendChild(el('div', { class: 'text-dim', text: aoeText, style: 'text-align: center; margin: 8px 0;' }));
     screen.appendChild(btn('Confirm', 'btn-primary btn-block btn-lg', () => {
       abilityAction(combat, hero, ability.id, null);
       nextTurn(combat);

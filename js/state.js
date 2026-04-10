@@ -164,9 +164,11 @@ function migrate(data) {
   if (!s.recruitPool) s.recruitPool = [];
   if (!s.lastRecruitRefresh) s.lastRecruitRefresh = Date.now();
   if (!s.secureContainer) s.secureContainer = [];
-  // Add autoBattle to existing heroes
+  // Add autoBattle to existing heroes + migrate class IDs
   for (const hero of (s.heroes || [])) {
     if (hero.autoBattle === undefined) hero.autoBattle = null;
+    if (hero.classId === 'fighter') hero.classId = 'berserker';
+    if (hero.classId === 'mage') hero.classId = 'arcanist';
   }
   data.state.version = SAVE_VERSION;
 }
@@ -248,25 +250,49 @@ export function healAllHeroes() {
 // Give a hero class-appropriate common starter gear
 export function giveStarterGear(hero) {
   const classId = hero.classId;
-  let weapon, body;
+  const STARTER = {
+    berserker: {
+      weapon: { name: 'Rusty Greatsword', icon: '\u2694\uFE0F', weaponType: 'greatsword', size: 5, damageType: 'physical', twoHanded: true, dmgMin: 7, dmgMax: 12, accuracy: 10 },
+      body: { name: 'Worn Chainmail', icon: '\uD83E\uDDE5', size: 4, armor: 8, magicResist: 3 },
+    },
+    rogue: {
+      weapon: { name: 'Chipped Dagger', icon: '\uD83D\uDDE1\uFE0F', weaponType: 'dagger', size: 1, damageType: 'physical', twoHanded: false, dmgMin: 4, dmgMax: 7, accuracy: 18 },
+      body: { name: 'Tattered Leather', icon: '\uD83E\uDDE5', size: 3, armor: 5, magicResist: 2 },
+    },
+    arcanist: {
+      weapon: { name: 'Cracked Wand', icon: '\uD83E\uDE84', weaponType: 'wand', size: 1, damageType: 'magic', twoHanded: false, dmgMin: 5, dmgMax: 10, accuracy: 16 },
+      body: { name: 'Faded Robes', icon: '\uD83E\uDDE5', size: 2, armor: 2, magicResist: 8 },
+    },
+    cleric: {
+      weapon: { name: 'Wooden Staff', icon: '\uD83E\uDE84', weaponType: 'staff', size: 3, damageType: 'magic', twoHanded: true, dmgMin: 4, dmgMax: 8, accuracy: 14 },
+      body: { name: 'Acolyte Robes', icon: '\uD83E\uDDE5', size: 2, armor: 4, magicResist: 6 },
+    },
+    paladin: {
+      weapon: { name: 'Dull Sword', icon: '\u2694\uFE0F', weaponType: 'sword', size: 3, damageType: 'physical', twoHanded: false, dmgMin: 5, dmgMax: 9, accuracy: 12 },
+      body: { name: 'Dented Plate', icon: '\uD83E\uDDE5', size: 6, armor: 12, magicResist: 4 },
+    },
+    ranger: {
+      weapon: { name: 'Worn Bow', icon: '\uD83C\uDFF9', weaponType: 'bow', size: 3, damageType: 'physical', twoHanded: true, dmgMin: 4, dmgMax: 8, accuracy: 16 },
+      body: { name: 'Tattered Leather', icon: '\uD83E\uDDE5', size: 3, armor: 5, magicResist: 2 },
+    },
+    necromancer: {
+      weapon: { name: 'Bone Wand', icon: '\uD83E\uDE84', weaponType: 'wand', size: 1, damageType: 'magic', twoHanded: false, dmgMin: 4, dmgMax: 9, accuracy: 15 },
+      body: { name: 'Tattered Robes', icon: '\uD83E\uDDE5', size: 2, armor: 2, magicResist: 7 },
+    },
+    bard: {
+      weapon: { name: 'Rusty Dagger', icon: '\uD83D\uDDE1\uFE0F', weaponType: 'dagger', size: 1, damageType: 'physical', twoHanded: false, dmgMin: 3, dmgMax: 6, accuracy: 16 },
+      body: { name: 'Traveler\'s Clothes', icon: '\uD83E\uDDE5', size: 2, armor: 3, magicResist: 4 },
+    },
+  };
 
-  switch (classId) {
-    case 'fighter':
-      weapon = { id: uid(), name: 'Rusty Sword', icon: '\u2694\uFE0F', slot: 'weapon', weaponType: 'sword', size: 3, rarity: 'common', damageType: 'physical', twoHanded: false, dmgMin: 5, dmgMax: 9, accuracy: 12, statReq: {}, substats: [] };
-      body = { id: uid(), name: 'Worn Chainmail', icon: '\uD83E\uDDE5', slot: 'body', size: 4, rarity: 'common', armor: 8, magicResist: 3, statReq: {}, substats: [] };
-      break;
-    case 'rogue':
-      weapon = { id: uid(), name: 'Chipped Dagger', icon: '\uD83D\uDDE1\uFE0F', slot: 'weapon', weaponType: 'dagger', size: 1, rarity: 'common', damageType: 'physical', twoHanded: false, dmgMin: 4, dmgMax: 7, accuracy: 18, statReq: {}, substats: [] };
-      body = { id: uid(), name: 'Tattered Leather', icon: '\uD83E\uDDE5', slot: 'body', size: 3, rarity: 'common', armor: 5, magicResist: 2, statReq: {}, substats: [] };
-      break;
-    case 'mage':
-      weapon = { id: uid(), name: 'Cracked Wand', icon: '\uD83E\uDE84', slot: 'weapon', weaponType: 'wand', size: 1, rarity: 'common', damageType: 'magic', twoHanded: false, dmgMin: 5, dmgMax: 10, accuracy: 16, statReq: {}, substats: [] };
-      body = { id: uid(), name: 'Faded Robes', icon: '\uD83E\uDDE5', slot: 'body', size: 2, rarity: 'common', armor: 2, magicResist: 8, statReq: {}, substats: [] };
-      break;
+  const gear = STARTER[classId] || STARTER.berserker;
+
+  if (!hero.gear.weapon) {
+    hero.gear.weapon = { id: uid(), ...gear.weapon, slot: 'weapon', rarity: 'common', statReq: {}, substats: [] };
   }
-
-  if (!hero.gear.weapon) hero.gear.weapon = weapon;
-  if (!hero.gear.body) hero.gear.body = body;
+  if (!hero.gear.body) {
+    hero.gear.body = { id: uid(), ...gear.body, slot: 'body', rarity: 'common', statReq: {}, substats: [] };
+  }
 }
 
 // === Secure Container ===

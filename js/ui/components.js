@@ -190,9 +190,14 @@ export function corruptionBar(corruption, corruptionLevel) {
 function getConfig() {
   return {
     CLASSES: {
-      fighter: { icon: '\u2694\uFE0F', name: 'Fighter' },
+      berserker: { icon: '\uD83E\uDE93', name: 'Berserker' },
       rogue: { icon: '\uD83D\uDDE1\uFE0F', name: 'Rogue' },
-      mage: { icon: '\uD83E\uDDD9', name: 'Mage' },
+      arcanist: { icon: '\uD83D\uDD2E', name: 'Arcanist' },
+      cleric: { icon: '\u2695\uFE0F', name: 'Cleric' },
+      paladin: { icon: '\uD83D\uDEE1\uFE0F', name: 'Paladin' },
+      ranger: { icon: '\uD83C\uDFF9', name: 'Ranger' },
+      necromancer: { icon: '\uD83D\uDC80', name: 'Necromancer' },
+      bard: { icon: '\uD83C\uDFB6', name: 'Bard' },
     },
   };
 }

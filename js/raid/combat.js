@@ -288,6 +288,13 @@ export function abilityAction(combat, hero, abilityId, target) {
       t.hp -= damage;
       results.push({ target: t, hit: true, damage });
 
+      // Lifesteal
+      if (ability.lifesteal && damage > 0) {
+        const healed = Math.round(damage * ability.lifesteal / 100);
+        hero.hp = Math.min(hero.maxHp, hero.hp + healed);
+        combat.log.push({ type: 'heal', text: `  ${hero.name} drains ${healed} HP`, class: 'heal' });
+      }
+
       if (t.hp <= 0) {
         t.hp = 0;
         t.alive = false;
@@ -326,6 +333,29 @@ export function abilityAction(combat, hero, abilityId, target) {
     hero.buffs = hero.buffs || [];
     hero.buffs.push({ stat: ability.selfBuff.stat, value: ability.selfBuff.pct, turns: ability.selfBuff.turns });
     combat.log.push({ type: 'ability', text: `  ${hero.name} gains +${ability.selfBuff.pct}% ${ability.selfBuff.stat}`, class: 'ability' });
+  }
+
+  // Heal ally abilities (Cleric/Paladin)
+  if (ability.healAlly) {
+    const healTargets = ability.aoe ? combat.party.filter(h => h.alive) : [target];
+    for (const t of healTargets) {
+      if (!t || !t.alive) continue;
+      const healed = Math.round(t.maxHp * ability.healPct / 100);
+      t.hp = Math.min(t.maxHp, t.hp + healed);
+      combat.log.push({ type: 'heal', text: `  → ${t.name} healed for ${healed} HP`, class: 'heal' });
+    }
+  }
+
+  // Encore: reset all ally cooldowns (Bard)
+  if (ability.id === 'encore') {
+    for (const ally of combat.party.filter(h => h.alive)) {
+      if (ally.abilityCooldowns) {
+        for (const key of Object.keys(ally.abilityCooldowns)) {
+          ally.abilityCooldowns[key] = 0;
+        }
+      }
+    }
+    combat.log.push({ type: 'ability', text: `  All ally cooldowns reset!`, class: 'ability' });
   }
 
   return { results };

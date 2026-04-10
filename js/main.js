@@ -69,7 +69,7 @@ function showCharacterCreation() {
   overlay.classList.remove('hidden');
   container.innerHTML = '';
 
-  let selectedClass = 'fighter';
+  let selectedClass = 'berserker';
   let stats = { ...STAT_DEFAULTS };
   let statPoints = STARTING_STAT_POINTS;
   let heroName = '';
