@@ -2,6 +2,7 @@
 
 import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getDamageMultiplier, getPenetration, getCritChance, getInitiative, getBuffValue } from './entities.js';
 import { CLASSES, DAMAGE_TYPES } from '../config.js';
+import { trackBountyProgress } from '../ui/tabs/bounties.js';
 import { calcHitChance, calcDamage, rollChance, randInt, clamp, statMod } from '../utils.js';
 
 // Combat state
@@ -217,6 +218,7 @@ export function attackAction(combat, attacker, target) {
     target.hp = 0;
     target.alive = false;
     combat.log.push({ type: 'death', text: `${target.name} has been slain!`, class: 'death' });
+    if (!isHero) trackBountyProgress('kill');
   }
 
   return { hit: true, damage, isCrit, hitChance };

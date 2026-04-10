@@ -10,6 +10,7 @@ import { renderRaidTab } from './ui/tabs/raid.js';
 import { renderPartyTab } from './ui/tabs/party.js';
 import { renderStashTab } from './ui/tabs/stash.js';
 import { renderTownTab } from './ui/tabs/town.js';
+import { renderBountiesTab } from './ui/tabs/bounties.js';
 
 // Initialize game
 function init() {
@@ -18,6 +19,7 @@ function init() {
   registerTab('party', renderPartyTab);
   registerTab('stash', renderStashTab);
   registerTab('town', renderTownTab);
+  registerTab('bounties', renderBountiesTab);
 
   // Init router
   initRouter();
@@ -182,7 +184,7 @@ function showCharacterCreation() {
       overlay.classList.add('hidden');
       renderHUD();
       switchTab('raid');
-      toast(`Welcome, ${hero.name}! Prepare for your first extraction.`, 'success');
+      showTutorial(hero.name);
     };
     container.appendChild(createBtn);
   }
@@ -190,7 +192,50 @@ function showCharacterCreation() {
   render();
 }
 
-// giveStarterGear is now imported from state.js
+// Tutorial for new players
+function showTutorial(heroName) {
+  const steps = [
+    { title: `Welcome, ${heroName}!`, text: 'Voidborn is an extraction RPG. Deploy into corrupted zones, fight enemies, collect loot, and extract alive to keep it all.' },
+    { title: 'Raids', text: 'Select your party and a zone on the Raid tab. Step through a branching path of encounters. Mystery nodes could be chests, traps, shrines, or merchants.' },
+    { title: 'Combat', text: 'Fight turn-based battles. Use abilities, items, or set auto-battle. Check enemy weaknesses — holy wrecks undead, fire kills beasts.' },
+    { title: 'Extraction', text: 'Reach an extraction point to keep your loot. If you die, you lose carried items but heroes revive in town with starter gear.' },
+    { title: 'Party', text: 'Hire more heroes from the Tavern on the Party tab. Up to 4 per raid. Each class has unique abilities.' },
+    { title: 'Bounties', text: 'Check the Bounties tab for faction quests. Complete them for gold and reputation. Higher rep unlocks perks and faction shops.' },
+    { title: 'Good luck!', text: 'Start with the Rust Crypts — undead enemies, weak to holy and fire. You have 3 health potions. Use them wisely.' },
+  ];
+
+  let step = 0;
+
+  function showStep() {
+    // Remove existing tutorial overlay
+    const existing = document.querySelector('.tutorial-overlay');
+    if (existing) existing.remove();
+
+    if (step >= steps.length) return;
+
+    const s = steps[step];
+    const overlay = el('div', { class: 'tutorial-overlay' });
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const card = el('div', { class: 'card', style: 'max-width:360px;width:100%;padding:20px;text-align:center;' });
+    card.appendChild(el('div', { class: 'text-bright', text: s.title, style: 'font-size: 18px; font-weight: 700; margin-bottom: 8px;' }));
+    card.appendChild(el('p', { class: 'text-dim', text: s.text, style: 'font-size: 13px; margin-bottom: 16px; line-height: 1.5;' }));
+
+    const btnRow = el('div', { class: 'flex gap-sm', style: 'justify-content: center;' });
+    if (step < steps.length - 1) {
+      btnRow.appendChild(el('button', { class: 'btn btn-primary', text: 'Next', onclick: () => { step++; showStep(); } }));
+      btnRow.appendChild(el('button', { class: 'btn btn-sm', text: 'Skip', onclick: () => { overlay.remove(); } }));
+    } else {
+      btnRow.appendChild(el('button', { class: 'btn btn-success btn-lg', text: 'Start Playing', onclick: () => { overlay.remove(); } }));
+    }
+    card.appendChild(btnRow);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+
+  showStep();
+}
 
 // Start the game when DOM is ready
 if (document.readyState === 'loading') {

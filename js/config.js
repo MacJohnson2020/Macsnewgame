@@ -331,7 +331,7 @@ export const ZONES = [
     id: 'rust_crypts',
     name: 'Rust Crypts',
     icon: '\uD83C\uDFDA\uFE0F',
-    desc: 'Ancient tombs corrupted by void energy. Good for beginners.',
+    desc: 'Crumbling tombs overrun with rats, skeletons, and ghouls. Short paths, few forks. Weak to holy and fire.',
     levelRange: [1, 15],
     nodes: [10, 12],
     forkChance: 0.25,
@@ -345,7 +345,7 @@ export const ZONES = [
     id: 'neon_depths',
     name: 'Neon Depths',
     icon: '\uD83C\uDF03',
-    desc: 'Ruined undercity pulsing with corrupted tech. Beware of traps.',
+    desc: 'Ruined undercity with void spiders, corrupted demons, and lightning wraiths. Tech golems guard the deep floors. Bring lightning resist.',
     levelRange: [10, 30],
     nodes: [12, 16],
     forkChance: 0.35,
@@ -359,7 +359,7 @@ export const ZONES = [
     id: 'void_marshes',
     name: 'Void Marshes',
     icon: '\uD83C\uDF3F',
-    desc: 'Toxic swampland saturated with void corruption. Environmental hazards.',
+    desc: 'Poisonous swamps with lurkers, fire-wielding bog witches, and the demonic Void Beast. Ice and holy damage shine here.',
     levelRange: [25, 50],
     nodes: [14, 18],
     forkChance: 0.4,
@@ -373,7 +373,7 @@ export const ZONES = [
     id: 'shattered_spire',
     name: 'Shattered Spire',
     icon: '\uD83C\uDFEF',
-    desc: 'A fractured tower crackling with unstable void energy. Elite enemies and fast corruption.',
+    desc: 'Fractured tower with construct sentinels, void cultists, and ice wraiths. The Spire Warden hits like lightning. Fast corruption.',
     levelRange: [45, 75],
     nodes: [16, 22],
     forkChance: 0.45,
@@ -387,7 +387,7 @@ export const ZONES = [
     id: 'the_abyss',
     name: 'The Abyss',
     icon: '\uD83C\uDF11',
-    desc: 'The source of all corruption. Everything here wants you dead. Bring your best.',
+    desc: 'The source of all corruption. Abyssal crawlers, void knights, elder demons, and the Void Lord. Holy damage is essential. Everything resists everything else.',
     levelRange: [70, 99],
     nodes: [20, 25],
     forkChance: 0.5,
@@ -450,4 +450,77 @@ export const HERO_NAMES = [
   'Ivar', 'Jorin', 'Kael', 'Lyra', 'Morven', 'Nyx', 'Orin', 'Petra',
   'Riven', 'Sable', 'Thane', 'Una', 'Vex', 'Wren', 'Xara', 'Yara', 'Zev',
   'Ashwin', 'Bron', 'Corrin', 'Dusk', 'Ember', 'Flint', 'Gareth', 'Hex',
+];
+
+// === Factions & Reputation ===
+export const FACTIONS = {
+  delvers_guild: {
+    id: 'delvers_guild', name: "Delver's Guild", icon: '\uD83D\uDCA0',
+    desc: 'Explorers and pathfinders. Unlock zone perks and better maps.',
+    ranks: [
+      { name: 'Outsider', rep: 0, perk: null },
+      { name: 'Scout', rep: 100, perk: '+1 revealed node per floor' },
+      { name: 'Pathfinder', rep: 300, perk: '-10% corruption rate' },
+      { name: 'Cartographer', rep: 600, perk: 'Unlock Shattered Spire early' },
+      { name: 'Guildmaster', rep: 1000, perk: '+20% extraction XP bonus' },
+    ],
+    shopItems: ['health_potion', 'mana_potion', 'antidote'],
+  },
+  iron_covenant: {
+    id: 'iron_covenant', name: 'Iron Covenant', icon: '\u2694\uFE0F',
+    desc: 'Warriors and weapon smiths. Better gear, combat bonuses, insurance.',
+    ranks: [
+      { name: 'Civilian', rep: 0, perk: null },
+      { name: 'Initiate', rep: 100, perk: '+5% physical damage' },
+      { name: 'Soldier', rep: 300, perk: 'Gear drops +1 rarity tier chance' },
+      { name: 'Champion', rep: 600, perk: '-25% insurance cost' },
+      { name: 'Warlord', rep: 1000, perk: '+10% all damage' },
+    ],
+    shopItems: ['health_potion', 'revival_scroll'],
+  },
+  shadow_market: {
+    id: 'shadow_market', name: 'Shadow Market', icon: '\uD83C\uDF11',
+    desc: 'Black market dealers. Better prices, secure container, rare finds.',
+    ranks: [
+      { name: 'Unknown', rep: 0, perk: null },
+      { name: 'Contact', rep: 100, perk: '-10% merchant prices' },
+      { name: 'Dealer', rep: 300, perk: '+1 secure container unit' },
+      { name: 'Broker', rep: 600, perk: 'Rare items in merchant stock' },
+      { name: 'Kingpin', rep: 1000, perk: '-25% all shop prices' },
+    ],
+    shopItems: ['antidote', 'revival_scroll'],
+  },
+  holy_order: {
+    id: 'holy_order', name: 'Holy Order', icon: '\u2728',
+    desc: 'Clerics and paladins. Healing bonuses, holy damage, undead bane.',
+    ranks: [
+      { name: 'Heathen', rep: 0, perk: null },
+      { name: 'Acolyte', rep: 100, perk: '+15% healing received' },
+      { name: 'Priest', rep: 300, perk: '+10% holy damage' },
+      { name: 'Bishop', rep: 600, perk: 'Free revive scroll per raid' },
+      { name: 'Archon', rep: 1000, perk: '+20% holy damage, undead take 2x' },
+    ],
+    shopItems: ['health_potion', 'revival_scroll'],
+  },
+  void_seekers: {
+    id: 'void_seekers', name: 'Void Seekers', icon: '\uD83D\uDE08',
+    desc: 'Those who harness corruption. Demonic power, risk-reward mastery.',
+    ranks: [
+      { name: 'Uninitiated', rep: 0, perk: null },
+      { name: 'Touched', rep: 100, perk: '+10% demonic damage' },
+      { name: 'Embraced', rep: 300, perk: 'Corruption gives +5% damage' },
+      { name: 'Vessel', rep: 600, perk: '+2 loot rolls at high corruption' },
+      { name: 'Voidborn', rep: 1000, perk: 'Corruption maxes at 50% penalty instead of wipe' },
+    ],
+    shopItems: ['mana_potion', 'antidote'],
+  },
+};
+
+// Bounty templates
+export const BOUNTY_TEMPLATES = [
+  { type: 'kill', desc: 'Kill {count} {enemy}', countRange: [3, 8], rep: 25, gold: 30 },
+  { type: 'extract', desc: 'Extract from {zone}', rep: 20, gold: 25 },
+  { type: 'extract_loot', desc: 'Extract with {count} items', countRange: [3, 6], rep: 30, gold: 40 },
+  { type: 'clear_floor', desc: 'Reach floor {count} in {zone}', countRange: [6, 10], rep: 35, gold: 50 },
+  { type: 'no_death', desc: 'Extract from {zone} with no deaths', rep: 40, gold: 60 },
 ];

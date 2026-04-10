@@ -2,6 +2,7 @@
 
 import { G, getHero, saveGame, giveStarterGear } from '../state.js';
 import { ZONES, CORRUPTION_LEVELS, xpForLevel } from '../config.js';
+import { trackBountyProgress } from '../ui/tabs/bounties.js';
 import { generateRaidPath, getChildren, pruneUnreachable } from './generator.js';
 import { generateEncounter, resolveEventChoice, applyTrap, applyShrine } from './encounter.js';
 import { createCombatState } from './combat.js';
@@ -200,6 +201,14 @@ export function endRaid(raid, success) {
     result.itemsKept = party
       .filter(h => h.alive)
       .flatMap(h => [...h.inventory]);
+
+    // Track bounties
+    trackBountyProgress('extract');
+    trackBountyProgress('extract_loot', { itemCount: result.itemsKept.length });
+    trackBountyProgress('floor', { floor: raid.steps });
+    if (!result.heroesLost.length && party.every(h => h.alive)) {
+      trackBountyProgress('extract_no_death');
+    }
   } else {
     G.totalDeaths++;
     for (const hero of party) {

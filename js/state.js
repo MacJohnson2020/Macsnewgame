@@ -125,6 +125,17 @@ export function newGameState() {
     recruitPool: [],
     lastRecruitRefresh: Date.now(),
 
+    // Factions & Bounties
+    factionRep: {
+      delvers_guild: 0,
+      iron_covenant: 0,
+      shadow_market: 0,
+      holy_order: 0,
+      void_seekers: 0,
+    },
+    activeBounties: [],  // [{id, factionId, type, desc, target, count, progress, rep, gold}]
+    completedBounties: 0,
+
     // Meta
     deepestFloor: {},   // per zone: { zone_id: deepest_node }
     totalRaids: 0,
@@ -182,6 +193,9 @@ function migrate(data) {
   if (!s.recruitPool) s.recruitPool = [];
   if (!s.lastRecruitRefresh) s.lastRecruitRefresh = Date.now();
   if (!s.secureContainer) s.secureContainer = [];
+  if (!s.factionRep) s.factionRep = { delvers_guild: 0, iron_covenant: 0, shadow_market: 0, holy_order: 0, void_seekers: 0 };
+  if (!s.activeBounties) s.activeBounties = [];
+  if (s.completedBounties === undefined) s.completedBounties = 0;
   // Add autoBattle to existing heroes + migrate class IDs
   for (const hero of (s.heroes || [])) {
     if (hero.autoBattle === undefined) hero.autoBattle = null;

@@ -214,5 +214,19 @@ function renderHeroDetail(hero) {
     card.appendChild(abilRow);
   }
 
+  // Dismiss button (not for main hero)
+  if (!hero.isMain) {
+    card.appendChild(el('div', { class: 'divider', style: 'margin: 8px 0;' }));
+    card.appendChild(btn('Dismiss Hero', 'btn-danger btn-sm btn-block', () => {
+      if (!confirm(`Dismiss ${hero.name}? They will be gone forever, along with all their gear.`)) return;
+      G.heroes = G.heroes.filter(h => h.id !== hero.id);
+      G.raidParty = G.raidParty.filter(id => id !== hero.id);
+      saveGame();
+      renderActiveTab();
+      renderHUD();
+      toast(`${hero.name} has been dismissed`, 'info');
+    }));
+  }
+
   return card;
 }
