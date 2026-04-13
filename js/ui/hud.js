@@ -70,13 +70,30 @@ function showSettings() {
   // Achievements button
   const achBtn = el('button', {
     class: 'btn btn-block', text: '\uD83C\uDFC6 View Achievements',
-    style: 'margin-bottom: 8px;',
+    style: 'margin-bottom: 6px;',
   });
   achBtn.onclick = () => {
     overlay.remove();
     showAchievements();
   };
   card.appendChild(achBtn);
+
+  // Replay tutorial
+  const tutBtn = el('button', {
+    class: 'btn btn-block', text: '\uD83D\uDCD6 Replay Tutorial',
+    style: 'margin-bottom: 6px;',
+  });
+  tutBtn.onclick = () => {
+    overlay.remove();
+    if (window._voidbornShowTutorial) window._voidbornShowTutorial();
+  };
+  card.appendChild(tutBtn);
+
+  // Keyboard shortcuts info
+  const kbCard = el('div', { class: 'card', style: 'padding: 8px; margin-bottom: 8px; background: var(--bg-dark);' });
+  kbCard.appendChild(el('div', { class: 'text-dim', text: 'Keyboard Shortcuts', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+  kbCard.appendChild(el('div', { class: 'text-dim', text: '1-6: Switch tabs  ·  S: Settings  ·  Esc: Close modal', style: 'font-size: 10px;' }));
+  card.appendChild(kbCard);
 
   // Save management
   card.appendChild(el('div', { class: 'text-dim', text: 'Save Management', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;' }));

@@ -68,46 +68,87 @@ function renderRaidPrep(container) {
 
   container.appendChild(el('div', { class: 'divider' }));
 
-  // Insurance section
+  // Insurance section — per-hero toggle
   if (G.raidParty.length > 0) {
     const insSection = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
     insSection.appendChild(el('div', { class: 'text-bright', text: 'Gear Insurance', style: 'font-weight: 700; font-size: 12px;' }));
-    insSection.appendChild(el('div', { class: 'text-dim', text: 'If a hero dies, their equipped gear is recovered to stash. Inventory items still lost.', style: 'font-size: 10px; margin-bottom: 6px;' }));
+    insSection.appendChild(el('div', { class: 'text-dim', text: 'Tap heroes to insure individually. Recovered gear goes to stash on death.', style: 'font-size: 10px; margin-bottom: 6px;' }));
 
+    const pending = G.pendingInsurance || [];
     let totalCost = 0;
+
     const partyHeroes = G.raidParty.map(id => getHero(id)).filter(Boolean);
     for (const hero of partyHeroes) {
       const cost = getInsuranceCost(hero);
-      totalCost += cost;
-      const insured = isHeroInsured(hero.id);
-      insSection.appendChild(el('div', { style: 'display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 0;' }, [
-        el('span', { class: insured ? 'text-success' : 'text-dim', text: insured ? '\u2705' : '\u2B1C' }),
-        el('span', { class: 'text-bright', text: hero.name, style: 'flex: 1;' }),
-        el('span', { class: 'text-warning', text: `${cost}g` }),
-      ]));
+      const insured = pending.includes(hero.id);
+      if (insured) totalCost += cost;
+
+      const row = el('div', {
+        style: `display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px 6px; margin-bottom: 2px; border-radius: 4px; cursor: pointer; background: ${insured ? 'rgba(46,204,113,0.1)' : 'var(--bg-dark)'}; border: 1px solid ${insured ? 'var(--success)' : 'var(--border)'};`
+      });
+      row.appendChild(el('span', { class: insured ? 'text-success' : 'text-dim', text: insured ? '\u2705' : '\u2B1C', style: 'font-size: 14px;' }));
+      row.appendChild(el('span', { class: 'text-bright', text: hero.name, style: 'flex: 1;' }));
+      row.appendChild(el('span', { class: cost === 0 ? 'text-dim' : 'text-warning', text: `${cost}g` }));
+
+      row.onclick = () => {
+        // Toggle this hero in the pending list
+        const current = G.pendingInsurance || [];
+        let updated;
+        if (current.includes(hero.id)) {
+          // Uninsure — refund cost
+          updated = current.filter(id => id !== hero.id);
+          G.gold += cost;
+        } else {
+          // Insure — check gold
+          if (G.gold < cost) {
+            toast(`Need ${cost}g to insure ${hero.name}`, 'danger');
+            return;
+          }
+          G.gold -= cost;
+          updated = [...current, hero.id];
+        }
+        G.pendingInsurance = updated.length > 0 ? updated : null;
+        saveGame();
+        renderActiveTab();
+        renderHUD();
+      };
+      insSection.appendChild(row);
     }
 
-    if (G.pendingInsurance && G.pendingInsurance.length > 0) {
-      insSection.appendChild(el('div', { class: 'text-success', text: `Party insured for next raid`, style: 'font-size: 11px; font-weight: 600; margin-top: 4px;' }));
-      insSection.appendChild(btn('Cancel Insurance', 'btn-sm', () => {
+    // Summary + bulk buttons
+    if (pending.length > 0) {
+      insSection.appendChild(el('div', { class: 'text-success', text: `${pending.length} hero${pending.length > 1 ? 'es' : ''} insured · ${totalCost}g paid`, style: 'font-size: 11px; font-weight: 600; margin-top: 4px;' }));
+    }
+    const btnRow = el('div', { style: 'display: flex; gap: 4px; margin-top: 4px;' });
+    btnRow.appendChild(btn('Insure All', 'btn-sm', () => {
+      const current = G.pendingInsurance || [];
+      const toInsure = partyHeroes.filter(h => !current.includes(h.id));
+      const cost = toInsure.reduce((s, h) => s + getInsuranceCost(h), 0);
+      if (G.gold < cost) { toast(`Need ${cost}g`, 'danger'); return; }
+      G.gold -= cost;
+      G.pendingInsurance = [...current, ...toInsure.map(h => h.id)];
+      saveGame();
+      renderActiveTab();
+      renderHUD();
+      toast(`Insured ${toInsure.length} heroes for ${cost}g`, 'success');
+    }));
+    if (pending.length > 0) {
+      btnRow.appendChild(btn('Clear All', 'btn-sm', () => {
+        // Refund all
+        let refund = 0;
+        for (const hid of pending) {
+          const h = getHero(hid);
+          if (h) refund += getInsuranceCost(h);
+        }
+        G.gold += refund;
         G.pendingInsurance = null;
         saveGame();
         renderActiveTab();
+        renderHUD();
+        toast(`Refunded ${refund}g`, 'info');
       }));
-    } else if (totalCost > 0) {
-      const canAfford = G.gold >= totalCost;
-      insSection.appendChild(btn(
-        canAfford ? `Insure Party (${totalCost}g)` : `Need ${totalCost}g`,
-        canAfford ? 'btn-sm btn-success btn-block' : 'btn-sm btn-block',
-        canAfford ? () => {
-          buyInsurance(G.raidParty);
-          saveGame();
-          renderActiveTab();
-          renderHUD();
-          toast(`Party insured for ${totalCost}g`, 'success');
-        } : null
-      ));
     }
+    insSection.appendChild(btnRow);
     container.appendChild(insSection);
   }
 
