@@ -3,7 +3,7 @@
 import { G, getHero, recalcHero, usedInventory, refreshRecruitPool, shouldRefreshRecruits, hireRecruit, saveGame, getSkillStatBonuses } from '../../state.js';
 import { CLASSES, STATS, STAT_DESC, GEAR_SLOTS, GEAR_SLOT_INFO, DAMAGE_TYPES } from '../../config.js';
 import { el } from '../../utils.js';
-import { heroCard, progressBar, statRow, btn, toast, itemDetail } from '../components.js';
+import { heroCard, progressBar, statRow, btn, toast, itemDetail, tip } from '../components.js';
 import { renderActiveTab } from '../router.js';
 import { renderHUD } from '../hud.js';
 import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getCritChance, getInitiative, getPenetration } from '../../raid/entities.js';
@@ -53,7 +53,7 @@ function showHeroProfile(hero) {
     const bonus = skillBonuses[stat] || 0;
     const total = base + bonus;
     const row = el('div', { class: 'stat-row', style: 'font-size: 11px;' }, [
-      el('span', { class: 'stat-label', text: stat }),
+      tip(stat, stat, STAT_DESC[stat]),
       el('span', { class: 'stat-value', text: bonus > 0 ? `${total} (${base}+${bonus})` : `${total}`, style: bonus > 0 ? 'color: var(--success);' : '' }),
     ]);
     statsCard.appendChild(row);
@@ -66,14 +66,18 @@ function showHeroProfile(hero) {
   const [dmgMin, dmgMax] = getWeaponDamage(hero);
   const dmgBonus = getDamageStat(hero);
   const pen = getPenetration(hero);
-  combatCard.appendChild(statRow('HP', `${hero.hp} / ${hero.maxHp}`));
-  combatCard.appendChild(statRow('MP', `${hero.mp} / ${hero.maxMp}`));
-  combatCard.appendChild(statRow('Damage', `${dmgMin}-${dmgMax} +${dmgBonus}`));
-  combatCard.appendChild(statRow('Accuracy', getAccuracy(hero)));
-  combatCard.appendChild(statRow('Crit Chance', `${getCritChance(hero)}%`));
-  combatCard.appendChild(statRow('Initiative', getInitiative(hero)));
-  combatCard.appendChild(statRow('Armor Pen', `${pen.armorPen}%`));
-  combatCard.appendChild(statRow('Magic Pen', `${pen.magicPen}%`));
+  const tipRow = (label, val, title, desc) => el('div', { class: 'stat-row', style: 'font-size: 11px;' }, [
+    tip(label, title, desc),
+    el('span', { class: 'stat-value', text: String(val) }),
+  ]);
+  combatCard.appendChild(tipRow('HP', `${hero.hp} / ${hero.maxHp}`, 'Hit Points', 'Health pool. Reach 0 and your hero falls in combat. Boosted by CON.'));
+  combatCard.appendChild(tipRow('MP', `${hero.mp} / ${hero.maxMp}`, 'Mana Points', 'Resource for class abilities. Boosted by INT.'));
+  combatCard.appendChild(tipRow('Damage', `${dmgMin}-${dmgMax} +${dmgBonus}`, 'Damage', 'Weapon base damage range plus stat bonus. Crits deal 2x.'));
+  combatCard.appendChild(tipRow('Accuracy', getAccuracy(hero), 'Accuracy', 'Hit chance = Accuracy / (Accuracy + target defense). Higher = more hits.'));
+  combatCard.appendChild(tipRow('Crit Chance', `${getCritChance(hero)}%`, 'Crit Chance', 'Chance to deal double damage on a hit. Boosted by DEX and gear.'));
+  combatCard.appendChild(tipRow('Initiative', getInitiative(hero), 'Initiative', 'Determines turn order in combat. Higher = act first. Based on DEX.'));
+  combatCard.appendChild(tipRow('Armor Pen', `${pen.armorPen}%`, 'Armor Penetration', 'Ignores this % of target armor before hit calc.'));
+  combatCard.appendChild(tipRow('Magic Pen', `${pen.magicPen}%`, 'Magic Penetration', 'Ignores this % of target magic resist before hit calc.'));
   screen.appendChild(combatCard);
 
   // Defenses

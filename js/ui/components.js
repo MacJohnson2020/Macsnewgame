@@ -66,6 +66,40 @@ export function btn(text, className = '', onClick = null) {
   return b;
 }
 
+// Tooltip — wraps text with a tap/hover popup
+export function tip(text, title, popupContent) {
+  const span = el('span', { class: 'tip-trigger', text });
+  const showTip = (ev) => {
+    hideAllTips();
+    const popup = el('div', { class: 'tip-popup' });
+    if (title) popup.appendChild(el('div', { class: 'tip-title', text: title }));
+    popup.appendChild(el('div', { text: popupContent }));
+    document.body.appendChild(popup);
+    // Position near the trigger
+    const rect = span.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+    let top = rect.bottom + 4;
+    let left = rect.left;
+    // Keep on screen
+    if (left + popupRect.width > window.innerWidth - 10) {
+      left = window.innerWidth - popupRect.width - 10;
+    }
+    if (top + popupRect.height > window.innerHeight - 10) {
+      top = rect.top - popupRect.height - 4;
+    }
+    popup.style.top = `${Math.max(10, top)}px`;
+    popup.style.left = `${Math.max(10, left)}px`;
+    // Auto-hide after 3s or on next tap
+    setTimeout(() => popup.remove(), 3000);
+  };
+  span.addEventListener('click', (ev) => { ev.stopPropagation(); showTip(ev); });
+  return span;
+}
+
+function hideAllTips() {
+  document.querySelectorAll('.tip-popup').forEach(p => p.remove());
+}
+
 // Item display
 export function itemDisplay(item, onClick = null) {
   const rarityClass = `rarity-${item.rarity || 'common'}`;

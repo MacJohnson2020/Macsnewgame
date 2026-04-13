@@ -1,6 +1,20 @@
 // === Voidborn — Stash Tab ===
 
 import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame, secureContainerCapacity, secureContainerUsed, canSecure, recalcHero } from '../../state.js';
+
+// Compare two items for stat diffs (positive = upgrade)
+function compareItemsDiff(newItem, oldItem) {
+  const diffs = [];
+  const stats = ['dmgMin', 'dmgMax', 'accuracy', 'armor', 'magicResist'];
+  const labels = { dmgMin: 'MinDmg', dmgMax: 'MaxDmg', accuracy: 'Acc', armor: 'Armor', magicResist: 'MR' };
+  for (const stat of stats) {
+    const newVal = newItem[stat] || 0;
+    const oldVal = oldItem ? (oldItem[stat] || 0) : 0;
+    const diff = newVal - oldVal;
+    if (diff !== 0) diffs.push({ stat: labels[stat], val: diff });
+  }
+  return diffs;
+}
 import { CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, MATERIALS, SKILLS } from '../../config.js';
 import { el } from '../../utils.js';
 import { itemDisplay, itemDetail, btn, statRow, toast, progressBar } from '../components.js';
@@ -287,22 +301,46 @@ function showStashItemActions(item) {
         }
       }
 
-      actions.appendChild(btn(
-        `${meetsReqs ? 'Equip on' : 'Cant equip:'} ${cls.icon} ${hero.name}`,
-        meetsReqs ? 'btn-primary btn-sm btn-block' : 'btn-sm btn-block',
-        meetsReqs ? () => {
+      // Build comparison row
+      const equipRow = el('div', { class: 'card', style: 'padding: 8px; margin-bottom: 4px; background: var(--bg-dark);' });
+      equipRow.appendChild(el('div', { style: 'display: flex; align-items: center; gap: 6px;' }, [
+        el('span', { text: cls.icon, style: 'font-size: 16px;' }),
+        el('span', { class: 'text-bright', text: hero.name, style: 'font-size: 12px; flex: 1;' }),
+      ]));
+
+      // Stat diff vs currently equipped
+      const equipped = hero.gear[item.slot];
+      const diffs = compareItemsDiff(item, equipped);
+      if (diffs.length > 0) {
+        const diffRow = el('div', { style: 'display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px;' });
+        for (const d of diffs) {
+          const color = d.val > 0 ? 'text-success' : d.val < 0 ? 'text-danger' : 'text-dim';
+          const sign = d.val > 0 ? '+' : '';
+          diffRow.appendChild(el('span', { class: color, text: `${sign}${d.val} ${d.stat}`, style: 'font-size: 10px;' }));
+        }
+        equipRow.appendChild(diffRow);
+      } else if (equipped) {
+        equipRow.appendChild(el('div', { class: 'text-dim', text: 'No stat changes', style: 'font-size: 10px; margin-top: 2px;' }));
+      }
+
+      if (meetsReqs) {
+        equipRow.appendChild(btn(equipped ? 'Replace' : 'Equip', 'btn-primary btn-sm', () => {
           const idx = G.stash.findIndex(i => i.id === item.id);
           if (idx >= 0) G.stash.splice(idx, 1);
           const slot = item.slot;
           if (hero.gear[slot]) G.stash.push(hero.gear[slot]);
           hero.gear[slot] = item;
+          recalcHero(hero);
           closeModal(modal);
           saveGame();
           renderActiveTab();
           renderHUD();
           toast(`${hero.name} equipped ${item.name}`, 'success');
-        } : null
-      ));
+        }));
+      } else {
+        equipRow.appendChild(el('span', { class: 'text-danger', text: 'Stat req not met', style: 'font-size: 10px;' }));
+      }
+      actions.appendChild(equipRow);
     }
   }
 
