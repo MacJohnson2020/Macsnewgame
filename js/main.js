@@ -35,13 +35,11 @@ function init() {
     renderHUD();
     switchTab('raid');
 
-    // Show welcome back
+    // Show offline progress summary if there's anything to report
     if (progress.minutes > 1) {
-      const msgs = [];
-      if (progress.gold > 0) msgs.push(`+${progress.gold} gold`);
-      if (progress.energy > 0) msgs.push(`+${progress.energy} energy`);
-      if (msgs.length > 0) {
-        toast(`Welcome back! (${progress.minutes}m) ${msgs.join(', ')}`, 'info');
+      const hasGains = progress.gold > 0 || progress.energy > 0 || progress.skillActions > 0;
+      if (hasGains) {
+        showOfflineProgress(progress);
       }
     }
   } else {
@@ -208,6 +206,72 @@ function showCharacterCreation() {
 }
 
 // Tutorial for new players
+// Offline progress summary popup
+function showOfflineProgress(progress) {
+  // Lazy import to avoid circular deps
+  import('./config.js').then(({ SKILLS, MATERIALS }) => {
+    const overlay = el('div', { class: 'offline-overlay' });
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const card = el('div', { class: 'card', style: 'max-width:420px;width:100%;padding:18px;max-height:80vh;overflow-y:auto;' });
+    card.appendChild(el('div', { class: 'text-bright', text: `Welcome back!`, style: 'font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px;' }));
+    card.appendChild(el('div', { class: 'text-dim', text: `You were away for ${progress.minutes} min`, style: 'font-size: 12px; text-align: center; margin-bottom: 12px;' }));
+
+    // Gold and energy
+    if (progress.gold > 0 || progress.energy > 0) {
+      const resDiv = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+      resDiv.appendChild(el('div', { class: 'text-dim', text: 'Resources', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+      if (progress.gold > 0) {
+        resDiv.appendChild(el('div', { class: 'text-warning', text: `+${progress.gold} gold (Foundry)`, style: 'font-size: 12px;' }));
+      }
+      if (progress.energy > 0) {
+        resDiv.appendChild(el('div', { class: 'text-accent', text: `+${progress.energy} energy (Generator)`, style: 'font-size: 12px;' }));
+      }
+      card.appendChild(resDiv);
+    }
+
+    // Skill training
+    if (progress.skillGains && Object.keys(progress.skillGains).length > 0) {
+      const skillDiv = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+      skillDiv.appendChild(el('div', { class: 'text-dim', text: 'Skills Trained', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+      for (const [skillId, gains] of Object.entries(progress.skillGains)) {
+        const sDef = SKILLS[skillId];
+        if (!sDef || gains.actions === 0) continue;
+        const levelText = gains.levelUps > 0 ? ` — +${gains.levelUps} level${gains.levelUps > 1 ? 's' : ''}!` : '';
+        const row = el('div', { class: 'text-success', text: `${sDef.icon} ${sDef.name}: ${gains.actions} actions, +${gains.xp} XP${levelText}`, style: 'font-size: 11px;' });
+        skillDiv.appendChild(row);
+      }
+      card.appendChild(skillDiv);
+    }
+
+    // Materials gained
+    if (progress.materialGains && Object.keys(progress.materialGains).length > 0) {
+      const matDiv = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+      matDiv.appendChild(el('div', { class: 'text-dim', text: 'Materials Gathered', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+      for (const [matId, count] of Object.entries(progress.materialGains)) {
+        const mat = MATERIALS[matId];
+        if (!mat) continue;
+        matDiv.appendChild(el('div', {
+          class: mat.rare ? 'rarity-text-rare' : 'text-bright',
+          text: `${mat.icon} ${mat.name} x${count}`,
+          style: 'font-size: 11px;',
+        }));
+      }
+      card.appendChild(matDiv);
+    }
+
+    card.appendChild(el('button', {
+      class: 'btn btn-primary btn-block btn-lg',
+      text: 'Continue',
+      onclick: () => overlay.remove(),
+      style: 'margin-top: 8px;',
+    }));
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  });
+}
+
 function showTutorial(heroName) {
   const steps = [
     { title: `Welcome, ${heroName}!`, text: 'Voidborn is an extraction RPG. Deploy into corrupted zones, fight enemies, collect loot, and extract alive to keep it all.' },

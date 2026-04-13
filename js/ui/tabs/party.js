@@ -1,11 +1,12 @@
 // === Voidborn — Party Tab ===
 
-import { G, getHero, recalcHero, usedInventory, refreshRecruitPool, shouldRefreshRecruits, hireRecruit, saveGame } from '../../state.js';
-import { CLASSES, STATS, STAT_DESC, GEAR_SLOTS, GEAR_SLOT_INFO } from '../../config.js';
+import { G, getHero, recalcHero, usedInventory, refreshRecruitPool, shouldRefreshRecruits, hireRecruit, saveGame, getSkillStatBonuses } from '../../state.js';
+import { CLASSES, STATS, STAT_DESC, GEAR_SLOTS, GEAR_SLOT_INFO, DAMAGE_TYPES } from '../../config.js';
 import { el } from '../../utils.js';
 import { heroCard, progressBar, statRow, btn, toast, itemDetail } from '../components.js';
 import { renderActiveTab } from '../router.js';
 import { renderHUD } from '../hud.js';
+import { getAccuracy, getArmor, getMagicResist, getDefense, getWeaponDamage, getDamageStat, getCritChance, getInitiative, getPenetration } from '../../raid/entities.js';
 
 export function renderPartyTab() {
   const container = el('div', { class: 'flex-col gap-md' });
@@ -26,6 +27,84 @@ export function renderPartyTab() {
   container.appendChild(renderRecruitment());
 
   return container;
+}
+
+// Full hero profile screen — derived stats + resistances
+function showHeroProfile(hero) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const cls = CLASSES[hero.classId];
+  const screen = el('div', { class: 'flex-col gap-md' });
+
+  // Header
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 16px;' }, [
+    el('div', { text: cls.icon, style: 'font-size: 36px; text-align: center;' }),
+    el('div', { class: 'text-bright', text: hero.name, style: 'font-size: 20px; font-weight: 700; text-align: center;' }),
+    el('div', { class: 'text-dim', text: `Level ${hero.level} ${cls.name}`, style: 'font-size: 12px; text-align: center;' }),
+  ]));
+
+  // Core stats (base + skill bonuses)
+  const statsCard = el('div', { class: 'card', style: 'padding: 12px;' });
+  statsCard.appendChild(el('div', { class: 'text-dim', text: 'Stats', style: 'font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;' }));
+  const skillBonuses = getSkillStatBonuses();
+  for (const stat of STATS) {
+    const base = hero.stats[stat];
+    const bonus = skillBonuses[stat] || 0;
+    const total = base + bonus;
+    const row = el('div', { class: 'stat-row', style: 'font-size: 11px;' }, [
+      el('span', { class: 'stat-label', text: stat }),
+      el('span', { class: 'stat-value', text: bonus > 0 ? `${total} (${base}+${bonus})` : `${total}`, style: bonus > 0 ? 'color: var(--success);' : '' }),
+    ]);
+    statsCard.appendChild(row);
+  }
+  screen.appendChild(statsCard);
+
+  // Combat stats (derived)
+  const combatCard = el('div', { class: 'card', style: 'padding: 12px;' });
+  combatCard.appendChild(el('div', { class: 'text-dim', text: 'Combat', style: 'font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;' }));
+  const [dmgMin, dmgMax] = getWeaponDamage(hero);
+  const dmgBonus = getDamageStat(hero);
+  const pen = getPenetration(hero);
+  combatCard.appendChild(statRow('HP', `${hero.hp} / ${hero.maxHp}`));
+  combatCard.appendChild(statRow('MP', `${hero.mp} / ${hero.maxMp}`));
+  combatCard.appendChild(statRow('Damage', `${dmgMin}-${dmgMax} +${dmgBonus}`));
+  combatCard.appendChild(statRow('Accuracy', getAccuracy(hero)));
+  combatCard.appendChild(statRow('Crit Chance', `${getCritChance(hero)}%`));
+  combatCard.appendChild(statRow('Initiative', getInitiative(hero)));
+  combatCard.appendChild(statRow('Armor Pen', `${pen.armorPen}%`));
+  combatCard.appendChild(statRow('Magic Pen', `${pen.magicPen}%`));
+  screen.appendChild(combatCard);
+
+  // Defenses
+  const defCard = el('div', { class: 'card', style: 'padding: 12px;' });
+  defCard.appendChild(el('div', { class: 'text-dim', text: 'Defenses', style: 'font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;' }));
+  defCard.appendChild(statRow('Armor', getArmor(hero)));
+  defCard.appendChild(statRow('Magic Resist', getMagicResist(hero)));
+  defCard.appendChild(el('div', { class: 'divider', style: 'margin: 6px 0;' }));
+  for (const [typeId, typeDef] of Object.entries(DAMAGE_TYPES)) {
+    if (typeId === 'physical' || typeId === 'magic') continue;
+    const value = getDefense(hero, typeId);
+    defCard.appendChild(statRow(`${typeDef.icon} ${typeDef.name}`, value));
+  }
+  screen.appendChild(defCard);
+
+  // Abilities
+  const abilCard = el('div', { class: 'card', style: 'padding: 12px;' });
+  abilCard.appendChild(el('div', { class: 'text-dim', text: 'Abilities', style: 'font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;' }));
+  for (const ability of cls.abilities) {
+    const unlocked = hero.level >= ability.level;
+    const row = el('div', { style: `padding: 4px 0; ${unlocked ? '' : 'opacity: 0.4;'}` });
+    row.appendChild(el('div', { class: 'text-bright', text: `${ability.name} (Lv.${ability.level})`, style: 'font-size: 11px; font-weight: 600;' }));
+    row.appendChild(el('div', { class: 'text-dim', text: ability.desc, style: 'font-size: 10px;' }));
+    row.appendChild(el('div', { class: 'text-accent', text: `${ability.mpCost} MP`, style: 'font-size: 10px;' }));
+    abilCard.appendChild(row);
+  }
+  screen.appendChild(abilCard);
+
+  // Back
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
 }
 
 function renderRecruitment() {
@@ -214,9 +293,12 @@ function renderHeroDetail(hero) {
     card.appendChild(abilRow);
   }
 
+  // Full Profile button
+  card.appendChild(el('div', { class: 'divider', style: 'margin: 8px 0;' }));
+  card.appendChild(btn('Full Profile', 'btn-sm btn-block', () => showHeroProfile(hero)));
+
   // Dismiss button (not for main hero)
   if (!hero.isMain) {
-    card.appendChild(el('div', { class: 'divider', style: 'margin: 8px 0;' }));
     card.appendChild(btn('Dismiss Hero', 'btn-danger btn-sm btn-block', () => {
       if (!confirm(`Dismiss ${hero.name}? They will be gone forever, along with all their gear.`)) return;
       G.heroes = G.heroes.filter(h => h.id !== hero.id);

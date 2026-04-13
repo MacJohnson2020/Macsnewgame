@@ -1,6 +1,6 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
-import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero } from '../../state.js';
+import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero, getInsuranceCost, buyInsurance, isHeroInsured } from '../../state.js';
 import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC, ENEMIES } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
@@ -67,6 +67,49 @@ function renderRaidPrep(container) {
   }
 
   container.appendChild(el('div', { class: 'divider' }));
+
+  // Insurance section
+  if (G.raidParty.length > 0) {
+    const insSection = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+    insSection.appendChild(el('div', { class: 'text-bright', text: 'Gear Insurance', style: 'font-weight: 700; font-size: 12px;' }));
+    insSection.appendChild(el('div', { class: 'text-dim', text: 'If a hero dies, their equipped gear is recovered to stash. Inventory items still lost.', style: 'font-size: 10px; margin-bottom: 6px;' }));
+
+    let totalCost = 0;
+    const partyHeroes = G.raidParty.map(id => getHero(id)).filter(Boolean);
+    for (const hero of partyHeroes) {
+      const cost = getInsuranceCost(hero);
+      totalCost += cost;
+      const insured = isHeroInsured(hero.id);
+      insSection.appendChild(el('div', { style: 'display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 0;' }, [
+        el('span', { class: insured ? 'text-success' : 'text-dim', text: insured ? '\u2705' : '\u2B1C' }),
+        el('span', { class: 'text-bright', text: hero.name, style: 'flex: 1;' }),
+        el('span', { class: 'text-warning', text: `${cost}g` }),
+      ]));
+    }
+
+    if (G.pendingInsurance && G.pendingInsurance.length > 0) {
+      insSection.appendChild(el('div', { class: 'text-success', text: `Party insured for next raid`, style: 'font-size: 11px; font-weight: 600; margin-top: 4px;' }));
+      insSection.appendChild(btn('Cancel Insurance', 'btn-sm', () => {
+        G.pendingInsurance = null;
+        saveGame();
+        renderActiveTab();
+      }));
+    } else if (totalCost > 0) {
+      const canAfford = G.gold >= totalCost;
+      insSection.appendChild(btn(
+        canAfford ? `Insure Party (${totalCost}g)` : `Need ${totalCost}g`,
+        canAfford ? 'btn-sm btn-success btn-block' : 'btn-sm btn-block',
+        canAfford ? () => {
+          buyInsurance(G.raidParty);
+          saveGame();
+          renderActiveTab();
+          renderHUD();
+          toast(`Party insured for ${totalCost}g`, 'success');
+        } : null
+      ));
+    }
+    container.appendChild(insSection);
+  }
 
   // Zone selection
   container.appendChild(el('div', { class: 'text-dim', text: 'Select Zone', style: 'font-weight: 600; margin-bottom: 4px;' }));
@@ -1515,6 +1558,9 @@ function renderResult(container, raid) {
   } else {
     if (result.itemsLost.length > 0) {
       summary.appendChild(statRow('Items Lost', result.itemsLost.length, 'text-danger'));
+    }
+    if (result.itemsRecovered && result.itemsRecovered.length > 0) {
+      summary.appendChild(statRow('Insurance Recovered', result.itemsRecovered.length, 'text-success'));
     }
     if (result.heroesLost.length > 0) {
       summary.appendChild(el('div', { class: 'text-danger', text: `Heroes downed: ${result.heroesLost.join(', ')}`, style: 'font-size: 12px;' }));
