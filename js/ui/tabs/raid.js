@@ -1,7 +1,7 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
 import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero } from '../../state.js';
-import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC } from '../../config.js';
+import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC, ENEMIES } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -81,6 +81,9 @@ function renderRaidPrep(container) {
     zoneCard.appendChild(el('div', { class: 'zone-level', text: `Level ${zone.levelRange[0]}-${zone.levelRange[1]} | ${zone.energyCost} energy` }));
     zoneCard.appendChild(el('div', { class: 'zone-desc', text: zone.desc }));
 
+    // Bestiary button always available
+    zoneCard.appendChild(btn('View Enemies', 'btn-sm', () => showBestiary(zone)));
+
     if (inRange && G.raidParty.length > 0) {
       zoneCard.appendChild(btn('Deploy', 'btn-primary btn-sm', () => {
         const raid = startRaid(zone.id);
@@ -99,6 +102,78 @@ function renderRaidPrep(container) {
   }
 
   return container;
+}
+
+// Bestiary screen — shows all enemies in a zone with stats and weaknesses
+function showBestiary(zone) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const screen = el('div', { class: 'flex-col gap-md' });
+
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: `${zone.icon} ${zone.name} Bestiary`, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: zone.desc, style: 'font-size: 11px; margin-top: 4px;' }),
+  ]));
+
+  const allEnemies = [...zone.enemies, ...(zone.elites || [])];
+  for (const enemyId of allEnemies) {
+    const template = ENEMIES[enemyId];
+    if (!template) continue;
+
+    const card = el('div', { class: `card ${template.elite ? 'rarity-epic' : ''}`, style: 'margin-bottom: 8px; padding: 10px;' });
+
+    card.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 6px;' }, [
+      el('span', { text: template.icon, style: 'font-size: 22px;' }),
+      el('div', { style: 'flex: 1;' }, [
+        el('div', { class: 'text-bright', text: template.name, style: 'font-weight: 700;' }),
+        el('div', { class: 'text-dim', text: [
+          template.elite ? 'ELITE' : '',
+          ...(template.tags || []),
+        ].filter(Boolean).join(' \u00B7 '), style: 'font-size: 10px;' }),
+      ]),
+    ]));
+
+    // Stats row
+    const statsDiv = el('div', { style: 'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;' });
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `HP ${template.hp}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `Armor ${template.armor}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `MR ${template.mr}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `Acc ${template.acc}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `Dmg ${template.dmg[0]}-${template.dmg[1]}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `XP ${template.xp}`, style: 'font-size: 10px;' }));
+    card.appendChild(statsDiv);
+
+    // Damage type
+    if (template.damageType) {
+      card.appendChild(el('div', { class: 'text-warning', text: `Deals ${template.damageType} damage`, style: 'font-size: 11px; font-weight: 600;' }));
+    }
+
+    // Weaknesses
+    if (template.weakTo && template.weakTo.length > 0) {
+      const row = el('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;' });
+      row.appendChild(el('span', { class: 'text-success', text: 'Weak:', style: 'font-size: 10px; font-weight: 700;' }));
+      for (const w of template.weakTo) {
+        row.appendChild(el('span', { class: 'text-success', text: w, style: 'font-size: 10px; background: rgba(46,204,113,0.1); padding: 1px 4px; border-radius: 3px;' }));
+      }
+      card.appendChild(row);
+    }
+
+    // Resistances
+    if (template.resistTo && template.resistTo.length > 0) {
+      const row = el('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;' });
+      row.appendChild(el('span', { class: 'text-danger', text: 'Resist:', style: 'font-size: 10px; font-weight: 700;' }));
+      for (const r of template.resistTo) {
+        row.appendChild(el('span', { class: 'text-danger', text: r, style: 'font-size: 10px; background: rgba(231,76,60,0.1); padding: 1px 4px; border-radius: 3px;' }));
+      }
+      card.appendChild(row);
+    }
+
+    screen.appendChild(card);
+  }
+
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
 }
 
 function togglePartyMember(heroId) {

@@ -257,6 +257,25 @@ function showStashItemActions(item) {
     return;
   }
 
+  // Apply coating to weapon
+  if (item.effect === 'weapon_poison' || item.effect === 'weapon_bleed' || item.effect === 'weapon_coating') {
+    actions.appendChild(btn('Apply to a weapon', 'btn-success btn-sm btn-block', () => {
+      closeModal(modal);
+      showCoatingTargetPicker(item);
+    }));
+    actions.appendChild(btn('Discard', 'btn-danger btn-sm btn-block', () => {
+      const idx = G.stash.findIndex(i => i.id === item.id);
+      if (idx >= 0) G.stash.splice(idx, 1);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+    }));
+    actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
+    modal.appendChild(actions);
+    document.body.appendChild(modal);
+    return;
+  }
+
   // Equip to hero
   if (item.slot) {
     for (const hero of G.heroes) {
@@ -376,6 +395,66 @@ function getUsedEnchantSlots(item) {
 }
 
 // Show picker to apply an enchant to a gear piece
+// Show picker to apply a weapon coating
+function showCoatingTargetPicker(coating) {
+  const modal = createModal();
+  modal.appendChild(el('div', { class: 'text-bright', text: `Apply ${coating.name}`, style: 'font-weight: 700; font-size: 14px; margin-bottom: 4px;' }));
+  modal.appendChild(el('div', { class: 'text-dim', text: `${coating.desc || ''} (5 charges)`, style: 'font-size: 11px; margin-bottom: 8px;' }));
+
+  // Collect all weapons (stash + hero equipped)
+  const allWeapons = [];
+  for (const it of G.stash) {
+    if (it.slot === 'weapon' && !it.isConsumable) {
+      allWeapons.push({ item: it, location: 'stash', hero: null });
+    }
+  }
+  for (const hero of G.heroes) {
+    if (!hero.gear) continue;
+    if (hero.gear.weapon) allWeapons.push({ item: hero.gear.weapon, location: 'equipped', hero });
+  }
+
+  if (allWeapons.length === 0) {
+    modal.appendChild(el('p', { class: 'text-dim', text: 'No weapons to coat.' }));
+  }
+
+  // Determine coating type from effect/name
+  const coatingName = coating.name.includes('Poison') ? 'Poison'
+    : coating.name.includes('Bleed') ? 'Bleed'
+    : coating.name.includes('Abyssal') ? 'Abyssal' : 'Coating';
+  const dotDamage = coating.value || 3;
+  const dotTurns = coating.turns || 2;
+
+  for (const { item, hero } of allWeapons) {
+    const row = el('div', { class: `loot-item rarity-${item.rarity || 'common'}`, style: 'padding: 6px; margin-bottom: 4px;' });
+    row.appendChild(el('div', { class: 'loot-item-info' }, [
+      el('span', { text: item.icon }),
+      el('span', { class: `rarity-text-${item.rarity || 'common'}`, text: item.name, style: 'font-size: 11px;' }),
+      item.coating ? el('span', { class: 'text-warning', text: ` (coated: ${item.coating.name})`, style: 'font-size: 9px;' }) : null,
+      hero ? el('span', { class: 'text-dim', text: ` — ${hero.name}`, style: 'font-size: 9px;' }) : el('span', { class: 'text-dim', text: ' — stash', style: 'font-size: 9px;' }),
+    ]));
+
+    row.appendChild(btn(item.coating ? 'Replace' : 'Apply', 'btn-sm btn-success', () => {
+      item.coating = {
+        name: coatingName,
+        damage: dotDamage,
+        turns: dotTurns,
+        charges: 5,
+      };
+      // Remove coating item from stash
+      const cIdx = G.stash.findIndex(i => i.id === coating.id);
+      if (cIdx >= 0) G.stash.splice(cIdx, 1);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+      toast(`${item.name} coated with ${coatingName} (5 charges)`, 'success');
+    }));
+    modal.appendChild(row);
+  }
+
+  modal.appendChild(btn('Cancel', 'btn-sm btn-block', () => closeModal(modal)));
+  document.body.appendChild(modal);
+}
+
 function showEnchantTargetPicker(enchant) {
   const modal = createModal();
   modal.appendChild(el('div', { class: 'text-bright', text: `Apply ${enchant.name}`, style: 'font-weight: 700; font-size: 14px; margin-bottom: 4px;' }));

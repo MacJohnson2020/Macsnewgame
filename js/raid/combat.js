@@ -221,6 +221,20 @@ export function attackAction(combat, attacker, target) {
     if (!isHero) trackBountyProgress('kill');
   }
 
+  // Apply weapon coating (poison/bleed/etc.) if hero with coated weapon
+  if (isHero && attacker.gear?.weapon?.coating && target.alive) {
+    const coat = attacker.gear.weapon.coating;
+    target.dots = target.dots || [];
+    target.dots.push({ name: coat.name, damage: coat.damage, turns: coat.turns });
+    combat.log.push({ type: 'ability', text: `  ${coat.name}: ${coat.damage}/turn for ${coat.turns} turns`, class: 'ability' });
+    // Decrement charges
+    coat.charges--;
+    if (coat.charges <= 0) {
+      attacker.gear.weapon.coating = null;
+      combat.log.push({ type: 'ability', text: `  ${attacker.name}'s coating wore off`, class: 'ability' });
+    }
+  }
+
   return { hit: true, damage, isCrit, hitChance };
 }
 
