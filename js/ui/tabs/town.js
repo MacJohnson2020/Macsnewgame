@@ -1,10 +1,10 @@
 // === Voidborn — Town Tab ===
 
-import { G, saveGame } from '../../state.js';
-import { BUILDINGS } from '../../config.js';
+import { G, saveGame, getHero, stopTraining, getTrainingSlots } from '../../state.js';
+import { BUILDINGS, SKILLS, CLASSES } from '../../config.js';
 import { el, fmtNum } from '../../utils.js';
 import { btn, card, statRow, toast, progressBar } from '../components.js';
-import { renderActiveTab } from '../router.js';
+import { renderActiveTab, switchTab } from '../router.js';
 import { renderHUD } from '../hud.js';
 
 export function renderTownTab() {
@@ -42,6 +42,39 @@ export function renderTownTab() {
       ));
     } else {
       bldgCard.appendChild(el('span', { class: 'text-success', text: 'MAX LEVEL', style: 'font-size: 12px; font-weight: 700;' }));
+    }
+
+    // Workshop: show active training
+    if (id === 'workshop') {
+      bldgCard.appendChild(el('div', { class: 'divider', style: 'margin: 8px 0;' }));
+      const slots = getTrainingSlots();
+      const usedSlots = G.trainingQueues.length;
+      bldgCard.appendChild(el('div', { class: 'text-dim', text: `Active Training: ${usedSlots}/${slots} slots`, style: 'font-size: 11px; font-weight: 700; margin-bottom: 4px;' }));
+
+      if (G.trainingQueues.length === 0) {
+        bldgCard.appendChild(el('div', { class: 'text-dim', text: 'No heroes training. Open Skills tab to start.', style: 'font-size: 10px; font-style: italic; margin-bottom: 6px;' }));
+      } else {
+        for (const queue of G.trainingQueues) {
+          const hero = getHero(queue.heroId);
+          const skillDef = SKILLS[queue.skillId];
+          if (!hero || !skillDef) continue;
+          const cls = CLASSES[hero.classId];
+          const row = el('div', { style: 'display: flex; align-items: center; gap: 6px; padding: 4px; background: var(--bg-dark); border-radius: 4px; margin-bottom: 3px;' });
+          row.appendChild(el('span', { text: cls.icon, style: 'font-size: 14px;' }));
+          row.appendChild(el('span', { class: 'text-bright', text: hero.name, style: 'font-size: 11px; font-weight: 600; flex: 1;' }));
+          row.appendChild(el('span', { text: skillDef.icon, style: 'font-size: 14px;' }));
+          row.appendChild(el('span', { class: 'text-dim', text: `${queue.actionsLeft} left`, style: 'font-size: 10px;' }));
+          row.appendChild(btn('Stop', 'btn-sm btn-danger', () => {
+            stopTraining(hero.id);
+            saveGame();
+            renderActiveTab();
+            toast(`${hero.name} stopped training`, 'info');
+          }));
+          bldgCard.appendChild(row);
+        }
+      }
+
+      bldgCard.appendChild(btn('Open Skills Tab', 'btn-sm btn-block', () => switchTab('skills')));
     }
 
     container.appendChild(bldgCard);

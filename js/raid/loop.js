@@ -49,7 +49,10 @@ export function startRaid(zoneId) {
     encounter: null,
     combat: null,
     result: null,
+    insuredHeroes: G.pendingInsurance ? [...G.pendingInsurance] : [], // hero IDs whose gear is insured
   };
+  // Clear pending insurance once consumed
+  G.pendingInsurance = null;
 
   path.nodes[0].visited = true;
   path.currentFloor = 0;
@@ -211,10 +214,24 @@ export function endRaid(raid, success) {
     }
   } else {
     G.totalDeaths++;
+    result.itemsRecovered = []; // gear saved by insurance
     for (const hero of party) {
       if (!hero.alive) {
         result.heroesLost.push(hero.name);
-        result.itemsLost.push(...hero.inventory, ...Object.values(hero.gear).filter(Boolean));
+        const isInsured = raid.insuredHeroes && raid.insuredHeroes.includes(hero.id);
+        const gearItems = Object.values(hero.gear).filter(Boolean);
+
+        if (isInsured) {
+          // Recover gear to stash
+          for (const g of gearItems) {
+            G.stash.push(g);
+            result.itemsRecovered.push(g);
+          }
+          // Inventory items still lost (only equipped gear is insured)
+          result.itemsLost.push(...hero.inventory);
+        } else {
+          result.itemsLost.push(...hero.inventory, ...gearItems);
+        }
         hero.inventory = [];
         hero.gear = Object.fromEntries(Object.keys(hero.gear).map(s => [s, null]));
       }

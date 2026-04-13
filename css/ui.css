@@ -310,3 +310,30 @@
   background: var(--bg-dark);
   border: 1px solid var(--border);
 }
+
+/* Tooltip — appears on tap/hover */
+.tip-trigger {
+  cursor: help;
+  border-bottom: 1px dotted var(--text-dim);
+  position: relative;
+}
+
+.tip-popup {
+  position: fixed;
+  z-index: 200;
+  background: var(--bg-dark);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  max-width: 240px;
+  font-size: 11px;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+.tip-popup .tip-title {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 4px;
+}

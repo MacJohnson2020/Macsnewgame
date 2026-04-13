@@ -2,7 +2,9 @@
 
 import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZE, MAX_ENERGY, GEAR_SLOTS,
   SECURE_CONTAINER_BASE, SECURE_PER_VAULT, SECURE_CONTAINER_MAX,
-  RECRUIT_BASE_COST, RECRUIT_POOL_BASE, RECRUIT_REFRESH_MS, HERO_NAMES, STARTING_STAT_POINTS } from './config.js';
+  RECRUIT_BASE_COST, RECRUIT_POOL_BASE, RECRUIT_REFRESH_MS, HERO_NAMES, STARTING_STAT_POINTS,
+  SKILLS, SKILL_MAX_LEVEL, SKILL_AFK_MAX, SKILL_TIERS, skillXpForLevel,
+  MATERIALS, getGatherableAt, getRareDropsAt, ACHIEVEMENTS } from './config.js';
 import { uid, deepClone, pick, randInt } from './utils.js';
 
 const SAVE_KEY = 'voidborn_save';
@@ -37,11 +39,15 @@ export function createHero(name, classId, stats) {
   return hero;
 }
 
-// Recalculate derived stats for a hero (includes gear substat bonuses)
+// Recalculate derived stats for a hero (includes gear substat + skill bonuses)
 export function recalcHero(hero) {
   const cls = CLASSES[hero.classId];
-  const conMod = Math.floor((hero.stats.CON - 10) / 2);
-  const intMod = Math.floor((hero.stats.INT - 10) / 2);
+  // Apply skill stat bonuses
+  const skillBonuses = getSkillStatBonuses();
+  const effectiveCON = hero.stats.CON + (skillBonuses.CON || 0);
+  const effectiveINT = hero.stats.INT + (skillBonuses.INT || 0);
+  const conMod = Math.floor((effectiveCON - 10) / 2);
+  const intMod = Math.floor((effectiveINT - 10) / 2);
 
   // Base + level + stat bonuses
   let maxHp = cls.hpBase + cls.hpPerLevel * (hero.level - 1) + conMod * 2;
@@ -125,6 +131,14 @@ export function newGameState() {
     recruitPool: [],
     lastRecruitRefresh: Date.now(),
 
+    // Skills (all 12, each has xp + level)
+    skills: Object.fromEntries(Object.keys(SKILLS).map(id => [id, { xp: 0, level: 1 }])),
+    materials: {}, // { material_id: count }
+    trainingQueues: [], // [{heroId, skillId, startTime, actionsLeft}]
+
+    // Insurance — hero IDs whose gear is paid up for the next raid
+    pendingInsurance: null,
+
     // Factions & Bounties
     factionRep: {
       delvers_guild: 0,
@@ -135,6 +149,9 @@ export function newGameState() {
     },
     activeBounties: [],  // [{id, factionId, type, desc, target, count, progress, rep, gold}]
     completedBounties: 0,
+
+    // Achievements — array of unlocked achievement IDs
+    achievements: [],
 
     // Meta
     deepestFloor: {},   // per zone: { zone_id: deepest_node }
@@ -193,9 +210,14 @@ function migrate(data) {
   if (!s.recruitPool) s.recruitPool = [];
   if (!s.lastRecruitRefresh) s.lastRecruitRefresh = Date.now();
   if (!s.secureContainer) s.secureContainer = [];
+  if (!s.skills) s.skills = Object.fromEntries(Object.keys(SKILLS).map(id => [id, { xp: 0, level: 1 }]));
+  if (!s.materials) s.materials = {};
+  if (!s.trainingQueues) s.trainingQueues = [];
+  if (s.pendingInsurance === undefined) s.pendingInsurance = null;
   if (!s.factionRep) s.factionRep = { delvers_guild: 0, iron_covenant: 0, shadow_market: 0, holy_order: 0, void_seekers: 0 };
   if (!s.activeBounties) s.activeBounties = [];
   if (s.completedBounties === undefined) s.completedBounties = 0;
+  if (!s.achievements) s.achievements = [];
   // Add autoBattle to existing heroes + migrate class IDs
   for (const hero of (s.heroes || [])) {
     if (hero.autoBattle === undefined) hero.autoBattle = null;
@@ -231,7 +253,7 @@ export function calcOfflineProgress() {
   const elapsed = now - G.lastOnline;
   const minutes = elapsed / 60000;
 
-  const progress = { gold: 0, energy: 0, minutes: Math.floor(minutes) };
+  const progress = { gold: 0, energy: 0, minutes: Math.floor(minutes), skillActions: 0 };
 
   // Foundry: gold per minute
   if (G.buildings.foundry > 0) {
@@ -247,8 +269,188 @@ export function calcOfflineProgress() {
   );
   G.energy = Math.min(G.energy + progress.energy, G.maxEnergy);
 
+  // Skill training — process queued actions (capped at AFK max)
+  progress.skillGains = {}; // skillId: { actions, xp, levelUps }
+  progress.materialGains = {}; // materialId: count
+  const cappedMinutes = Math.min(minutes, SKILL_AFK_MAX);
+  for (const queue of G.trainingQueues) {
+    if (queue.actionsLeft <= 0) continue;
+    const actionTime = 2; // 2 min per action
+    const actionsDone = Math.min(queue.actionsLeft, Math.floor(cappedMinutes / actionTime));
+    if (actionsDone > 0) {
+      const skillId = queue.skillId;
+      const startLevel = G.skills[skillId]?.level || 1;
+      const startMats = { ...G.materials };
+
+      for (let i = 0; i < actionsDone; i++) {
+        processSkillAction(skillId, queue.heroId);
+        queue.actionsLeft--;
+        progress.skillActions++;
+      }
+
+      // Track per-skill gains
+      const endLevel = G.skills[skillId]?.level || 1;
+      const tier = [...SKILL_TIERS].reverse().find(t => startLevel >= t.level) || SKILL_TIERS[0];
+      if (!progress.skillGains[skillId]) progress.skillGains[skillId] = { actions: 0, xp: 0, levelUps: 0 };
+      progress.skillGains[skillId].actions += actionsDone;
+      progress.skillGains[skillId].xp += actionsDone * tier.xp;
+      progress.skillGains[skillId].levelUps += endLevel - startLevel;
+
+      // Track material gains
+      for (const [matId, count] of Object.entries(G.materials)) {
+        const diff = count - (startMats[matId] || 0);
+        if (diff > 0) {
+          progress.materialGains[matId] = (progress.materialGains[matId] || 0) + diff;
+        }
+      }
+    }
+  }
+  // Remove finished queues
+  G.trainingQueues = G.trainingQueues.filter(q => q.actionsLeft > 0);
+
   G.lastOnline = now;
   return progress;
+}
+
+// Process a single skill action (gathering/training)
+export function processSkillAction(skillId, heroId) {
+  const skillDef = SKILLS[skillId];
+  if (!skillDef) return;
+  const skill = G.skills[skillId];
+  if (!skill || skill.level >= SKILL_MAX_LEVEL) return;
+
+  // Get tier for XP
+  const tier = [...SKILL_TIERS].reverse().find(t => skill.level >= t.level) || SKILL_TIERS[0];
+
+  // Award XP
+  skill.xp += tier.xp;
+
+  // Level up check
+  while (skill.level < SKILL_MAX_LEVEL) {
+    const needed = skillXpForLevel(skill.level + 1);
+    if (skill.xp < needed) break;
+    skill.xp -= needed;
+    skill.level++;
+  }
+
+  // Gathering: produce materials
+  if (skillDef.type === 'gathering') {
+    const mat = getGatherableAt(skillId, skill.level);
+    if (mat) {
+      const [matId] = mat;
+      G.materials[matId] = (G.materials[matId] || 0) + 1;
+    }
+    // Rare drop check
+    const rares = getRareDropsAt(skillId, skill.level);
+    if (rares.length > 0) {
+      const [rareId, rareDef] = rares[0]; // highest tier rare
+      if (Math.random() * 100 < rareDef.dropPct) {
+        G.materials[rareId] = (G.materials[rareId] || 0) + 1;
+      }
+    }
+  }
+}
+
+// Start training a skill
+export function startTraining(heroId, skillId) {
+  // Check workshop slots
+  const maxSlots = 1 + Math.floor(G.buildings.workshop / 3);
+  if (G.trainingQueues.length >= maxSlots) return false;
+
+  // Check hero not already training
+  if (G.trainingQueues.find(q => q.heroId === heroId)) return false;
+
+  // Check hero not in active raid
+  if (G.activeRaid && G.activeRaid.party.includes(heroId)) return false;
+
+  const maxActions = Math.floor(SKILL_AFK_MAX / 2); // 30 actions max (60 min / 2 min each)
+  G.trainingQueues.push({
+    heroId,
+    skillId,
+    startTime: Date.now(),
+    actionsLeft: maxActions,
+  });
+  return true;
+}
+
+// Stop training for a hero
+export function stopTraining(heroId) {
+  G.trainingQueues = G.trainingQueues.filter(q => q.heroId !== heroId);
+}
+
+// Check if hero is currently training
+export function isHeroTraining(heroId) {
+  return G.trainingQueues.some(q => q.heroId === heroId);
+}
+
+// Get skill stat bonuses (every 10 levels = +1)
+// === Insurance ===
+// Calculate insurance cost for a hero based on their gear value
+export function getInsuranceCost(hero) {
+  if (!hero || !hero.gear) return 0;
+  const rarityValue = { common: 5, uncommon: 12, rare: 30, epic: 75, legendary: 200 };
+  let cost = 0;
+  for (const slot of GEAR_SLOTS) {
+    const item = hero.gear[slot];
+    if (item) cost += rarityValue[item.rarity || 'common'] || 5;
+  }
+  // Shrine reduces cost
+  const shrineLevel = G.buildings.shrine || 0;
+  const discount = Math.min(0.5, shrineLevel * 0.05);
+  return Math.max(1, Math.floor(cost * (1 - discount)));
+}
+
+// Buy insurance for one or more heroes (pay gold, mark for next raid)
+export function buyInsurance(heroIds) {
+  let totalCost = 0;
+  for (const id of heroIds) {
+    const hero = getHero(id);
+    if (hero) totalCost += getInsuranceCost(hero);
+  }
+  if (G.gold < totalCost) return false;
+  G.gold -= totalCost;
+  G.pendingInsurance = [...heroIds];
+  return totalCost;
+}
+
+export function isHeroInsured(heroId) {
+  return G.pendingInsurance && G.pendingInsurance.includes(heroId);
+}
+
+// === Achievements ===
+// Check all achievements and unlock any that are newly met
+// Returns an array of newly unlocked achievements (for popup display)
+export function checkAchievements() {
+  const newlyUnlocked = [];
+  for (const ach of ACHIEVEMENTS) {
+    if (G.achievements.includes(ach.id)) continue;
+    try {
+      if (ach.check(G)) {
+        G.achievements.push(ach.id);
+        if (ach.rewardGold) G.gold += ach.rewardGold;
+        newlyUnlocked.push(ach);
+      }
+    } catch (e) {
+      // Ignore check errors (missing data etc.)
+    }
+  }
+  if (newlyUnlocked.length > 0) saveGame();
+  return newlyUnlocked;
+}
+
+export function getSkillStatBonuses() {
+  const bonuses = { STR: 0, DEX: 0, CON: 0, INT: 0, WIS: 0, CHA: 0 };
+  for (const [skillId, skillDef] of Object.entries(SKILLS)) {
+    const level = G.skills[skillId]?.level || 1;
+    const stat = skillDef.statBonus;
+    bonuses[stat] += Math.floor(level / 10);
+  }
+  return bonuses;
+}
+
+// Get workshop training slot count
+export function getTrainingSlots() {
+  return Math.min(4, 1 + Math.floor(G.buildings.workshop / 3));
 }
 
 // Get a hero by ID

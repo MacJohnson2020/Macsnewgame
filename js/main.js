@@ -1,6 +1,6 @@
 // === Voidborn — Main Entry Point ===
 
-import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear } from './state.js';
+import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear, processSkillAction, checkAchievements } from './state.js';
 import { CLASSES, STATS, STAT_DESC, STAT_DEFAULTS, STARTING_STAT_POINTS } from './config.js';
 import { el, uid } from './utils.js';
 import { initRouter, registerTab, switchTab, renderActiveTab } from './ui/router.js';
@@ -11,6 +11,7 @@ import { renderPartyTab } from './ui/tabs/party.js';
 import { renderStashTab } from './ui/tabs/stash.js';
 import { renderTownTab } from './ui/tabs/town.js';
 import { renderBountiesTab } from './ui/tabs/bounties.js';
+import { renderSkillsTab } from './ui/tabs/skills.js';
 
 // Initialize game
 function init() {
@@ -18,6 +19,7 @@ function init() {
   registerTab('raid', renderRaidTab);
   registerTab('party', renderPartyTab);
   registerTab('stash', renderStashTab);
+  registerTab('skills', renderSkillsTab);
   registerTab('town', renderTownTab);
   registerTab('bounties', renderBountiesTab);
 
@@ -33,13 +35,11 @@ function init() {
     renderHUD();
     switchTab('raid');
 
-    // Show welcome back
+    // Show offline progress summary if there's anything to report
     if (progress.minutes > 1) {
-      const msgs = [];
-      if (progress.gold > 0) msgs.push(`+${progress.gold} gold`);
-      if (progress.energy > 0) msgs.push(`+${progress.energy} energy`);
-      if (msgs.length > 0) {
-        toast(`Welcome back! (${progress.minutes}m) ${msgs.join(', ')}`, 'info');
+      const hasGains = progress.gold > 0 || progress.energy > 0 || progress.skillActions > 0;
+      if (hasGains) {
+        showOfflineProgress(progress);
       }
     }
   } else {
@@ -47,9 +47,15 @@ function init() {
     showCharacterCreation();
   }
 
-  // Auto-save every 30 seconds
+  // Auto-save + check achievements every 30 seconds
   setInterval(() => {
     if (G.heroes.length > 0) {
+      const unlocked = checkAchievements();
+      if (unlocked.length > 0) {
+        for (const ach of unlocked) {
+          showAchievementUnlock(ach);
+        }
+      }
       saveGame();
     }
   }, 30000);
@@ -62,6 +68,71 @@ function init() {
       renderHUD();
     }
   }, 60000);
+
+  // Skill training tick every 2 minutes (120 seconds)
+  setInterval(() => {
+    if (G.trainingQueues.length === 0) return;
+    for (const queue of G.trainingQueues) {
+      if (queue.actionsLeft > 0) {
+        processSkillAction(queue.skillId, queue.heroId);
+        queue.actionsLeft--;
+      }
+    }
+    G.trainingQueues = G.trainingQueues.filter(q => q.actionsLeft > 0);
+    saveGame();
+  }, 120000);
+
+  // Keyboard shortcuts
+  setupKeyboardShortcuts();
+}
+
+// Keyboard shortcuts for tab switching, escape to close modals
+function setupKeyboardShortcuts() {
+  const tabMap = {
+    '1': 'raid',
+    '2': 'party',
+    '3': 'stash',
+    '4': 'skills',
+    '5': 'town',
+    '6': 'bounties',
+  };
+
+  document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    // Close modals/overlays with Escape
+    if (e.key === 'Escape') {
+      const closers = [
+        '.settings-overlay',
+        '.achievements-overlay',
+        '.tutorial-overlay',
+        '.offline-overlay',
+        '.item-modal-backdrop',
+      ];
+      for (const sel of closers) {
+        const elFound = document.querySelector(sel);
+        if (elFound) {
+          elFound.remove();
+          return;
+        }
+      }
+      return;
+    }
+
+    // Tab switching 1-6 (not during raid)
+    if (!G.activeRaid && tabMap[e.key]) {
+      switchTab(tabMap[e.key]);
+      return;
+    }
+
+    // S = Settings
+    if ((e.key === 's' || e.key === 'S') && !G.activeRaid) {
+      const gearBtn = Array.from(document.querySelectorAll('#hud button')).find(b => b.textContent === '\u2699\uFE0F');
+      if (gearBtn) gearBtn.click();
+      return;
+    }
+  });
 }
 
 // Character creation screen
@@ -193,15 +264,106 @@ function showCharacterCreation() {
 }
 
 // Tutorial for new players
-function showTutorial(heroName) {
+// Achievement unlock popup (briefly)
+function showAchievementUnlock(ach) {
+  const overlay = el('div', { class: 'achievement-popup' });
+  overlay.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:101;background:linear-gradient(135deg,#f39c12,#e67e22);color:#000;padding:10px 16px;border-radius:8px;box-shadow:0 4px 20px rgba(243,156,18,0.5);display:flex;align-items:center;gap:10px;max-width:90%;animation:slideDown 0.4s;';
+  overlay.appendChild(el('span', { text: ach.icon, style: 'font-size: 28px;' }));
+  overlay.appendChild(el('div', {}, [
+    el('div', { text: 'Achievement Unlocked!', style: 'font-size: 11px; font-weight: 700; opacity: 0.8;' }),
+    el('div', { text: ach.name, style: 'font-size: 14px; font-weight: 900;' }),
+    el('div', { text: ach.desc, style: 'font-size: 11px;' }),
+    ach.rewardGold ? el('div', { text: `+${ach.rewardGold} gold`, style: 'font-size: 11px; font-weight: 700; color: #0d0d0d;' }) : null,
+  ]));
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 4000);
+}
+
+// Offline progress summary popup
+function showOfflineProgress(progress) {
+  // Lazy import to avoid circular deps
+  import('./config.js').then(({ SKILLS, MATERIALS }) => {
+    const overlay = el('div', { class: 'offline-overlay' });
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+    const card = el('div', { class: 'card', style: 'max-width:420px;width:100%;padding:18px;max-height:80vh;overflow-y:auto;' });
+    card.appendChild(el('div', { class: 'text-bright', text: `Welcome back!`, style: 'font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px;' }));
+    card.appendChild(el('div', { class: 'text-dim', text: `You were away for ${progress.minutes} min`, style: 'font-size: 12px; text-align: center; margin-bottom: 12px;' }));
+
+    // Gold and energy
+    if (progress.gold > 0 || progress.energy > 0) {
+      const resDiv = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+      resDiv.appendChild(el('div', { class: 'text-dim', text: 'Resources', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+      if (progress.gold > 0) {
+        resDiv.appendChild(el('div', { class: 'text-warning', text: `+${progress.gold} gold (Foundry)`, style: 'font-size: 12px;' }));
+      }
+      if (progress.energy > 0) {
+        resDiv.appendChild(el('div', { class: 'text-accent', text: `+${progress.energy} energy (Generator)`, style: 'font-size: 12px;' }));
+      }
+      card.appendChild(resDiv);
+    }
+
+    // Skill training
+    if (progress.skillGains && Object.keys(progress.skillGains).length > 0) {
+      const skillDiv = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+      skillDiv.appendChild(el('div', { class: 'text-dim', text: 'Skills Trained', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+      for (const [skillId, gains] of Object.entries(progress.skillGains)) {
+        const sDef = SKILLS[skillId];
+        if (!sDef || gains.actions === 0) continue;
+        const levelText = gains.levelUps > 0 ? ` — +${gains.levelUps} level${gains.levelUps > 1 ? 's' : ''}!` : '';
+        const row = el('div', { class: 'text-success', text: `${sDef.icon} ${sDef.name}: ${gains.actions} actions, +${gains.xp} XP${levelText}`, style: 'font-size: 11px;' });
+        skillDiv.appendChild(row);
+      }
+      card.appendChild(skillDiv);
+    }
+
+    // Materials gained
+    if (progress.materialGains && Object.keys(progress.materialGains).length > 0) {
+      const matDiv = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+      matDiv.appendChild(el('div', { class: 'text-dim', text: 'Materials Gathered', style: 'font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;' }));
+      for (const [matId, count] of Object.entries(progress.materialGains)) {
+        const mat = MATERIALS[matId];
+        if (!mat) continue;
+        matDiv.appendChild(el('div', {
+          class: mat.rare ? 'rarity-text-rare' : 'text-bright',
+          text: `${mat.icon} ${mat.name} x${count}`,
+          style: 'font-size: 11px;',
+        }));
+      }
+      card.appendChild(matDiv);
+    }
+
+    card.appendChild(el('button', {
+      class: 'btn btn-primary btn-block btn-lg',
+      text: 'Continue',
+      onclick: () => overlay.remove(),
+      style: 'margin-top: 8px;',
+    }));
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  });
+}
+
+export function showTutorial(heroName) {
+  const welcomeText = heroName
+    ? `Voidborn is an extraction RPG. Deploy into corrupted zones, fight enemies, collect loot, and extract alive to keep it all.`
+    : `Welcome back! Here's a refresher on how everything works.`;
+  const welcomeTitle = heroName ? `Welcome, ${heroName}!` : 'Voidborn Tutorial';
+
   const steps = [
-    { title: `Welcome, ${heroName}!`, text: 'Voidborn is an extraction RPG. Deploy into corrupted zones, fight enemies, collect loot, and extract alive to keep it all.' },
-    { title: 'Raids', text: 'Select your party and a zone on the Raid tab. Step through a branching path of encounters. Mystery nodes could be chests, traps, shrines, or merchants.' },
-    { title: 'Combat', text: 'Fight turn-based battles. Use abilities, items, or set auto-battle. Check enemy weaknesses — holy wrecks undead, fire kills beasts.' },
-    { title: 'Extraction', text: 'Reach an extraction point to keep your loot. If you die, you lose carried items but heroes revive in town with starter gear.' },
-    { title: 'Party', text: 'Hire more heroes from the Tavern on the Party tab. Up to 4 per raid. Each class has unique abilities.' },
-    { title: 'Bounties', text: 'Check the Bounties tab for faction quests. Complete them for gold and reputation. Higher rep unlocks perks and faction shops.' },
-    { title: 'Good luck!', text: 'Start with the Rust Crypts — undead enemies, weak to holy and fire. You have 3 health potions. Use them wisely.' },
+    { title: welcomeTitle, text: welcomeText },
+    { title: '1. Raids', text: 'Select a party (up to 4 heroes) and a zone on the Raid tab. Step through a branching path of encounters. Mystery nodes (?) could be chests, traps, shrines, or merchants until you visit them.' },
+    { title: '2. Combat', text: 'Turn-based battles. Use basic attacks, class abilities, items, or flee. Set auto-battle (Aggressive/Defensive/Supportive) to skip managing individual turns.' },
+    { title: '3. Weaknesses', text: 'Every enemy has weaknesses and resistances. Holy wrecks undead, fire burns beasts, lightning cracks constructs. Check the Bestiary button on each zone before deploying.' },
+    { title: '4. Extraction', text: 'Reach the extraction point (green ✅ node) to keep all your loot. If a hero dies their gear drops. If the whole party wipes, everything is lost — unless you bought Insurance.' },
+    { title: '5. Party & Hiring', text: 'Hire new heroes from the Tavern on the Party tab. 8 classes available: Berserker, Rogue, Arcanist, Cleric, Paladin, Ranger, Necromancer, Bard. Each has unique abilities and stat focuses.' },
+    { title: '6. Stash', text: 'Town Stash holds unlimited items. Move gear between heroes, apply enchants, coat weapons with poison. The Secure Container (small) NEVER loses items on wipes.' },
+    { title: '7. Skills', text: '12 skills: 4 gathering (Mining, Herbalism, Woodcutting, Fishing), 5 crafting (Smithing, Alchemy, Enchanting, Runecrafting, Cooking), 3 training (Agility, Leadership, Faith). Each gives +1 to a stat per 10 levels.' },
+    { title: '8. Town Buildings', text: 'Upgrade 6 buildings in Town: Generator (energy), Foundry (gold), Vault (secure container), Workshop (training slots), Tavern (hires), Shrine (insurance discount).' },
+    { title: '9. Bounties & Factions', text: '5 factions — Delvers Guild, Iron Covenant, Shadow Market, Holy Order, Void Seekers. Complete bounties to earn gold and rep. Rank up for perks and shop access.' },
+    { title: '10. Achievements', text: '22 achievements track your progress. Unlocking them pays gold rewards. Check them in the Settings menu (gear icon top-right).' },
+    { title: 'Good luck!', text: 'Start with the Rust Crypts — undead enemies, weak to holy and fire. You have 3 starter health potions. Use them wisely.' },
   ];
 
   let step = 0;
@@ -236,6 +398,9 @@ function showTutorial(heroName) {
 
   showStep();
 }
+
+// Expose for settings screen (avoid circular import)
+window._voidbornShowTutorial = () => showTutorial(null);
 
 // Start the game when DOM is ready
 if (document.readyState === 'loading') {

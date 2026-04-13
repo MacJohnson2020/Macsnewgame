@@ -1,7 +1,7 @@
 // === Voidborn — Raid Tab (Main Gameplay View) ===
 
-import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero } from '../../state.js';
-import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC } from '../../config.js';
+import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero, getInsuranceCost, buyInsurance, isHeroInsured } from '../../state.js';
+import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC, ENEMIES } from '../../config.js';
 import { el } from '../../utils.js';
 import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
 import { renderActiveTab } from '../router.js';
@@ -68,6 +68,90 @@ function renderRaidPrep(container) {
 
   container.appendChild(el('div', { class: 'divider' }));
 
+  // Insurance section — per-hero toggle
+  if (G.raidParty.length > 0) {
+    const insSection = el('div', { class: 'card', style: 'padding: 10px; margin-bottom: 8px;' });
+    insSection.appendChild(el('div', { class: 'text-bright', text: 'Gear Insurance', style: 'font-weight: 700; font-size: 12px;' }));
+    insSection.appendChild(el('div', { class: 'text-dim', text: 'Tap heroes to insure individually. Recovered gear goes to stash on death.', style: 'font-size: 10px; margin-bottom: 6px;' }));
+
+    const pending = G.pendingInsurance || [];
+    let totalCost = 0;
+
+    const partyHeroes = G.raidParty.map(id => getHero(id)).filter(Boolean);
+    for (const hero of partyHeroes) {
+      const cost = getInsuranceCost(hero);
+      const insured = pending.includes(hero.id);
+      if (insured) totalCost += cost;
+
+      const row = el('div', {
+        style: `display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px 6px; margin-bottom: 2px; border-radius: 4px; cursor: pointer; background: ${insured ? 'rgba(46,204,113,0.1)' : 'var(--bg-dark)'}; border: 1px solid ${insured ? 'var(--success)' : 'var(--border)'};`
+      });
+      row.appendChild(el('span', { class: insured ? 'text-success' : 'text-dim', text: insured ? '\u2705' : '\u2B1C', style: 'font-size: 14px;' }));
+      row.appendChild(el('span', { class: 'text-bright', text: hero.name, style: 'flex: 1;' }));
+      row.appendChild(el('span', { class: cost === 0 ? 'text-dim' : 'text-warning', text: `${cost}g` }));
+
+      row.onclick = () => {
+        // Toggle this hero in the pending list
+        const current = G.pendingInsurance || [];
+        let updated;
+        if (current.includes(hero.id)) {
+          // Uninsure — refund cost
+          updated = current.filter(id => id !== hero.id);
+          G.gold += cost;
+        } else {
+          // Insure — check gold
+          if (G.gold < cost) {
+            toast(`Need ${cost}g to insure ${hero.name}`, 'danger');
+            return;
+          }
+          G.gold -= cost;
+          updated = [...current, hero.id];
+        }
+        G.pendingInsurance = updated.length > 0 ? updated : null;
+        saveGame();
+        renderActiveTab();
+        renderHUD();
+      };
+      insSection.appendChild(row);
+    }
+
+    // Summary + bulk buttons
+    if (pending.length > 0) {
+      insSection.appendChild(el('div', { class: 'text-success', text: `${pending.length} hero${pending.length > 1 ? 'es' : ''} insured · ${totalCost}g paid`, style: 'font-size: 11px; font-weight: 600; margin-top: 4px;' }));
+    }
+    const btnRow = el('div', { style: 'display: flex; gap: 4px; margin-top: 4px;' });
+    btnRow.appendChild(btn('Insure All', 'btn-sm', () => {
+      const current = G.pendingInsurance || [];
+      const toInsure = partyHeroes.filter(h => !current.includes(h.id));
+      const cost = toInsure.reduce((s, h) => s + getInsuranceCost(h), 0);
+      if (G.gold < cost) { toast(`Need ${cost}g`, 'danger'); return; }
+      G.gold -= cost;
+      G.pendingInsurance = [...current, ...toInsure.map(h => h.id)];
+      saveGame();
+      renderActiveTab();
+      renderHUD();
+      toast(`Insured ${toInsure.length} heroes for ${cost}g`, 'success');
+    }));
+    if (pending.length > 0) {
+      btnRow.appendChild(btn('Clear All', 'btn-sm', () => {
+        // Refund all
+        let refund = 0;
+        for (const hid of pending) {
+          const h = getHero(hid);
+          if (h) refund += getInsuranceCost(h);
+        }
+        G.gold += refund;
+        G.pendingInsurance = null;
+        saveGame();
+        renderActiveTab();
+        renderHUD();
+        toast(`Refunded ${refund}g`, 'info');
+      }));
+    }
+    insSection.appendChild(btnRow);
+    container.appendChild(insSection);
+  }
+
   // Zone selection
   container.appendChild(el('div', { class: 'text-dim', text: 'Select Zone', style: 'font-weight: 600; margin-bottom: 4px;' }));
   for (const zone of ZONES) {
@@ -80,6 +164,9 @@ function renderRaidPrep(container) {
     zoneCard.appendChild(el('div', { class: 'zone-name', text: `${zone.icon} ${zone.name}` }));
     zoneCard.appendChild(el('div', { class: 'zone-level', text: `Level ${zone.levelRange[0]}-${zone.levelRange[1]} | ${zone.energyCost} energy` }));
     zoneCard.appendChild(el('div', { class: 'zone-desc', text: zone.desc }));
+
+    // Bestiary button always available
+    zoneCard.appendChild(btn('View Enemies', 'btn-sm', () => showBestiary(zone)));
 
     if (inRange && G.raidParty.length > 0) {
       zoneCard.appendChild(btn('Deploy', 'btn-primary btn-sm', () => {
@@ -99,6 +186,78 @@ function renderRaidPrep(container) {
   }
 
   return container;
+}
+
+// Bestiary screen — shows all enemies in a zone with stats and weaknesses
+function showBestiary(zone) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const screen = el('div', { class: 'flex-col gap-md' });
+
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: `${zone.icon} ${zone.name} Bestiary`, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: zone.desc, style: 'font-size: 11px; margin-top: 4px;' }),
+  ]));
+
+  const allEnemies = [...zone.enemies, ...(zone.elites || [])];
+  for (const enemyId of allEnemies) {
+    const template = ENEMIES[enemyId];
+    if (!template) continue;
+
+    const card = el('div', { class: `card ${template.elite ? 'rarity-epic' : ''}`, style: 'margin-bottom: 8px; padding: 10px;' });
+
+    card.appendChild(el('div', { class: 'flex gap-sm', style: 'align-items: center; margin-bottom: 6px;' }, [
+      el('span', { text: template.icon, style: 'font-size: 22px;' }),
+      el('div', { style: 'flex: 1;' }, [
+        el('div', { class: 'text-bright', text: template.name, style: 'font-weight: 700;' }),
+        el('div', { class: 'text-dim', text: [
+          template.elite ? 'ELITE' : '',
+          ...(template.tags || []),
+        ].filter(Boolean).join(' \u00B7 '), style: 'font-size: 10px;' }),
+      ]),
+    ]));
+
+    // Stats row
+    const statsDiv = el('div', { style: 'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;' });
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `HP ${template.hp}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `Armor ${template.armor}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `MR ${template.mr}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `Acc ${template.acc}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `Dmg ${template.dmg[0]}-${template.dmg[1]}`, style: 'font-size: 10px;' }));
+    statsDiv.appendChild(el('span', { class: 'text-dim', text: `XP ${template.xp}`, style: 'font-size: 10px;' }));
+    card.appendChild(statsDiv);
+
+    // Damage type
+    if (template.damageType) {
+      card.appendChild(el('div', { class: 'text-warning', text: `Deals ${template.damageType} damage`, style: 'font-size: 11px; font-weight: 600;' }));
+    }
+
+    // Weaknesses
+    if (template.weakTo && template.weakTo.length > 0) {
+      const row = el('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;' });
+      row.appendChild(el('span', { class: 'text-success', text: 'Weak:', style: 'font-size: 10px; font-weight: 700;' }));
+      for (const w of template.weakTo) {
+        row.appendChild(el('span', { class: 'text-success', text: w, style: 'font-size: 10px; background: rgba(46,204,113,0.1); padding: 1px 4px; border-radius: 3px;' }));
+      }
+      card.appendChild(row);
+    }
+
+    // Resistances
+    if (template.resistTo && template.resistTo.length > 0) {
+      const row = el('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;' });
+      row.appendChild(el('span', { class: 'text-danger', text: 'Resist:', style: 'font-size: 10px; font-weight: 700;' }));
+      for (const r of template.resistTo) {
+        row.appendChild(el('span', { class: 'text-danger', text: r, style: 'font-size: 10px; background: rgba(231,76,60,0.1); padding: 1px 4px; border-radius: 3px;' }));
+      }
+      card.appendChild(row);
+    }
+
+    screen.appendChild(card);
+  }
+
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
 }
 
 function togglePartyMember(heroId) {
@@ -703,6 +862,43 @@ function showAbilityTargetScreen(raid, combat, hero, ability) {
   content.appendChild(screen);
 }
 
+// Throwable target selection screen
+function showThrowTargetScreen(raid, combat, hero, item) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const screen = el('div', { class: 'flex-col gap-md' });
+
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: `${item.icon} ${item.name}`, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: item.desc || '', style: 'font-size: 12px; margin-top: 4px;' }),
+  ]));
+
+  screen.appendChild(el('div', { class: 'text-dim', text: 'Pick a target:', style: 'font-weight: 600; margin-bottom: 4px;' }));
+
+  for (const enemy of combat.enemies.filter(e => e.alive)) {
+    const tBtn = el('div', { class: 'combatant-card', style: 'cursor: pointer; margin-bottom: 6px;' });
+    tBtn.appendChild(el('div', { class: 'combatant-header' }, [
+      el('span', { class: 'combatant-icon', text: enemy.icon }),
+      el('div', { class: 'combatant-info' }, [
+        el('span', { class: 'combatant-name', text: enemy.name }),
+        el('span', { class: 'combatant-class', text: `HP: ${enemy.hp}/${enemy.maxHp}` }),
+      ]),
+    ]));
+    tBtn.appendChild(progressBar(enemy.hp, enemy.maxHp, 'hp', false));
+    tBtn.onclick = () => {
+      useItemAction(combat, hero, item, null, enemy);
+      nextTurn(combat);
+      saveGame();
+      renderActiveTab();
+    };
+    screen.appendChild(tBtn);
+  }
+
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
+}
+
 // Item picker during combat
 function showItemPicker(parent, combat, hero, raid) {
   const old = parent.querySelector('.item-picker');
@@ -716,18 +912,24 @@ function showItemPicker(parent, combat, hero, raid) {
     const row = el('button', { class: 'combat-action-btn', style: 'text-align: left;' });
     row.appendChild(el('span', { text: `${item.icon} ${item.name}` }));
     row.appendChild(el('span', { class: 'hit-chance', text: item.desc }));
+    const needsEnemyTarget = ['throw', 'throw_stun', 'throw_poison'].includes(item.effect);
     row.onclick = () => {
       if (item.effect === 'revive') {
-        // Pick a dead hero to revive
         const dead = combat.party.filter(h => !h.alive);
         if (dead.length === 0) { toast('No one to revive', 'info'); return; }
         useItemAction(combat, hero, item, dead[0]);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
+      } else if (needsEnemyTarget) {
+        // Open enemy target picker
+        showThrowTargetScreen(raid, combat, hero, item);
       } else {
         useItemAction(combat, hero, item);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
       }
-      nextTurn(combat);
-      saveGame();
-      renderActiveTab();
     };
     picker.appendChild(row);
   }
@@ -1397,6 +1599,9 @@ function renderResult(container, raid) {
   } else {
     if (result.itemsLost.length > 0) {
       summary.appendChild(statRow('Items Lost', result.itemsLost.length, 'text-danger'));
+    }
+    if (result.itemsRecovered && result.itemsRecovered.length > 0) {
+      summary.appendChild(statRow('Insurance Recovered', result.itemsRecovered.length, 'text-success'));
     }
     if (result.heroesLost.length > 0) {
       summary.appendChild(el('div', { class: 'text-danger', text: `Heroes downed: ${result.heroesLost.join(', ')}`, style: 'font-size: 12px;' }));
