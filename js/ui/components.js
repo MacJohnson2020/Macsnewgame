@@ -66,6 +66,68 @@ export function btn(text, className = '', onClick = null) {
   return b;
 }
 
+// Floating damage/heal number on a combatant card
+// type: 'damage', 'crit', 'heal', 'miss'
+export function showDamageNumber(entityId, amount, type = 'damage') {
+  const card = document.querySelector(`[data-entity-id="${entityId}"]`);
+  if (!card) return;
+
+  const colors = {
+    damage: '#e74c3c',
+    crit: '#f1c40f',
+    heal: '#2ecc71',
+    miss: '#7f8c8d',
+  };
+  const text = type === 'miss' ? 'MISS' : type === 'heal' ? `+${amount}` : `-${amount}`;
+
+  const num = el('div', { class: 'damage-number' });
+  num.textContent = text;
+  num.style.cssText = `
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: ${colors[type] || colors.damage};
+    font-size: ${type === 'crit' ? '22px' : '18px'};
+    font-weight: 900;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6);
+    pointer-events: none;
+    z-index: 50;
+    animation: dmgFloat 1s ease-out forwards;
+  `;
+  card.appendChild(num);
+  setTimeout(() => num.remove(), 1000);
+}
+
+// Show a one-time contextual tip if not already seen
+// Stored in G.seenTips array
+export function showContextTip(id, title, text) {
+  // Lazy reference to state to avoid circular imports
+  import('../state.js').then(({ G, saveGame }) => {
+    if (!G.seenTips) G.seenTips = [];
+    if (G.seenTips.includes(id)) return;
+    G.seenTips.push(id);
+    saveGame();
+
+    const overlay = el('div', { class: 'context-tip' });
+    overlay.style.cssText = 'position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:99;background:linear-gradient(135deg,#2c3e50,#34495e);color:#fff;padding:12px 16px;border-radius:8px;border:1px solid var(--accent);box-shadow:0 4px 16px rgba(0,0,0,0.6);max-width:90%;width:320px;animation:slideDown 0.4s;';
+    overlay.appendChild(el('div', {}, [
+      el('div', { text: '\uD83D\uDCA1 ' + title, style: 'font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px;' }),
+      el('div', { text, style: 'font-size: 11px; line-height: 1.4;' }),
+    ]));
+    const dismissBtn = el('button', {
+      text: 'Got it',
+      style: 'margin-top: 8px; width: 100%; padding: 6px; background: var(--accent); color: white; border: none; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;',
+    });
+    dismissBtn.onclick = () => overlay.remove();
+    overlay.appendChild(dismissBtn);
+
+    document.body.appendChild(overlay);
+    // Auto-dismiss after 15s
+    setTimeout(() => overlay.remove(), 15000);
+  });
+}
+
 // Tooltip — wraps text with a tap/hover popup
 export function tip(text, title, popupContent) {
   const span = el('span', { class: 'tip-trigger', text });
@@ -166,7 +228,8 @@ export function heroCard(hero, onClick = null) {
   const { CLASSES } = getConfig();
   const cls = CLASSES[hero.classId];
 
-  const c = el('div', { class: `combatant-card ${!hero.alive ? 'dead' : ''}` });
+  const c = el('div', { class: `combatant-card ${!hero.alive ? 'dead' : ''}`, 'data-entity-id': hero.id });
+  c.style.position = 'relative';
   c.appendChild(el('div', { class: 'combatant-header' }, [
     el('span', { class: 'combatant-icon', text: cls.icon }),
     el('div', { class: 'combatant-info' }, [
@@ -193,7 +256,8 @@ export function heroCard(hero, onClick = null) {
 
 // Enemy card (compact)
 export function enemyCard(enemy, onClick = null) {
-  const c = el('div', { class: `combatant-card ${!enemy.alive ? 'dead' : ''}` });
+  const c = el('div', { class: `combatant-card ${!enemy.alive ? 'dead' : ''}`, 'data-entity-id': enemy.id });
+  c.style.position = 'relative';
   c.appendChild(el('div', { class: 'combatant-header' }, [
     el('span', { class: 'combatant-icon', text: enemy.icon }),
     el('div', { class: 'combatant-info' }, [

@@ -39,6 +39,7 @@ export function createCombatState(party, enemies) {
     turnIndex: 0,
     round: 1,
     log: [],
+    events: [], // UI reads and clears each render — floating damage numbers
     state: 'active', // 'active', 'victory', 'defeat', 'fled'
     pendingAction: null, // waiting for player input
     xpEarned: 0,
@@ -161,6 +162,7 @@ export function attackAction(combat, attacker, target) {
       text: `${attacker.name} attacks ${target.name} — MISS (${hitChance}%)`,
       class: 'miss',
     });
+    combat.events.push({ type: 'miss', targetId: target.id });
     return { hit: false, hitChance };
   }
 
@@ -206,12 +208,14 @@ export function attackAction(combat, attacker, target) {
       text: `${attacker.name} CRITS ${target.name} for ${damage} damage!${weakTag}`,
       class: 'crit',
     });
+    combat.events.push({ type: 'crit', targetId: target.id, amount: damage });
   } else {
     combat.log.push({
       type: 'damage',
       text: `${attacker.name} hits ${target.name} for ${damage}${weakTag} (${hitChance}%)`,
       class: 'damage',
     });
+    combat.events.push({ type: 'damage', targetId: target.id, amount: damage });
   }
 
   if (target.hp <= 0) {
@@ -308,8 +312,10 @@ export function abilityAction(combat, hero, abilityId, target) {
       if (rollChance(critChance)) {
         damage *= 2;
         combat.log.push({ type: 'crit', text: `  → ${t.name}: CRIT! ${damage}${abilWeakTag}`, class: 'crit' });
+        combat.events.push({ type: 'crit', targetId: t.id, amount: damage });
       } else {
         combat.log.push({ type: 'damage', text: `  → ${t.name}: ${damage}${abilWeakTag}`, class: 'damage' });
+        combat.events.push({ type: 'damage', targetId: t.id, amount: damage });
       }
 
       damage = Math.max(1, Math.round(damage));
@@ -383,6 +389,7 @@ export function abilityAction(combat, hero, abilityId, target) {
       const healed = Math.round(t.maxHp * ability.healPct / 100);
       t.hp = Math.min(t.maxHp, t.hp + healed);
       combat.log.push({ type: 'heal', text: `  → ${t.name} healed for ${healed} HP`, class: 'heal' });
+      combat.events.push({ type: 'heal', targetId: t.id, amount: healed });
     }
   }
 
@@ -411,6 +418,7 @@ export function useItemAction(combat, hero, item, targetHero = null, targetEnemy
     case 'heal':
       target.hp = Math.min(target.maxHp, target.hp + item.value);
       combat.log.push({ type: 'heal', text: `${hero.name} uses ${item.name} on ${target.name} — healed ${item.value} HP`, class: 'heal' });
+      combat.events.push({ type: 'heal', targetId: target.id, amount: item.value });
       break;
     case 'mana':
       target.mp = Math.min(target.maxMp, target.mp + item.value);

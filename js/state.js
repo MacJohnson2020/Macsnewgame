@@ -7,8 +7,58 @@ import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZ
   MATERIALS, getGatherableAt, getRareDropsAt, ACHIEVEMENTS } from './config.js';
 import { uid, deepClone, pick, randInt } from './utils.js';
 
-const SAVE_KEY = 'voidborn_save';
+const SAVE_KEY_PREFIX = 'voidborn_save';
+const SLOT_KEY = 'voidborn_active_slot';
 const SAVE_VERSION = 1;
+const MAX_SLOTS = 3;
+
+// Get active save slot (defaults to 0)
+export function getActiveSlot() {
+  const s = localStorage.getItem(SLOT_KEY);
+  return s ? parseInt(s, 10) : 0;
+}
+
+export function setActiveSlot(slot) {
+  localStorage.setItem(SLOT_KEY, String(slot));
+}
+
+function saveKey(slot = getActiveSlot()) {
+  return slot === 0 ? SAVE_KEY_PREFIX : `${SAVE_KEY_PREFIX}_${slot}`;
+}
+
+// Get list of all slots with basic info (for slot picker)
+export function listSaveSlots() {
+  const slots = [];
+  for (let i = 0; i < MAX_SLOTS; i++) {
+    const key = i === 0 ? SAVE_KEY_PREFIX : `${SAVE_KEY_PREFIX}_${i}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      slots.push({ slot: i, empty: true });
+      continue;
+    }
+    try {
+      const data = JSON.parse(raw);
+      const state = data.state;
+      const mainHero = (state.heroes || []).find(h => h.isMain);
+      slots.push({
+        slot: i,
+        empty: false,
+        heroName: mainHero?.name || 'Unknown',
+        level: mainHero?.level || 1,
+        heroCount: (state.heroes || []).length,
+        gold: state.gold || 0,
+        raids: state.totalRaids || 0,
+        lastSave: state.lastSave,
+        className: mainHero?.classId || 'unknown',
+      });
+    } catch (e) {
+      slots.push({ slot: i, empty: true });
+    }
+  }
+  return slots;
+}
+
+export const MAX_SAVE_SLOTS = MAX_SLOTS;
 
 // Create a new hero
 export function createHero(name, classId, stats) {
@@ -152,6 +202,8 @@ export function newGameState() {
 
     // Achievements — array of unlocked achievement IDs
     achievements: [],
+    // Contextual tips seen (won't show again)
+    seenTips: [],
 
     // Meta
     deepestFloor: {},   // per zone: { zone_id: deepest_node }
@@ -181,7 +233,7 @@ export function saveGame() {
   G.lastSave = Date.now();
   const data = { version: SAVE_VERSION, state: deepClone(G) };
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(saveKey(), JSON.stringify(data));
   } catch (e) {
     console.warn('Save failed:', e);
   }
@@ -190,7 +242,7 @@ export function saveGame() {
 // Load from localStorage
 export function loadGame() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(saveKey());
     if (!raw) return false;
     const data = JSON.parse(raw);
     if (!data || !data.state) return false;
@@ -218,6 +270,11 @@ function migrate(data) {
   if (!s.activeBounties) s.activeBounties = [];
   if (s.completedBounties === undefined) s.completedBounties = 0;
   if (!s.achievements) s.achievements = [];
+  if (!s.seenTips) s.seenTips = [];
+  // Active raid combat: ensure events array exists for floating damage numbers
+  if (s.activeRaid && s.activeRaid.combat && !s.activeRaid.combat.events) {
+    s.activeRaid.combat.events = [];
+  }
   // Add autoBattle to existing heroes + migrate class IDs
   for (const hero of (s.heroes || [])) {
     if (hero.autoBattle === undefined) hero.autoBattle = null;
@@ -229,7 +286,7 @@ function migrate(data) {
 
 // Delete save
 export function deleteSave() {
-  localStorage.removeItem(SAVE_KEY);
+  localStorage.removeItem(saveKey());
 }
 
 // Get stash capacity based on Vault level

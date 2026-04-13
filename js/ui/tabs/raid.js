@@ -3,7 +3,7 @@
 import { G, getHero, saveGame, canCarry, giveStarterGear, recalcHero, getInsuranceCost, buyInsurance, isHeroInsured } from '../../state.js';
 import { ZONES, CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, STATS, STAT_DESC, ENEMIES } from '../../config.js';
 import { el } from '../../utils.js';
-import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast } from '../components.js';
+import { btn, card, heroCard, enemyCard, itemDisplay, itemDetail, corruptionBar, progressBar, statRow, toast, showDamageNumber, showContextTip } from '../components.js';
 import { renderActiveTab } from '../router.js';
 import { renderHUD } from '../hud.js';
 import { setNavVisible } from '../router.js';
@@ -396,6 +396,14 @@ function renderEncounter(container, raid) {
   const enc = raid.encounter;
   if (!enc) return renderExploring(container, raid);
 
+  // First-time encounter type tips
+  if (enc.type === 'chest') showContextTip('first_chest', 'Chests', 'Chests give gold and items. Pick which hero carries each item — items drop if that hero dies.');
+  if (enc.type === 'trap') showContextTip('first_trap', 'Traps', 'Traps damage your party. Heroes with high WIS can spot them and avoid damage.');
+  if (enc.type === 'shrine') showContextTip('first_shrine', 'Shrines', 'Shrines grant free buffs, heals, or gold. Always step on them — they have no downside.');
+  if (enc.type === 'merchant') showContextTip('first_merchant', 'Merchants', "Merchants sell items for gold. You can't come back once you continue, so buy what you need.");
+  if (enc.type === 'event') showContextTip('first_event', 'Events', 'Events offer a choice between safe and risky options. Risky choices can backfire but often pay more.');
+  if (enc.type === 'extraction') showContextTip('first_extract', 'Extraction Point', 'Extract now to keep everything! Or push deeper for more loot — but every step increases danger.');
+
   // Encounter card
   const encCard = el('div', { class: 'encounter-card' });
   encCard.appendChild(el('div', { class: 'encounter-icon', text: enc.icon }));
@@ -578,6 +586,10 @@ function renderCombat(container, raid) {
   const combat = raid.combat;
   if (!combat) return renderExploring(container, raid);
 
+  // First-time combat tip
+  showContextTip('first_combat', 'Combat Basics',
+    'Check enemy weaknesses (Weak/Resist tags on their cards). Holy damage wrecks undead, fire burns beasts. Use abilities to exploit weaknesses for bonus damage.');
+
   // Check combat state
   if (combat.state === 'victory') {
     return renderCombatVictory(container, raid);
@@ -662,6 +674,17 @@ function renderCombat(container, raid) {
     container.appendChild(log);
     // Scroll log to bottom
     setTimeout(() => log.scrollTop = log.scrollHeight, 0);
+  }
+
+  // Flush floating damage number events after DOM is attached
+  if (combat.events && combat.events.length > 0) {
+    const events = [...combat.events];
+    combat.events = [];
+    setTimeout(() => {
+      for (const ev of events) {
+        showDamageNumber(ev.targetId, ev.amount || 0, ev.type);
+      }
+    }, 50);
   }
 
   return container;
@@ -1230,6 +1253,8 @@ function showLevelUpScreen(heroes, index, raid) {
     renderActiveTab();
     return;
   }
+
+  showContextTip('first_levelup', 'Level Up!', 'Each level grants 2 stat points. Put them in your main attack stat (STR for melee, DEX for finesse, INT for magic) or CON for survivability.');
 
   const hero = heroes[index];
   const cls = CLASSES[hero.classId];
