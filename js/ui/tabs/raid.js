@@ -703,6 +703,43 @@ function showAbilityTargetScreen(raid, combat, hero, ability) {
   content.appendChild(screen);
 }
 
+// Throwable target selection screen
+function showThrowTargetScreen(raid, combat, hero, item) {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const screen = el('div', { class: 'flex-col gap-md' });
+
+  screen.appendChild(el('div', { class: 'encounter-card', style: 'padding: 12px;' }, [
+    el('div', { class: 'text-bright', text: `${item.icon} ${item.name}`, style: 'font-size: 18px; font-weight: 700;' }),
+    el('div', { class: 'text-dim', text: item.desc || '', style: 'font-size: 12px; margin-top: 4px;' }),
+  ]));
+
+  screen.appendChild(el('div', { class: 'text-dim', text: 'Pick a target:', style: 'font-weight: 600; margin-bottom: 4px;' }));
+
+  for (const enemy of combat.enemies.filter(e => e.alive)) {
+    const tBtn = el('div', { class: 'combatant-card', style: 'cursor: pointer; margin-bottom: 6px;' });
+    tBtn.appendChild(el('div', { class: 'combatant-header' }, [
+      el('span', { class: 'combatant-icon', text: enemy.icon }),
+      el('div', { class: 'combatant-info' }, [
+        el('span', { class: 'combatant-name', text: enemy.name }),
+        el('span', { class: 'combatant-class', text: `HP: ${enemy.hp}/${enemy.maxHp}` }),
+      ]),
+    ]));
+    tBtn.appendChild(progressBar(enemy.hp, enemy.maxHp, 'hp', false));
+    tBtn.onclick = () => {
+      useItemAction(combat, hero, item, null, enemy);
+      nextTurn(combat);
+      saveGame();
+      renderActiveTab();
+    };
+    screen.appendChild(tBtn);
+  }
+
+  screen.appendChild(btn('\u2190 Back', 'btn-block', () => renderActiveTab()));
+  content.appendChild(screen);
+}
+
 // Item picker during combat
 function showItemPicker(parent, combat, hero, raid) {
   const old = parent.querySelector('.item-picker');
@@ -716,18 +753,24 @@ function showItemPicker(parent, combat, hero, raid) {
     const row = el('button', { class: 'combat-action-btn', style: 'text-align: left;' });
     row.appendChild(el('span', { text: `${item.icon} ${item.name}` }));
     row.appendChild(el('span', { class: 'hit-chance', text: item.desc }));
+    const needsEnemyTarget = ['throw', 'throw_stun', 'throw_poison'].includes(item.effect);
     row.onclick = () => {
       if (item.effect === 'revive') {
-        // Pick a dead hero to revive
         const dead = combat.party.filter(h => !h.alive);
         if (dead.length === 0) { toast('No one to revive', 'info'); return; }
         useItemAction(combat, hero, item, dead[0]);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
+      } else if (needsEnemyTarget) {
+        // Open enemy target picker
+        showThrowTargetScreen(raid, combat, hero, item);
       } else {
         useItemAction(combat, hero, item);
+        nextTurn(combat);
+        saveGame();
+        renderActiveTab();
       }
-      nextTurn(combat);
-      saveGame();
-      renderActiveTab();
     };
     picker.appendChild(row);
   }

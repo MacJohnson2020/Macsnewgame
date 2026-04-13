@@ -387,8 +387,8 @@ export function abilityAction(combat, hero, abilityId, target) {
   return { results };
 }
 
-// Use an item in combat
-export function useItemAction(combat, hero, item, targetHero = null) {
+// Use an item in combat (target can be hero ally OR enemy depending on item)
+export function useItemAction(combat, hero, item, targetHero = null, targetEnemy = null) {
   if (!item.isConsumable) return { error: 'Not a consumable' };
 
   const target = targetHero || hero;
@@ -406,6 +406,126 @@ export function useItemAction(combat, hero, item, targetHero = null) {
       target.dots = [];
       combat.log.push({ type: 'heal', text: `${hero.name} uses ${item.name} on ${target.name} — cured!`, class: 'heal' });
       break;
+    case 'heal_both':
+      target.hp = Math.min(target.maxHp, target.hp + item.value);
+      target.mp = Math.min(target.maxMp, target.mp + item.value);
+      combat.log.push({ type: 'heal', text: `${hero.name} uses ${item.name} on ${target.name} — +${item.value} HP/MP`, class: 'heal' });
+      break;
+    case 'heal_buff': {
+      target.hp = Math.min(target.maxHp, target.hp + item.value);
+      const buffVal = item.buff || 10;
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'damage', value: buffVal, turns: 99 });
+      combat.log.push({ type: 'heal', text: `${hero.name} eats ${item.name} — heal ${item.value} HP, +${buffVal}% damage`, class: 'heal' });
+      break;
+    }
+    case 'heal_both_buff': {
+      target.hp = Math.min(target.maxHp, target.hp + item.value);
+      target.mp = Math.min(target.maxMp, target.mp + (item.mana || item.value));
+      const buffVal = item.buff || 10;
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'damage', value: buffVal, turns: 99 });
+      combat.log.push({ type: 'heal', text: `${hero.name} feasts on ${item.name} — full meal!`, class: 'heal' });
+      break;
+    }
+    case 'buff_damage':
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'damage', value: item.value, turns: 99 });
+      combat.log.push({ type: 'ability', text: `${hero.name} uses ${item.name} — +${item.value}% damage this fight`, class: 'ability' });
+      break;
+    case 'buff_armor':
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'armor', value: item.value, turns: 99 });
+      combat.log.push({ type: 'ability', text: `${hero.name} uses ${item.name} — +${item.value}% armor this fight`, class: 'ability' });
+      break;
+    case 'buff_resist':
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'allResist', value: item.value, turns: 99 });
+      combat.log.push({ type: 'ability', text: `${hero.name} uses ${item.name} — +${item.value}% all resist this fight`, class: 'ability' });
+      break;
+    case 'buff_accuracy':
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'accuracy', value: item.value, turns: 99 });
+      combat.log.push({ type: 'ability', text: `${hero.name} uses ${item.name} — +${item.value} accuracy this fight`, class: 'ability' });
+      break;
+    case 'buff_crit':
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'critChance', value: item.value, turns: 99 });
+      combat.log.push({ type: 'ability', text: `${hero.name} uses ${item.name} — +${item.value}% crit this fight`, class: 'ability' });
+      break;
+    case 'buff_all':
+      target.buffs = target.buffs || [];
+      target.buffs.push({ stat: 'damage', value: item.value, turns: 99 });
+      target.buffs.push({ stat: 'allResist', value: item.value, turns: 99 });
+      combat.log.push({ type: 'ability', text: `${hero.name} drinks ${item.name} — +${item.value}% damage AND resist!`, class: 'ability' });
+      break;
+
+    // === Throwables ===
+    case 'throw': {
+      if (!targetEnemy) return { error: 'Need an enemy target' };
+      const dmg = item.value || 5;
+      targetEnemy.hp -= dmg;
+      combat.log.push({ type: 'damage', text: `${hero.name} throws ${item.name} at ${targetEnemy.name} for ${dmg}!`, class: 'damage' });
+      if (targetEnemy.hp <= 0) {
+        targetEnemy.hp = 0;
+        targetEnemy.alive = false;
+        combat.log.push({ type: 'death', text: `${targetEnemy.name} has been slain!`, class: 'death' });
+      }
+      break;
+    }
+    case 'throw_aoe': {
+      const dmg = item.value || 10;
+      combat.log.push({ type: 'ability', text: `${hero.name} throws ${item.name}!`, class: 'ability' });
+      for (const e of combat.enemies.filter(x => x.alive)) {
+        e.hp -= dmg;
+        combat.log.push({ type: 'damage', text: `  → ${e.name}: ${dmg} damage`, class: 'damage' });
+        if (e.hp <= 0) {
+          e.hp = 0;
+          e.alive = false;
+          combat.log.push({ type: 'death', text: `  ${e.name} has been slain!`, class: 'death' });
+        }
+      }
+      break;
+    }
+    case 'throw_stun': {
+      if (!targetEnemy) return { error: 'Need an enemy target' };
+      const dmg = item.value || 8;
+      targetEnemy.hp -= dmg;
+      targetEnemy.debuffs = targetEnemy.debuffs || [];
+      targetEnemy.debuffs.push({ stat: 'stunned', value: 1, turns: 1 });
+      combat.log.push({ type: 'ability', text: `${hero.name} throws ${item.name} at ${targetEnemy.name} — ${dmg} damage and STUNNED!`, class: 'ability' });
+      if (targetEnemy.hp <= 0) {
+        targetEnemy.hp = 0;
+        targetEnemy.alive = false;
+        combat.log.push({ type: 'death', text: `${targetEnemy.name} has been slain!`, class: 'death' });
+      }
+      break;
+    }
+    case 'throw_debuff': {
+      // AoE accuracy debuff (flash bomb)
+      combat.log.push({ type: 'ability', text: `${hero.name} throws ${item.name}!`, class: 'ability' });
+      for (const e of combat.enemies.filter(x => x.alive)) {
+        e.debuffs = e.debuffs || [];
+        e.debuffs.push({ stat: item.stat || 'accuracy', value: -(item.value || 20), turns: item.turns || 2 });
+      }
+      combat.log.push({ type: 'ability', text: `  All enemies: -${item.value}% ${item.stat || 'accuracy'} for ${item.turns || 2} turns`, class: 'ability' });
+      break;
+    }
+    case 'throw_poison': {
+      if (!targetEnemy) return { error: 'Need an enemy target' };
+      const dmg = item.value || 8;
+      targetEnemy.hp -= dmg;
+      targetEnemy.dots = targetEnemy.dots || [];
+      targetEnemy.dots.push({ name: 'Poison', damage: 3, turns: item.turns || 2 });
+      combat.log.push({ type: 'ability', text: `${hero.name} throws ${item.name} at ${targetEnemy.name} — ${dmg} + poison`, class: 'ability' });
+      if (targetEnemy.hp <= 0) {
+        targetEnemy.hp = 0;
+        targetEnemy.alive = false;
+        combat.log.push({ type: 'death', text: `${targetEnemy.name} has been slain!`, class: 'death' });
+      }
+      break;
+    }
+
     case 'revive':
       if (target.alive) return { error: 'Target is alive' };
       target.alive = true;

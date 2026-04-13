@@ -1,6 +1,6 @@
 // === Voidborn — Stash Tab ===
 
-import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame, secureContainerCapacity, secureContainerUsed, canSecure } from '../../state.js';
+import { G, stashCapacity, stashUsed, canStash, getHero, usedInventory, saveGame, secureContainerCapacity, secureContainerUsed, canSecure, recalcHero } from '../../state.js';
 import { CLASSES, GEAR_SLOTS, GEAR_SLOT_INFO, MATERIALS, SKILLS } from '../../config.js';
 import { el } from '../../utils.js';
 import { itemDisplay, itemDetail, btn, statRow, toast, progressBar } from '../components.js';
@@ -238,6 +238,25 @@ function showStashItemActions(item) {
 
   const actions = el('div', { class: 'flex-col gap-sm', style: 'margin-top: 8px;' });
 
+  // Apply enchant to gear
+  if (item.isEnchant) {
+    actions.appendChild(btn('Apply to a gear piece', 'btn-success btn-sm btn-block', () => {
+      closeModal(modal);
+      showEnchantTargetPicker(item);
+    }));
+    actions.appendChild(btn('Discard', 'btn-danger btn-sm btn-block', () => {
+      const idx = G.stash.findIndex(i => i.id === item.id);
+      if (idx >= 0) G.stash.splice(idx, 1);
+      closeModal(modal);
+      saveGame();
+      renderActiveTab();
+    }));
+    actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
+    modal.appendChild(actions);
+    document.body.appendChild(modal);
+    return;
+  }
+
   // Equip to hero
   if (item.slot) {
     for (const hero of G.heroes) {
@@ -338,6 +357,93 @@ function showSecureItemActions(item) {
 
   actions.appendChild(btn('Close', 'btn-sm btn-block', () => closeModal(modal)));
   modal.appendChild(actions);
+  document.body.appendChild(modal);
+}
+
+// Calculate how many enchant slots a gear item has based on rarity
+function getMaxEnchantSlots(item) {
+  const rarity = item.rarity || 'common';
+  if (rarity === 'common') return 1;
+  if (rarity === 'uncommon') return 2;
+  return 3; // rare, epic, legendary
+}
+
+// Calculate how many slots are currently used by existing substats
+function getUsedEnchantSlots(item) {
+  if (!item.substats) return 0;
+  // Each substat uses 1 slot
+  return item.substats.length;
+}
+
+// Show picker to apply an enchant to a gear piece
+function showEnchantTargetPicker(enchant) {
+  const modal = createModal();
+  modal.appendChild(el('div', { class: 'text-bright', text: `Apply ${enchant.name}`, style: 'font-weight: 700; font-size: 14px; margin-bottom: 4px;' }));
+  modal.appendChild(el('div', { class: 'text-dim', text: `Adds: ${enchant.substats.map(s => `+${s.value} ${s.id}`).join(', ')}`, style: 'font-size: 11px; margin-bottom: 4px;' }));
+  modal.appendChild(el('div', { class: 'text-warning', text: `Requires ${enchant.enchantSlots} slot${enchant.enchantSlots > 1 ? 's' : ''}`, style: 'font-size: 11px; margin-bottom: 8px;' }));
+
+  // Collect all gear (stash + hero equipped)
+  const allGear = [];
+  for (const item of G.stash) {
+    if (item.slot && !item.isConsumable && !item.isEnchant && !item.isMaterial) {
+      allGear.push({ item, location: 'stash', hero: null });
+    }
+  }
+  for (const hero of G.heroes) {
+    if (!hero.gear) continue;
+    for (const slot of GEAR_SLOTS) {
+      const g = hero.gear[slot];
+      if (g) allGear.push({ item: g, location: 'equipped', hero });
+    }
+  }
+
+  if (allGear.length === 0) {
+    modal.appendChild(el('p', { class: 'text-dim', text: 'No gear to enchant.' }));
+  }
+
+  for (const { item, location, hero } of allGear) {
+    const maxSlots = getMaxEnchantSlots(item);
+    const used = getUsedEnchantSlots(item);
+    const free = maxSlots - used;
+    const fits = free >= enchant.enchantSlots;
+
+    const row = el('div', { class: `loot-item rarity-${item.rarity}`, style: `padding: 6px; margin-bottom: 4px; ${fits ? '' : 'opacity: 0.5;'}` });
+    row.appendChild(el('div', { class: 'loot-item-info' }, [
+      el('span', { text: item.icon }),
+      el('span', { class: `rarity-text-${item.rarity}`, text: item.name, style: 'font-size: 11px;' }),
+      el('span', { class: 'text-dim', text: `(${used}/${maxSlots} slots)`, style: 'font-size: 9px;' }),
+      hero ? el('span', { class: 'text-dim', text: ` — ${hero.name}`, style: 'font-size: 9px;' }) : el('span', { class: 'text-dim', text: ' — stash', style: 'font-size: 9px;' }),
+    ]));
+
+    if (fits) {
+      row.appendChild(btn('Apply', 'btn-sm btn-success', () => {
+        // Add the substats
+        item.substats = item.substats || [];
+        for (const sub of enchant.substats) {
+          // Get the substat name from id
+          const subName = sub.id;
+          item.substats.push({ id: sub.id, name: subName, value: sub.value, suffix: subName.includes('Pen') || subName === 'critChance' ? '%' : '' });
+        }
+        // Remove enchant from stash
+        const eIdx = G.stash.findIndex(i => i.id === enchant.id);
+        if (eIdx >= 0) G.stash.splice(eIdx, 1);
+
+        // Recalc hero if equipped (in case maxHp/maxMp changed)
+        if (hero) recalcHero(hero);
+
+        closeModal(modal);
+        saveGame();
+        renderActiveTab();
+        renderHUD();
+        toast(`Applied ${enchant.name} to ${item.name}`, 'success');
+      }));
+    } else {
+      row.appendChild(el('span', { class: 'text-danger', text: 'No room', style: 'font-size: 10px;' }));
+    }
+    modal.appendChild(row);
+  }
+
+  modal.appendChild(btn('Cancel', 'btn-sm btn-block', () => closeModal(modal)));
   document.body.appendChild(modal);
 }
 

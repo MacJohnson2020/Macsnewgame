@@ -38,21 +38,27 @@ export function getAccuracy(hero) {
   return Math.max(1, acc);
 }
 
-// Get hero's armor (physical defense) — sum from all gear slots
+// Get hero's armor (physical defense) — sum from all gear slots + buff %
 export function getArmor(hero) {
   let armor = 0;
   for (const slot of GEAR_SLOTS) {
     if (hero.gear[slot] && hero.gear[slot].armor) armor += hero.gear[slot].armor;
   }
+  // Apply armor % buff (food, paladin shield, etc.)
+  const buffPct = getBuffValue(hero, 'armor');
+  if (buffPct) armor = Math.round(armor * (1 + buffPct / 100));
   return armor;
 }
 
-// Get hero's magic resist — sum from all gear slots + WIS
+// Get hero's magic resist — sum from all gear slots + WIS + buffs
 export function getMagicResist(hero) {
   let mr = statMod(effStat(hero, 'WIS')) * 2;
   for (const slot of GEAR_SLOTS) {
     if (hero.gear[slot] && hero.gear[slot].magicResist) mr += hero.gear[slot].magicResist;
   }
+  // Apply MR % buff
+  const buffPct = getBuffValue(hero, 'magicResist') + getBuffValue(hero, 'allResist');
+  if (buffPct) mr = Math.round(mr * (1 + buffPct / 100));
   return Math.max(0, mr);
 }
 
@@ -72,6 +78,9 @@ export function getDefense(entity, damageType) {
 
     if (entity.gear) {
       base = getSubstatTotal(entity, resistKey) + (entity[resistKey] || 0);
+      // Apply all-resist buff for heroes (food/potions)
+      const allResist = getBuffValue(entity, 'allResist');
+      if (allResist) base = Math.round(base * (1 + allResist / 100));
     } else {
       base = entity[resistKey] || 0;
     }
@@ -124,6 +133,7 @@ export function getCritChance(hero) {
   let crit = 3; // base 3%
   crit += statMod(effStat(hero, 'DEX')); // DEX adds crit
   crit += getSubstatTotal(hero, 'critChance');
+  crit += getBuffValue(hero, 'critChance');
   return Math.min(crit, 75); // cap at 75%
 }
 
