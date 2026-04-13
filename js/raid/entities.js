@@ -31,10 +31,11 @@ export function getAccuracy(hero) {
   } else {
     acc += statMod(effStat(hero, 'STR'));
   }
-  // Substat bonuses
+  // Substat bonuses (flat +accuracy from gear)
   acc += getSubstatTotal(hero, 'accuracy');
-  // Buff/debuff
-  acc += getBuffValue(hero, 'accuracy');
+  // Buff/debuff (percent-based, e.g. War Song +25%)
+  const buffPct = getBuffValue(hero, 'accuracy');
+  if (buffPct) acc = Math.round(acc * (1 + buffPct / 100));
   return Math.max(1, acc);
 }
 

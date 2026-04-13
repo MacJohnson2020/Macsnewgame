@@ -134,8 +134,15 @@ export function itemDetail(item) {
 
   // Substats
   if (item.substats && item.substats.length > 0) {
+    const subNames = {
+      accuracy: 'Accuracy', critChance: 'Crit Chance', maxHp: 'Max HP', maxMp: 'Max MP',
+      armorPen: 'Armor Pen', magicPen: 'Magic Pen',
+      fireResist: 'Fire Resist', iceResist: 'Ice Resist', lightningResist: 'Lightning Resist',
+      demonicResist: 'Demonic Resist', holyResist: 'Holy Resist',
+    };
     for (const sub of item.substats) {
-      d.appendChild(statRow(sub.name, `+${sub.value}${sub.suffix || ''}`));
+      const label = sub.name || subNames[sub.id] || sub.id;
+      d.appendChild(statRow(label, `+${sub.value}${sub.suffix || ''}`));
     }
   }
 

@@ -1,6 +1,6 @@
 // === Voidborn — Main Entry Point ===
 
-import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear, processSkillAction } from './state.js';
+import { G, loadGame, saveGame, createHero, recalcHero, newGameState, setState, calcOfflineProgress, giveStarterGear, processSkillAction, checkAchievements } from './state.js';
 import { CLASSES, STATS, STAT_DESC, STAT_DEFAULTS, STARTING_STAT_POINTS } from './config.js';
 import { el, uid } from './utils.js';
 import { initRouter, registerTab, switchTab, renderActiveTab } from './ui/router.js';
@@ -47,9 +47,15 @@ function init() {
     showCharacterCreation();
   }
 
-  // Auto-save every 30 seconds
+  // Auto-save + check achievements every 30 seconds
   setInterval(() => {
     if (G.heroes.length > 0) {
+      const unlocked = checkAchievements();
+      if (unlocked.length > 0) {
+        for (const ach of unlocked) {
+          showAchievementUnlock(ach);
+        }
+      }
       saveGame();
     }
   }, 30000);
@@ -206,6 +212,21 @@ function showCharacterCreation() {
 }
 
 // Tutorial for new players
+// Achievement unlock popup (briefly)
+function showAchievementUnlock(ach) {
+  const overlay = el('div', { class: 'achievement-popup' });
+  overlay.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:101;background:linear-gradient(135deg,#f39c12,#e67e22);color:#000;padding:10px 16px;border-radius:8px;box-shadow:0 4px 20px rgba(243,156,18,0.5);display:flex;align-items:center;gap:10px;max-width:90%;animation:slideDown 0.4s;';
+  overlay.appendChild(el('span', { text: ach.icon, style: 'font-size: 28px;' }));
+  overlay.appendChild(el('div', {}, [
+    el('div', { text: 'Achievement Unlocked!', style: 'font-size: 11px; font-weight: 700; opacity: 0.8;' }),
+    el('div', { text: ach.name, style: 'font-size: 14px; font-weight: 900;' }),
+    el('div', { text: ach.desc, style: 'font-size: 11px;' }),
+    ach.rewardGold ? el('div', { text: `+${ach.rewardGold} gold`, style: 'font-size: 11px; font-weight: 700; color: #0d0d0d;' }) : null,
+  ]));
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 4000);
+}
+
 // Offline progress summary popup
 function showOfflineProgress(progress) {
   // Lazy import to avoid circular deps

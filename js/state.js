@@ -4,7 +4,7 @@ import { STAT_DEFAULTS, CLASSES, xpForLevel, HERO_INVENTORY_SIZE, BASE_STASH_SIZ
   SECURE_CONTAINER_BASE, SECURE_PER_VAULT, SECURE_CONTAINER_MAX,
   RECRUIT_BASE_COST, RECRUIT_POOL_BASE, RECRUIT_REFRESH_MS, HERO_NAMES, STARTING_STAT_POINTS,
   SKILLS, SKILL_MAX_LEVEL, SKILL_AFK_MAX, SKILL_TIERS, skillXpForLevel,
-  MATERIALS, getGatherableAt, getRareDropsAt } from './config.js';
+  MATERIALS, getGatherableAt, getRareDropsAt, ACHIEVEMENTS } from './config.js';
 import { uid, deepClone, pick, randInt } from './utils.js';
 
 const SAVE_KEY = 'voidborn_save';
@@ -150,6 +150,9 @@ export function newGameState() {
     activeBounties: [],  // [{id, factionId, type, desc, target, count, progress, rep, gold}]
     completedBounties: 0,
 
+    // Achievements — array of unlocked achievement IDs
+    achievements: [],
+
     // Meta
     deepestFloor: {},   // per zone: { zone_id: deepest_node }
     totalRaids: 0,
@@ -214,6 +217,7 @@ function migrate(data) {
   if (!s.factionRep) s.factionRep = { delvers_guild: 0, iron_covenant: 0, shadow_market: 0, holy_order: 0, void_seekers: 0 };
   if (!s.activeBounties) s.activeBounties = [];
   if (s.completedBounties === undefined) s.completedBounties = 0;
+  if (!s.achievements) s.achievements = [];
   // Add autoBattle to existing heroes + migrate class IDs
   for (const hero of (s.heroes || [])) {
     if (hero.autoBattle === undefined) hero.autoBattle = null;
@@ -411,6 +415,27 @@ export function buyInsurance(heroIds) {
 
 export function isHeroInsured(heroId) {
   return G.pendingInsurance && G.pendingInsurance.includes(heroId);
+}
+
+// === Achievements ===
+// Check all achievements and unlock any that are newly met
+// Returns an array of newly unlocked achievements (for popup display)
+export function checkAchievements() {
+  const newlyUnlocked = [];
+  for (const ach of ACHIEVEMENTS) {
+    if (G.achievements.includes(ach.id)) continue;
+    try {
+      if (ach.check(G)) {
+        G.achievements.push(ach.id);
+        if (ach.rewardGold) G.gold += ach.rewardGold;
+        newlyUnlocked.push(ach);
+      }
+    } catch (e) {
+      // Ignore check errors (missing data etc.)
+    }
+  }
+  if (newlyUnlocked.length > 0) saveGame();
+  return newlyUnlocked;
 }
 
 export function getSkillStatBonuses() {

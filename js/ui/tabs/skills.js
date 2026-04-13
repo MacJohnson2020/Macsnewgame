@@ -243,7 +243,13 @@ function showSkillDetail(skillDef) {
         if (desc) card.appendChild(el('div', { class: 'text-dim', text: desc, style: 'font-size: 10px; margin-top: 2px;' }));
       }
       if (recipe.substats) {
-        const subText = recipe.substats.map(s => `+${s.value} ${s.id}`).join(', ');
+        const subNames = {
+          accuracy: 'Accuracy', critChance: 'Crit %', maxHp: 'Max HP', maxMp: 'Max MP',
+          armorPen: 'Armor Pen', magicPen: 'Magic Pen',
+          fireResist: 'Fire Res', iceResist: 'Ice Res', lightningResist: 'Lightning Res',
+          demonicResist: 'Demonic Res', holyResist: 'Holy Res',
+        };
+        const subText = recipe.substats.map(s => `+${s.value} ${subNames[s.id] || s.id}`).join(', ');
         card.appendChild(el('div', { class: 'text-accent', text: subText, style: 'font-size: 10px; margin-top: 2px;' }));
       }
 

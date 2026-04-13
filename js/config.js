@@ -525,6 +525,50 @@ export const BOUNTY_TEMPLATES = [
   { type: 'no_death', desc: 'Extract from {zone} with no deaths', rep: 40, gold: 60 },
 ];
 
+// === Achievements ===
+// Each achievement has: id, name, desc, icon, check(G) -> bool, reward (gold or item)
+export const ACHIEVEMENTS = [
+  // First steps
+  { id: 'first_raid', name: 'Into the Void', desc: 'Start your first raid', icon: '\uD83C\uDFAF', check: g => g.totalRaids >= 1, rewardGold: 25 },
+  { id: 'first_extract', name: 'Survivor', desc: 'Extract from a raid successfully', icon: '\u2705', check: g => g.totalExtractions >= 1, rewardGold: 50 },
+  { id: 'first_death', name: 'Hard Lesson', desc: 'Lose a hero in a raid', icon: '\uD83D\uDC80', check: g => g.totalDeaths >= 1, rewardGold: 30 },
+  { id: 'first_bounty', name: 'Bounty Hunter', desc: 'Complete your first bounty', icon: '\uD83D\uDCDC', check: g => g.completedBounties >= 1, rewardGold: 40 },
+  { id: 'first_hire', name: 'Not Alone', desc: 'Recruit a second hero', icon: '\uD83D\uDC65', check: g => g.heroes.length >= 2, rewardGold: 50 },
+
+  // Raid milestones
+  { id: 'raids_10', name: 'Veteran', desc: 'Complete 10 raids', icon: '\u2694\uFE0F', check: g => g.totalRaids >= 10, rewardGold: 200 },
+  { id: 'raids_50', name: 'Hardened', desc: 'Complete 50 raids', icon: '\uD83D\uDEE1\uFE0F', check: g => g.totalRaids >= 50, rewardGold: 1000 },
+  { id: 'raids_100', name: 'Voidwalker', desc: 'Complete 100 raids', icon: '\uD83C\uDF11', check: g => g.totalRaids >= 100, rewardGold: 5000 },
+
+  // Extraction milestones
+  { id: 'extract_10', name: 'Lucky', desc: 'Extract successfully 10 times', icon: '\uD83C\uDF40', check: g => g.totalExtractions >= 10, rewardGold: 250 },
+  { id: 'extract_50', name: 'Fortune Favored', desc: 'Extract successfully 50 times', icon: '\uD83C\uDFC6', check: g => g.totalExtractions >= 50, rewardGold: 1500 },
+
+  // Party size
+  { id: 'full_party', name: 'Full House', desc: 'Have 4 heroes in your party', icon: '\uD83D\uDC6A', check: g => g.heroes.length >= 4, rewardGold: 200 },
+
+  // Wealth
+  { id: 'gold_1k', name: 'Thousandaire', desc: 'Accumulate 1,000 gold', icon: '\uD83D\uDCB0', check: g => g.gold >= 1000, rewardGold: 100 },
+  { id: 'gold_10k', name: 'Wealthy', desc: 'Accumulate 10,000 gold', icon: '\uD83D\uDCB0', check: g => g.gold >= 10000, rewardGold: 500 },
+
+  // Bounties
+  { id: 'bounties_10', name: 'Contracted', desc: 'Complete 10 bounties', icon: '\uD83D\uDCCB', check: g => g.completedBounties >= 10, rewardGold: 300 },
+  { id: 'bounties_50', name: 'Guild Master', desc: 'Complete 50 bounties', icon: '\uD83D\uDC51', check: g => g.completedBounties >= 50, rewardGold: 2000 },
+
+  // Skills
+  { id: 'skill_10', name: 'Apprentice', desc: 'Reach level 10 in any skill', icon: '\uD83D\uDCDA', check: g => Object.values(g.skills || {}).some(s => s.level >= 10), rewardGold: 100 },
+  { id: 'skill_50', name: 'Journeyman', desc: 'Reach level 50 in any skill', icon: '\uD83D\uDCDA', check: g => Object.values(g.skills || {}).some(s => s.level >= 50), rewardGold: 500 },
+  { id: 'skill_100', name: 'Master', desc: 'Max out any skill (level 100)', icon: '\uD83C\uDF1F', check: g => Object.values(g.skills || {}).some(s => s.level >= 100), rewardGold: 5000 },
+
+  // Buildings
+  { id: 'building_5', name: 'Architect', desc: 'Upgrade any building to level 5', icon: '\uD83C\uDFD7\uFE0F', check: g => Object.values(g.buildings || {}).some(v => v >= 5), rewardGold: 300 },
+  { id: 'building_10', name: 'City Builder', desc: 'Upgrade any building to level 10', icon: '\uD83C\uDFD9\uFE0F', check: g => Object.values(g.buildings || {}).some(v => v >= 10), rewardGold: 2000 },
+
+  // Faction rep
+  { id: 'rank_up', name: 'Recognized', desc: 'Reach rank 2 with any faction', icon: '\uD83C\uDFC5', check: g => Object.values(g.factionRep || {}).some(r => r >= 100), rewardGold: 200 },
+  { id: 'rank_max', name: 'Legend', desc: 'Reach max rank with any faction', icon: '\uD83D\uDC51', check: g => Object.values(g.factionRep || {}).some(r => r >= 1000), rewardGold: 3000 },
+];
+
 // === Skills System ===
 
 // XP needed for each skill level (RuneScape-style exponential)
