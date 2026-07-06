@@ -5,53 +5,46 @@ what it contains.
 
 ## Stack
 
-- Plain HTML/CSS/JS, **native ES modules** (`<script type="module">`),
-  no bundler/build step, no framework, no canvas.
-- Game content (skills/items/monsters/tasks/zones) is defined as
-  **plain JS data modules** — objects/arrays exported from files under
-  `js/data/`, not JSON. Keeps definitions close to any helper functions
-  they need and avoids a parsing/fetch step.
+- **Single self-contained `index.html`** — inline `<style>` and one
+  inline `<script>`, no separate files, no modules, no bundler/build
+  step, no framework, no canvas. Opens directly via `file://` with
+  zero setup (no local server, no CORS/module-loading issues).
+- Game content (skills/items/monsters) is defined as **plain JS
+  objects/consts** inside the script, grouped into clearly labeled
+  sections (see File Layout below) rather than split across files.
 - **Fixed-interval tick loop** drives all progress, roughly OSRS's
   ~0.6s cadence. One `setInterval` advances whatever activity is
   currently active each time it fires.
 
 ## File Layout
 
+Everything lives in `index.html`. The inline `<script>` is organized
+into commented sections in dependency order, mirroring what would
+otherwise be separate modules:
+
 ```
 index.html
-css/
-  style.css
-js/
-  main.js                 entry point: boot, load save, start tick loop, first render
-  core/
-    state.js              the single gameState object + get/set helpers
-    tick.js               setInterval loop; calls the active system's update() each tick
-    save.js                localStorage read/write, versioned save format
-    xp.js                  XP curve/table (OSRS-style, 1.104x/level), level<->xp helpers
-  data/
-    skills.js              skill registry: id, name, category, maxLevel (99 or 120)
-    items.js                item registry: id, name, tier, category, stats
-    monsters.js             monster registry: id, name, zone, level, combat stats, drop table
-    zones.js                zone registry: id, name, unlock requirement, resources/monsters present
-    tasks.js                task board definitions per tier (Novice..Master)
-    tiers.js                gear tier ladder (Scrap..Wyrmforged) + tier metadata
-  systems/
-    combat.js               auto-combat resolution (attack rounds, damage, drops)
-    gathering.js            shared logic for Woodcutting/Mining/Fishing/Hunter/Farming
-    production.js           shared logic for Cooking/Firemaking/Smithing/Crafting/Fletching
-    herblore.js             potion-making logic
-    slayer.js                task assignment/tracking for the Slayer skill specifically
-    runecrafting.js          essence -> rune logic
-    construction.js          player hub build/upgrade logic
-    shop.js                  NPC shop pricing (supply/demand drift) and buy/sell
-    taskboard.js             task board tier gating, task pool, reward payout
-  ui/
-    render.js               top-level render dispatch, re-renders on state change
-    panels/
-      skillsPanel.js, inventoryPanel.js, combatPanel.js,
-      shopPanel.js, taskboardPanel.js, hubPanel.js
-    components.js           small reusable DOM-building helpers (icon+text rows, progress bars)
+  <style>                        all CSS, formerly css/style.css
+  <script>
+    // core/xp.js       — XP curve/table (OSRS-style, 1.104x/level), level<->xp helpers
+    // data/skills.js   — skill registry: id, name, category, maxLevel (99 or 120)
+    // data/tiers.js    — gear tier ladder (Scrap..Wyrmforged)
+    // data/items.js    — item registry: id, name, tier, category, stats
+    // data/monsters.js — monster registry: id, name, zone, level, combat stats, drop table
+    // core/state.js    — the single gameState object + get/set helpers
+    // core/save.js     — localStorage read/write, versioned save format
+    // systems/gathering.js — Woodcutting tick logic (Mining/Fishing/Hunter/Farming later)
+    // systems/combat.js    — auto-combat resolution (attack rounds, damage, drops)
+    // core/tick.js     — setInterval loop; calls the active system's update() each tick
+    // ui/render.js     — render dispatch, re-renders on state change
+    // main.js          — entry point: boot, load save, start tick loop, first render
 ```
+
+New content (a monster, an item, a skill's tick logic) is added as a
+new entry/function within the relevant section rather than a new file.
+If the script grows unwieldy, splitting sections back into files is a
+mechanical extraction — the section boundaries above are exactly where
+the seams would go.
 
 ## State Management
 
@@ -91,9 +84,10 @@ js/
 ## Data-Driven Content
 
 - Adding a new item/monster/task/zone means adding an entry to the
-  relevant `js/data/*.js` registry — no changes to system logic
-  required for the common case. Systems are written to iterate/look up
-  by id rather than hardcoding specific items or monsters.
+  relevant registry object in the "data" section of the script — no
+  changes to system logic required for the common case. Systems are
+  written to iterate/look up by id rather than hardcoding specific
+  items or monsters.
 
 ## Open Implementation Questions
 

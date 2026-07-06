@@ -1,13 +1,635 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mac's New Game</title>
-  <link rel="stylesheet" href="css/style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mac's New Game</title>
+<style>
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Verdana, sans-serif;
+  background: #2b2620;
+  color: #e8dcc4;
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.game-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.panel {
+  background: #3b3327;
+  border: 2px solid #7a6a4f;
+  border-radius: 4px;
+  padding: 12px 16px;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: #d4af37;
+  border-bottom: 1px solid #7a6a4f;
+  padding-bottom: 4px;
+}
+
+.skills-panel {
+  flex: 0 0 220px;
+}
+
+.skill-category h3 {
+  margin: 10px 0 4px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: #a99a7a;
+}
+
+.skill-category ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.skill-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 0.9rem;
+}
+
+.main-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stat-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.hp-bar-wrap {
+  margin-bottom: 12px;
+}
+
+.hp-bar-label {
+  font-size: 0.85rem;
+  margin-bottom: 2px;
+}
+
+.hp-bar {
+  background: #1f1b16;
+  border: 1px solid #7a6a4f;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hp-bar-fill {
+  height: 100%;
+  background: #a83232;
+  transition: width 0.3s ease;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.actions button {
+  background: #55492f;
+  color: #e8dcc4;
+  border: 1px solid #7a6a4f;
+  border-radius: 3px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.actions button:hover:not(:disabled) {
+  background: #6b5c3a;
+}
+
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.progress-note {
+  font-size: 0.85rem;
+  color: #cfc2a3;
+}
+
+.log-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+.log-panel li {
+  padding: 2px 0;
+  border-bottom: 1px solid #4a4030;
+}
+</style>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="js/main.js"></script>
+<div id="app"></div>
+<script>
+'use strict';
+
+// ---------------------------------------------------------------------------
+// core/xp.js — OSRS-style XP curve: each level costs ~1.104x the previous.
+// ---------------------------------------------------------------------------
+function generateXpTable(maxLevel) {
+  const table = [0, 0]; // index 0 unused, level 1 = 0 xp
+  let points = 0;
+  for (let level = 1; level < maxLevel; level++) {
+    points += Math.floor(level + 300 * Math.pow(2, level / 7));
+    table[level + 1] = Math.floor(points / 4);
+  }
+  return table;
+}
+
+const XP_TABLE_99 = generateXpTable(99);
+const XP_TABLE_120 = generateXpTable(120);
+
+function levelForXp(xp, table) {
+  let level = 1;
+  for (let i = table.length - 1; i >= 1; i--) {
+    if (xp >= table[i]) {
+      level = i;
+      break;
+    }
+  }
+  return level;
+}
+
+function xpForLevel(level, table) {
+  return table[level] ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// data/skills.js — full 19-skill roster from GAME_DESIGN.md. Only
+// Woodcutting, Melee, Defence, and Hitpoints are wired up to gameplay in
+// this first slice; the rest exist so state/UI code doesn't need to
+// special-case "skills that don't exist yet".
+// ---------------------------------------------------------------------------
+const CATEGORY_LABELS = {
+  combat: 'Combat',
+  gathering: 'Gathering',
+  production: 'Production',
+  support: 'Support',
+  complex: 'Complex',
+};
+
+const SKILLS = {
+  melee: { id: 'melee', name: 'Melee', category: 'combat', maxLevel: 99 },
+  ranged: { id: 'ranged', name: 'Ranged', category: 'combat', maxLevel: 99 },
+  magic: { id: 'magic', name: 'Magic', category: 'combat', maxLevel: 99 },
+  defence: { id: 'defence', name: 'Defence', category: 'combat', maxLevel: 99 },
+  hitpoints: { id: 'hitpoints', name: 'Hitpoints', category: 'combat', maxLevel: 99 },
+
+  woodcutting: { id: 'woodcutting', name: 'Woodcutting', category: 'gathering', maxLevel: 99 },
+  mining: { id: 'mining', name: 'Mining', category: 'gathering', maxLevel: 99 },
+  fishing: { id: 'fishing', name: 'Fishing', category: 'gathering', maxLevel: 99 },
+  farming: { id: 'farming', name: 'Farming', category: 'gathering', maxLevel: 99 },
+  hunter: { id: 'hunter', name: 'Hunter', category: 'gathering', maxLevel: 99 },
+
+  cooking: { id: 'cooking', name: 'Cooking', category: 'production', maxLevel: 99 },
+  firemaking: { id: 'firemaking', name: 'Firemaking', category: 'production', maxLevel: 99 },
+  smithing: { id: 'smithing', name: 'Smithing', category: 'production', maxLevel: 99 },
+  crafting: { id: 'crafting', name: 'Crafting', category: 'production', maxLevel: 99 },
+  fletching: { id: 'fletching', name: 'Fletching', category: 'production', maxLevel: 99 },
+
+  herblore: { id: 'herblore', name: 'Herblore', category: 'support', maxLevel: 99 },
+  slayer: { id: 'slayer', name: 'Slayer', category: 'support', maxLevel: 99 },
+
+  runecrafting: { id: 'runecrafting', name: 'Runecrafting', category: 'complex', maxLevel: 120 },
+  construction: { id: 'construction', name: 'Construction', category: 'complex', maxLevel: 120 },
+};
+
+const SKILL_IDS = Object.keys(SKILLS);
+
+// ---------------------------------------------------------------------------
+// data/tiers.js — custom gear/material tier ladder (see GAME_DESIGN.md).
+// Only Scrap is used by this first slice.
+// ---------------------------------------------------------------------------
+const TIERS = [
+  { id: 'scrap', name: 'Scrap', order: 1 },
+  { id: 'iron', name: 'Iron', order: 2 },
+  { id: 'steel', name: 'Steel', order: 3 },
+  { id: 'alloy', name: 'Alloy', order: 4 },
+  { id: 'silverstone', name: 'Silverstone', order: 5 },
+  { id: 'auric', name: 'Auric', order: 6 },
+  { id: 'wyrmforged', name: 'Wyrmforged', order: 7 },
+];
+
+// ---------------------------------------------------------------------------
+// data/items.js
+// ---------------------------------------------------------------------------
+const ITEMS = {
+  logs: {
+    id: 'logs',
+    name: 'Logs',
+    stackable: true,
+  },
+  rusty_sword: {
+    id: 'rusty_sword',
+    name: 'Rusty Sword',
+    tier: 'scrap',
+    slot: 'weapon',
+    attackBonus: 1,
+    strengthBonus: 2,
+    attackSpeedTicks: 4,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// data/monsters.js
+// ---------------------------------------------------------------------------
+const MONSTERS = {
+  wild_boar: {
+    id: 'wild_boar',
+    name: 'Wild Boar',
+    zone: 'millbrook',
+    level: 3,
+    maxHp: 12,
+    defenceLevel: 1,
+    attackLevel: 2,
+    maxHit: 2,
+    attackSpeedTicks: 4,
+    goldDrop: [2, 6],
+  },
+};
+
+// ---------------------------------------------------------------------------
+// core/state.js
+// ---------------------------------------------------------------------------
+const SAVE_VERSION = 1;
+const LOG_LIMIT = 50;
+
+function tableForSkill(skillId) {
+  return SKILLS[skillId].maxLevel === 120 ? XP_TABLE_120 : XP_TABLE_99;
+}
+
+function getLevel(state, skillId) {
+  return levelForXp(state.skills[skillId].xp, tableForSkill(skillId));
+}
+
+function getXp(state, skillId) {
+  return state.skills[skillId].xp;
+}
+
+function getMaxHp(state) {
+  return getLevel(state, 'hitpoints');
+}
+
+function addLogEntry(state, message) {
+  state.log.push(message);
+  if (state.log.length > LOG_LIMIT) {
+    state.log.shift();
+  }
+}
+
+function addXp(state, skillId, amount) {
+  const table = tableForSkill(skillId);
+  const beforeLevel = levelForXp(state.skills[skillId].xp, table);
+  state.skills[skillId].xp += amount;
+  const afterLevel = levelForXp(state.skills[skillId].xp, table);
+
+  if (afterLevel > beforeLevel) {
+    addLogEntry(state, `Congratulations! Your ${SKILLS[skillId].name} level is now ${afterLevel}.`);
+  }
+  return { leveledUp: afterLevel > beforeLevel, level: afterLevel };
+}
+
+function addItem(state, itemId, qty = 1) {
+  state.inventory[itemId] = (state.inventory[itemId] || 0) + qty;
+}
+
+function addGold(state, amount) {
+  state.inventory.gold = (state.inventory.gold || 0) + amount;
+}
+
+function createDefaultState() {
+  const skills = {};
+  for (const id of SKILL_IDS) {
+    skills[id] = { xp: 0 };
+  }
+  // Hitpoints starts at level 10, OSRS convention.
+  skills.hitpoints.xp = XP_TABLE_99[10];
+
+  const state = {
+    version: SAVE_VERSION,
+    skills,
+    inventory: { logs: 0, gold: 0 },
+    equipment: { weapon: 'rusty_sword' },
+    combat: { currentHp: 0, monsterId: null, monsterHp: null },
+    activity: { type: null, ticks: 0 },
+    log: [],
+  };
+
+  state.combat.currentHp = getMaxHp(state);
+  addLogEntry(state, 'Welcome to Millbrook.');
+  return state;
+}
+
+// ---------------------------------------------------------------------------
+// core/save.js
+// ---------------------------------------------------------------------------
+const SAVE_KEY = 'rs_hybrid_save';
+
+function saveState(state) {
+  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+}
+
+function loadState() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return createDefaultState();
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.version !== SAVE_VERSION) {
+      // No migrations defined yet for a version mismatch; start fresh
+      // rather than risk loading an incompatible shape.
+      return createDefaultState();
+    }
+    return parsed;
+  } catch {
+    return createDefaultState();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// systems/gathering.js
+// ---------------------------------------------------------------------------
+const WOODCUTTING_XP_PER_LOG = 25;
+
+function tickWoodcutting(state) {
+  state.activity.ticks += 1;
+
+  const level = getLevel(state, 'woodcutting');
+  const chance = Math.min(0.35 + level * 0.004, 0.8);
+
+  if (Math.random() < chance) {
+    addItem(state, 'logs', 1);
+    addXp(state, 'woodcutting', WOODCUTTING_XP_PER_LOG);
+    addLogEntry(state, 'You get some logs.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// systems/combat.js
+// ---------------------------------------------------------------------------
+const MELEE_XP_PER_DAMAGE = 4;
+const HITPOINTS_XP_PER_DAMAGE = 1.33;
+
+function startCombat(state, monsterId) {
+  const monster = MONSTERS[monsterId];
+  state.activity = { type: 'combat', ticks: 0 };
+  state.combat.monsterId = monsterId;
+  state.combat.monsterHp = monster.maxHp;
+  addLogEntry(state, `You engage a ${monster.name}.`);
+}
+
+function respawnMonster(state, monster) {
+  state.combat.monsterHp = monster.maxHp;
+}
+
+function resolvePlayerAttack(state, monster) {
+  const weapon = ITEMS[state.equipment.weapon];
+  const meleeLevel = getLevel(state, 'melee');
+  const accuracy = Math.min(0.9, 0.5 + (meleeLevel - monster.defenceLevel) * 0.02);
+
+  if (Math.random() >= accuracy) {
+    addLogEntry(state, `You miss the ${monster.name}.`);
+    return;
+  }
+
+  const maxHit = Math.max(1, Math.floor(meleeLevel / 4) + weapon.strengthBonus);
+  const damage = 1 + Math.floor(Math.random() * maxHit);
+  state.combat.monsterHp -= damage;
+  addXp(state, 'melee', damage * MELEE_XP_PER_DAMAGE);
+  addXp(state, 'hitpoints', damage * HITPOINTS_XP_PER_DAMAGE);
+  addLogEntry(state, `You hit the ${monster.name} for ${damage}.`);
+
+  if (state.combat.monsterHp <= 0) {
+    const [min, max] = monster.goldDrop;
+    const gold = min + Math.floor(Math.random() * (max - min + 1));
+    addGold(state, gold);
+    addLogEntry(state, `You defeat the ${monster.name} and find ${gold} gold.`);
+    respawnMonster(state, monster);
+  }
+}
+
+function resolveMonsterAttack(state, monster) {
+  const defenceLevel = getLevel(state, 'defence');
+  const accuracy = Math.max(0.1, 0.5 + (monster.attackLevel - defenceLevel) * 0.02);
+
+  if (Math.random() >= accuracy) {
+    addLogEntry(state, `The ${monster.name} misses you.`);
+    return;
+  }
+
+  const damage = 1 + Math.floor(Math.random() * monster.maxHit);
+  state.combat.currentHp = Math.max(0, state.combat.currentHp - damage);
+  addLogEntry(state, `The ${monster.name} hits you for ${damage}.`);
+
+  if (state.combat.currentHp <= 0) {
+    addLogEntry(state, 'You have been knocked out and wake up back in Millbrook.');
+    state.combat.currentHp = getMaxHp(state);
+    state.combat.monsterId = null;
+    state.combat.monsterHp = null;
+    state.activity = { type: null, ticks: 0 };
+  }
+}
+
+function tickCombat(state) {
+  const monster = MONSTERS[state.combat.monsterId];
+  if (!monster) return;
+
+  state.activity.ticks += 1;
+  const ticks = state.activity.ticks;
+  const weapon = ITEMS[state.equipment.weapon];
+
+  if (ticks % weapon.attackSpeedTicks === 0) {
+    resolvePlayerAttack(state, monster);
+  }
+
+  // Offset from the player's swing so both don't always land on the same tick.
+  if (state.combat.monsterHp > 0 && ticks % monster.attackSpeedTicks === 2) {
+    resolveMonsterAttack(state, monster);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// core/tick.js
+// ---------------------------------------------------------------------------
+const TICK_MS = 600;
+
+function runGameTick(state) {
+  if (state.activity.type === 'woodcutting') {
+    tickWoodcutting(state);
+  } else if (state.activity.type === 'combat') {
+    tickCombat(state);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ui/render.js
+// ---------------------------------------------------------------------------
+function renderSkillsPanel(state) {
+  const byCategory = {};
+  for (const skill of Object.values(SKILLS)) {
+    (byCategory[skill.category] ??= []).push(skill);
+  }
+
+  const sections = Object.entries(byCategory)
+    .map(([category, skills]) => {
+      const rows = skills
+        .map((skill) => {
+          const level = getLevel(state, skill.id);
+          return `<li class="skill-row"><span>${skill.name}</span><span>${level}</span></li>`;
+        })
+        .join('');
+      return `<div class="skill-category"><h3>${CATEGORY_LABELS[category]}</h3><ul>${rows}</ul></div>`;
+    })
+    .join('');
+
+  return `<div class="panel skills-panel"><h2>Skills</h2>${sections}</div>`;
+}
+
+function renderXpBar(xp, level, table) {
+  const nextLevelXp = xpForLevel(level + 1, table);
+  const currentLevelXp = xpForLevel(level, table);
+  if (!nextLevelXp) return `Level ${level} (max)`;
+  const progress = Math.round(((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100);
+  return `Level ${level}, ${progress}% to ${level + 1}`;
+}
+
+function renderActivityPanel(state) {
+  const maxHp = getMaxHp(state);
+  const currentHp = state.combat.currentHp;
+  const hpPercent = Math.round((currentHp / maxHp) * 100);
+
+  const inCombat = state.activity.type === 'combat';
+  const isChopping = state.activity.type === 'woodcutting';
+  const monster = inCombat ? MONSTERS[state.combat.monsterId] : null;
+
+  const woodcuttingXp = getXp(state, 'woodcutting');
+  const woodcuttingLevel = getLevel(state, 'woodcutting');
+  const wcProgress = renderXpBar(woodcuttingXp, woodcuttingLevel, XP_TABLE_99);
+
+  return `
+    <div class="panel activity-panel">
+      <h2>Millbrook</h2>
+      <div class="stat-row">
+        <span>Logs: ${state.inventory.logs || 0}</span>
+        <span>Gold: ${state.inventory.gold || 0}</span>
+      </div>
+      <div class="hp-bar-wrap">
+        <div class="hp-bar-label">HP: ${currentHp} / ${maxHp}</div>
+        <div class="hp-bar"><div class="hp-bar-fill" style="width:${hpPercent}%"></div></div>
+      </div>
+      <div class="actions">
+        <button data-action="chop" ${isChopping ? 'disabled' : ''}>Chop Trees (Woodcutting)</button>
+        <button data-action="fight" ${inCombat ? 'disabled' : ''}>Fight Wild Boar</button>
+        <button data-action="stop" ${state.activity.type ? '' : 'disabled'}>Stop</button>
+      </div>
+      ${isChopping ? `<div class="progress-note">Woodcutting: ${wcProgress}</div>` : ''}
+      ${inCombat && monster ? `<div class="progress-note">Fighting ${monster.name}: ${state.combat.monsterHp} / ${monster.maxHp} HP</div>` : ''}
+    </div>
+  `;
+}
+
+function renderLogPanel(state) {
+  const entries = state.log.map((message) => `<li>${message}</li>`).join('');
+  return `<div class="panel log-panel"><h2>Activity Log</h2><ul id="log-list">${entries}</ul></div>`;
+}
+
+function renderApp(state) {
+  return `
+    <div class="game-layout">
+      ${renderSkillsPanel(state)}
+      <div class="main-column">
+        ${renderActivityPanel(state)}
+        ${renderLogPanel(state)}
+      </div>
+    </div>
+  `;
+}
+
+function scrollLogToBottom() {
+  const logList = document.getElementById('log-list');
+  if (logList) {
+    logList.scrollTop = logList.scrollHeight;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// main.js
+// ---------------------------------------------------------------------------
+const AUTOSAVE_EVERY_N_TICKS = 10;
+
+const state = loadState();
+const appEl = document.getElementById('app');
+let ticksSinceSave = 0;
+
+function render() {
+  appEl.innerHTML = renderApp(state);
+  scrollLogToBottom();
+}
+
+function handleAction(action) {
+  if (action === 'chop') {
+    state.activity = { type: 'woodcutting', ticks: 0 };
+  } else if (action === 'fight') {
+    startCombat(state, 'wild_boar');
+  } else if (action === 'stop') {
+    state.activity = { type: null, ticks: 0 };
+    state.combat.monsterId = null;
+    state.combat.monsterHp = null;
+  }
+  render();
+}
+
+appEl.addEventListener('click', (event) => {
+  const action = event.target.dataset.action;
+  if (action) handleAction(action);
+});
+
+setInterval(() => {
+  runGameTick(state);
+  render();
+
+  ticksSinceSave += 1;
+  if (ticksSinceSave >= AUTOSAVE_EVERY_N_TICKS) {
+    saveState(state);
+    ticksSinceSave = 0;
+  }
+}, TICK_MS);
+
+window.addEventListener('beforeunload', () => saveState(state));
+
+render();
+</script>
 </body>
 </html>
