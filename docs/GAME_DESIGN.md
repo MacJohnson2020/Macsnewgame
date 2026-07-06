@@ -76,6 +76,62 @@ bolted on later).
 skills (Divination, Invention, Archaeology, Necromancy). Candidates for
 later phases once the core 19 are solid.
 
+## Progression
+
+- **XP curve:** OSRS-style curve — each level requires roughly 1.104x
+  the XP of the previous, same shape as OSRS's table (level 99 ≈
+  13M XP under that curve).
+- **Level cap:** 99 for all skills except **Runecrafting** and
+  **Construction**, which extend to **120** as an endgame flex (RS3-style),
+  reflecting their place as the two "complex/late-game" skills.
+
+## Gear & Material Tiers
+
+Custom naming (not reused OSRS metal names) to give the game its own
+identity, same power-curve shape as OSRS bronze→dragon:
+
+1. **Scrap** — starting-tier gear, crafted from junk/found materials.
+2. **Iron**
+3. **Steel**
+4. **Alloy** — a composite/mixed-metal tier (distinct flavor, not a reskin).
+5. **Silverstone** — silver shot through with ground gem dust.
+6. **Auric** — gold-and-magic infused, RS3 "elite tier" equivalent.
+7. **Wyrmforged** — top v1 tier, dragon-equivalent rarity/power.
+
+Each tier applies across weapons/armor for all three combat styles
+(Melee/Ranged/Magic gear share the same tier ladder), and gates which
+Smithing/Fletching/Crafting recipes are available at a given skill level.
+
+## Starter Zone (proposed)
+
+**Millbrook** — a small farming village on the edge of a forest,
+mechanically equivalent to Lumbridge/Tutorial Island but with its own
+identity:
+
+- **Early monsters:** crows, wild boars, feral dogs, and brigands
+  (low-level melee fodder; brigands drop small amounts of gold and
+  Scrap-tier gear scraps).
+- **Early resources:** normal trees (Woodcutting), a shallow streambed
+  (Fishing — small fish only), a copper-vein rockpile (Mining), and a
+  few open farming patches at the village edge (Farming).
+- **Hub building:** the village center holds the general store (NPC
+  shop), bank/storage, and the task board.
+- Later zones (forest depths, the old mine, the coastal cliffs, etc.)
+  unlock as combat/skill levels rise, each introducing the next gear
+  tier's resources and monsters.
+
+## Task Board Tiers
+
+Five tiers, gated by a combined-level threshold (combat level + a
+minimum relevant skill level), each with its own reward pool:
+
+1. **Novice** — starter-zone monsters/resources, Scrap/Iron-tier rewards.
+2. **Apprentice** — Steel-tier content, first unique (non-shop) drops.
+3. **Adept** — Alloy-tier content, recipe unlocks as rewards.
+4. **Veteran** — Silverstone/Auric-tier content, rarer material rewards.
+5. **Master** — Wyrmforged-tier content, best-in-slot v1 rewards and
+   cosmetic/prestige rewards.
+
 ## Economy
 
 - **NPC shops only** (no player-to-player trading — single-player game).
@@ -107,7 +163,7 @@ later phases once the core 19 are solid.
 - Post-v1 candidates: Prayer (or a Necromancy-style alternative),
   Agility, Thieving, save export/import, ability-bar combat option,
   shared/multiplayer world.
-- XP curve and level cap (e.g. OSRS's 1–99 curve vs. a custom curve)
-  — to be defined during implementation.
-- Exact task board task pool and reward tiers — to be fleshed out
-  alongside the first content pass.
+- Exact task board task pool per tier (specific tasks, XP/gold amounts)
+  — to be fleshed out alongside the first content pass.
+- Zones beyond Millbrook (names, themes, which gear tier each
+  introduces) — to be designed once the starter zone is implemented.
