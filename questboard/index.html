@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Wandering Tavern — A D&D Quest Board for RuneScape 3</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍺</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header class="tavern-header">
+    <div class="header-inner">
+      <h1>🍺 The Wandering Tavern</h1>
+      <p class="subtitle">A D&amp;D-flavored quest board &amp; tracker for your RuneScape 3 adventures</p>
+    </div>
+  </header>
+
+  <!-- Hero setup, shown only until a hero exists -->
+  <section id="hero-setup" class="panel hidden">
+    <h2>Who enters the tavern?</h2>
+    <p class="muted">Name your adventurer and pick a class. Each class has an affinity for one kind of contract — roll one and you'll earn bonus rewards.</p>
+    <div class="setup-form">
+      <label>
+        Adventurer name
+        <input id="hero-name-input" type="text" maxlength="24" placeholder="e.g. Doric Ironvein">
+      </label>
+      <label>
+        Class
+        <select id="hero-class-select"></select>
+      </label>
+      <p id="class-flavor" class="muted class-flavor"></p>
+      <button id="hero-create-btn" class="btn btn-primary">Enter the Tavern</button>
+    </div>
+  </section>
+
+  <!-- Main app, shown once a hero exists -->
+  <div id="main-app" class="hidden">
+
+    <section class="panel hero-panel">
+      <div class="hero-summary">
+        <div class="hero-id">
+          <h2 id="hero-name"></h2>
+          <p><span id="hero-class"></span> · <span id="hero-title" class="hero-title"></span></p>
+        </div>
+        <div class="hero-level">
+          <div class="level-badge">Lv <span id="hero-level-num"></span></div>
+          <div class="xp-bar-track">
+            <div id="xp-bar-fill" class="xp-bar-fill"></div>
+          </div>
+          <p class="muted small"><span id="hero-xp-text"></span></p>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-box"><span class="stat-num" id="stat-completed">0</span><span class="stat-label">Contracts Fulfilled</span></div>
+        <div class="stat-box"><span class="stat-num" id="stat-streak">0</span><span class="stat-label">Current Streak</span></div>
+        <div class="stat-box"><span class="stat-num" id="stat-best-streak">0</span><span class="stat-label">Best Streak</span></div>
+        <div class="stat-box"><span class="stat-num" id="stat-gold">0</span><span class="stat-label">Gold Earned</span></div>
+      </div>
+    </section>
+
+    <section class="panel roll-panel">
+      <h2>📜 The Quest Board</h2>
+      <p class="muted">Roll the tavern die to draw a new contract. Rarity is determined by the roll, just like a d20 check.</p>
+      <button id="roll-btn" class="btn btn-roll">
+        <span id="die-face">🎲</span> Roll for a Quest
+      </button>
+
+      <div id="pending-quest-wrap" class="hidden">
+        <div id="pending-quest-card" class="quest-card"></div>
+        <div class="quest-actions">
+          <button id="accept-btn" class="btn btn-primary">Accept Contract</button>
+          <button id="reroll-btn" class="btn btn-secondary">Reroll (1 gold cost skipped for now)</button>
+          <button id="decline-btn" class="btn btn-ghost">Decline</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>⚔️ Active Contracts</h2>
+      <div id="active-quest-list" class="quest-list">
+        <p class="muted empty-msg">No active contracts. Roll one above!</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>🏰 Bestiary — Legendary Encounters</h2>
+      <p class="muted">RuneScape's most infamous bosses, reskinned for the tavern crowd. Click one to draw it as a boss contract.</p>
+      <div id="bestiary-grid" class="bestiary-grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>📖 Chronicle (Recent Completions)</h2>
+      <div id="completed-log" class="completed-log">
+        <p class="muted empty-msg">Your legend has yet to be written.</p>
+      </div>
+    </section>
+
+    <section class="panel danger-zone">
+      <button id="reset-btn" class="btn btn-danger-outline">Abandon this hero &amp; reset save</button>
+    </section>
+
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
